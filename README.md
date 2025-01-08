@@ -30,11 +30,11 @@ Stock prices are significantly influenced by market sentiment, which is often sh
 
 ## **Project Structure**
 ```plaintext
-├── sentiment_stock_prediction/
+├── stock_sentiment_engine/
 │   ├── api/              # REST API endpoints
-│   ├── dashboard/        # Frontend for visualization
-│   ├── ml_models/        # Machine learning models
-│   ├── news_processing/  # NLP and sentiment analysis
+│   ├── frontend/         # Frontend for visualization
+│   ├── analysis/         # NLP and sentiment analysis
+|   ├── data_ingest /     # All data-fetching tasks.
 │   ├── static/           # Static files for the frontend
 │   ├── templates/        # HTML templates
 │   └── tests/            # Unit and integration tests
