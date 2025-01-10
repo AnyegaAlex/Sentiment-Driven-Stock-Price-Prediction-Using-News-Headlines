@@ -1,6 +1,7 @@
+# data_ingestion/urls.py
 from django.urls import path
-from . import views
+from .views import stock_analysis_view
 
 urlpatterns = [
-    path('data_ingestion/', views.home, name='data_ingestion'),  
+    path('stock-analysis/', stock_analysis_view, name='stock_analysis'),
 ]
