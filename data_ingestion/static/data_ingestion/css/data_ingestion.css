@@ -1,0 +1,119 @@
+*{
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+    font-family: "Montserrat", system-ui;
+    scroll-behavior: smooth;
+  }
+  
+  body{
+    background-color: var(--white);
+    color: var(--beautiful-grey);
+    z-index: 1000;
+  }
+  
+  :root{
+    --ff:"inter", sans-serif;
+    --h1: bold 4rem/1em var(--bg-color);
+    --h2: bold 3rem/1.2em var(--bg-color);
+    --h3: bold 2.25rem/1.2em var(--bg-color);
+    --h4: bold 1.5rem/1.6em var(--bg-color);
+    --big: 1.25rem/1.6em var(--bg-color);
+    --p: 1rem/1.6em var(--bg-color);
+    --small:  0.75rem/1em var(--bg-color);
+  
+    --margin-xxs: .25rem;
+    --margin-xs: .5rem;
+    --margin-s: .75rem;
+    --margin-m: 1rem;
+    --margin-l: 1.25rem;
+    --margin-xl: 1.75rem;
+    --margin-xxl: 2.5rem;
+  
+    --primary-color: #071013;
+    --secondary-color: #208FD2;
+    --bg-color: #FDF0D5;
+    --red-color: #B50B0B;
+    --beautiful-grey:#212121;
+    --some-white:#efefef;
+    --white:#fff;
+    --darker-white:hsla(0, 0%, 100%, 0.404);
+    --header-height:3.5rem;
+    --pink: #ff90e8;
+    --nav-background-color: #121212;
+  
+  }
+  
+  /* Custom font styles */
+  .cutive-mono-regular {
+    font-family: "Cutive Mono", monospace;
+    font-weight: 700;
+    font-style: normal;
+  }
+  
+  .gruppo-regular {
+    font-family: "Gruppo", sans-serif;
+    font-weight: 400;
+    font-style: normal;
+  }  
+    
+  .montserrat-regular {
+    font-family: "Montserrat", system-ui;
+    font-optical-sizing: auto;
+    font-weight: 400;
+    font-style: normal;
+}
+  
+  .material-symbols-outlined {
+    font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24
+}  
+
+
+body {
+    font-family: "Montserrat", system-ui;
+    background-color: var(--some-white);
+    margin: 0;
+    padding: 20px;
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 30px;
+    color: var(--primary-color);
+}
+
+.sentiment-positive {
+    color: green;
+    font-weight: bold;
+}
+
+.sentiment-negative {
+    color: red;
+    font-weight: bold;
+}
+
+.sentiment-neutral {
+    color: gray;
+    font-weight: bold;
+}
+
+table {
+    margin-top: 20px;
+}
+
+table th {
+    background-color: #343a40;
+    color: white;
+}
+
+table tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+table tr:nth-child(odd) {
+    background-color: #ffffff;
+}
