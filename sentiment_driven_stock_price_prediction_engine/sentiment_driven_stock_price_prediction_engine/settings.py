@@ -37,6 +37,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Django default apps...
+    'rest_framework',
+    'corsheaders',
+    'news',
+    'stocks',
 ]
 
 MIDDLEWARE = [
@@ -47,6 +52,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
+
 ]
 
 ROOT_URLCONF = 'sentiment_driven_stock_price_prediction_engine.urls'
@@ -121,3 +128,25 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Allow all origins (for development only)
+CORS_ORIGIN_ALLOW_ALL = True
+
+# Allow frontend requests
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  # Frontend URL (update if different)
+]
+
+# Configure Celery
+CELERY_BROKER_URL = "redis://localhost:6379/0"
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+
+# Load secrets from .env
+from dotenv import load_dotenv
+import os
+load_dotenv()
+
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")
+ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY", "default-secret-key")

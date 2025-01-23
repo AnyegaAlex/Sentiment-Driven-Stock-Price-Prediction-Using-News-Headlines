@@ -1,3 +1,10 @@
-from django.shortcuts import render
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from .models import NewsArticle
+from .serializers import NewsSerializer
 
-# Create your views here.
+class NewsListView(APIView):
+    def get(self, request):
+        articles = NewsArticle.objects.all().order_by('-created_at')
+        serializer = NewsSerializer(articles, many=True)
+        return Response(serializer.data)
