@@ -138,9 +138,13 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 # Configure Celery
-CELERY_BROKER_URL = "redis://localhost:6379/0"
+# CELERY_BROKER_URL = "redis://localhost:6379/0"
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
+
+#changed the redis port to 6380
+CELERY_BROKER_URL = 'redis://localhost:6380/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6380/0'
 
 # Load secrets from .env
 from dotenv import load_dotenv
