@@ -54,6 +54,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'corsheaders.middleware.CorsMiddleware',
 
+
 ]
 
 ROOT_URLCONF = 'sentiment_driven_stock_price_prediction_engine.urls'
@@ -134,7 +135,7 @@ CORS_ORIGIN_ALLOW_ALL = True
 
 # Allow frontend requests
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # Frontend URL (update if different)
+    "http://localhost:5173",  # Frontend URL 
 ]
 
 # Configure Celery
