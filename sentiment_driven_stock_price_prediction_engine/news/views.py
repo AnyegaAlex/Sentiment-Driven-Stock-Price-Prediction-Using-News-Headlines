@@ -5,6 +5,6 @@ from .serializers import NewsSerializer
 
 class NewsListView(APIView):
     def get(self, request):
-        articles = NewsArticle.objects.all().order_by('-created_at')
+        articles = NewsArticle.objects.all().order_by('-published_at')  
         serializer = NewsSerializer(articles, many=True)
         return Response(serializer.data)
