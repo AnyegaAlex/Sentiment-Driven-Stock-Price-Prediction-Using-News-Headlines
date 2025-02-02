@@ -12,6 +12,7 @@ class NewsArticle(models.Model):
     url = models.URLField()
     url_to_image = models.URLField(null=True, blank=True)
     sentiment = models.CharField(max_length=10, null=True, blank=True)
+    sentiment_score = models.FloatField(null=True, blank=True)  # Store numerical sentiment score
     created_at = models.DateTimeField(auto_now_add=True)  # Track when the article was saved
 
     def __str__(self):

@@ -8,6 +8,7 @@ staticfiles/
 *.env
 migrations/
 
+data/
 # React-specific
 node_modules/
 build/
@@ -66,3 +67,5 @@ node_modules/
 dist/
 build/
 
+
+stock_price_model.pkl

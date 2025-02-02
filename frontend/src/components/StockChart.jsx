@@ -3,7 +3,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts"
 
 const StockChart = ({ stockData }) => {
   return (
-    <LineChart width={600} height={300} data={stockData}>
+    <LineChart width={800} height={700} data={stockData}>
       <CartesianGrid stroke="#ccc" />
       <XAxis dataKey="date" />
       <YAxis />

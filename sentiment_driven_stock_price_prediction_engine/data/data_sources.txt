@@ -1,0 +1,5 @@
+https://github.com/Zdong104/FNSPID_Financial_News_Dataset?tab=readme-ov-file
+https://www.kaggle.com/datasets/ankurzing/sentiment-analysis-for-financial-news
+https://www.kaggle.com/datasets/notlucasp/financial-news-headlines
+https://huggingface.co/datasets/Zihan1004/FNSPID/tree/main/Stock_price
+https://huggingface.co/datasets/Zihan1004/FNSPID/tree/main/Stock_news
