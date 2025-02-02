@@ -5,7 +5,7 @@ from huggingface_hub import login
 from dotenv import load_dotenv
 import os
 
-# Load environment variables from the .env file
+# Load environment variables from the .env file f
 load_dotenv()
 
 # Access the token from environment variables
