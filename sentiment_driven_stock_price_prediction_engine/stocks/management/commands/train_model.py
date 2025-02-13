@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from stocks.models import StockData
+from stocks.models import Stock
 from news.models import NewsArticle
 from stocks.ml_model import prepare_dataset, train_model
 

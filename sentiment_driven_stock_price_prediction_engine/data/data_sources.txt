@@ -3,3 +3,4 @@ https://www.kaggle.com/datasets/ankurzing/sentiment-analysis-for-financial-news
 https://www.kaggle.com/datasets/notlucasp/financial-news-headlines
 https://huggingface.co/datasets/Zihan1004/FNSPID/tree/main/Stock_price
 https://huggingface.co/datasets/Zihan1004/FNSPID/tree/main/Stock_news
+https://www.kaggle.com/datasets/bhavikshangari/ibm-stock-prices-and-news-2008-2023?select=ibm_hist.png

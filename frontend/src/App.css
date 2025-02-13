@@ -64,3 +64,18 @@
     @apply bg-background text-foreground;
   }
 }
+
+
+/* Scrollbar styling for suggestions */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
