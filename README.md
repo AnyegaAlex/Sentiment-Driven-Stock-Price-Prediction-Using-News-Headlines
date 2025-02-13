@@ -1,227 +1,263 @@
-# Sentiment-Driven Stock Price Prediction Using News Headlines
 
-## **Overview**
+# Sentiment-Driven Stock Price Prediction Using News Headlines 📈
 
-Stock prices are significantly influenced by market sentiment, which is often shaped by news headlines and media narratives. This project leverages machine learning and natural language processing (NLP) to predict stock price movement (increase or decrease) based on the sentiment of financial news headlines. The tool provides investors with a data-driven way to make informed decisions quickly and efficiently.
-
----
-
-## **Features**
-
-1. **Sentiment Analysis**: Classifies financial news headlines as positive, negative, or neutral.
-2. **Stock Price Movement Prediction**: Predicts whether stock prices will increase or decrease based on sentiment and historical data.
-3. **Interactive Dashboard**:
-    - Visualizes sentiment trends over time.
-    - Displays stock predictions alongside historical data.
-    - Provides actionable insights through graphs and charts.
-4. **Real-Time Data Integration**: Fetches financial news and stock data using APIs like NewsAPI and Alpha Vantage.
-5. **Scalable Design**: Designed to handle large datasets and real-time data streams efficiently.
+## **Overview** 🔍
+This project provides a **real-time stock sentiment analysis platform** that predicts stock price movements using NLP-driven sentiment analysis of financial news. It features **automated data pipelines**, **machine learning integration**, and an **interactive dashboard** for market insights. The system is designed to help investors make data-driven decisions by analyzing the sentiment of news headlines and correlating it with stock price movements.
 
 ---
 
-## **Tech Stack**
 
-- **Backend**: Django, Django REST Framework
-- **Frontend**: Django templates
-- **Machine Learning**: Scikit-learn, TensorFlow/Keras
-- **APIs**: NewsAPI, Alpha Vantage
-- **Database**: PostgreSQL
-- **Task Queue**: Celery with Redis
-- **Visualization**: Plotly/D3.js for the dashboard
+## **Key Features** 🚀
+
+### **1. Automated News Aggregation**
+- **Multi-Source Integration**: Fetches news from Alpha Vantage, Yahoo Finance, and Finnhub.
+- **Scheduled Fetching**: Celery-powered tasks run every 15 minutes.
+- **Duplicate Prevention**: Uses SHA-256 hashing to avoid duplicate articles.
+
+### **2. Advanced Sentiment Analysis**
+- **Real-Time Confidence Scoring**: Provides a confidence score (0-1) for each sentiment prediction.
+- **Contextual Sentiment Classification**: Uses FinBERT for accurate sentiment analysis.
+- **Historical Trend Visualization**: Displays sentiment trends over time.
+
+### **3. Predictive Dashboard**
+- **Interactive Charts**: Candlestick charts with sentiment overlay.
+- **Source Distribution Heatmaps**: Visualizes news sources and their sentiment distribution.
+- **Confidence-Level Indicators**: Highlights high-confidence predictions.
+- **Mobile-Responsive Design**: Works seamlessly on all devices.
+
+### **4. Enterprise-Grade Infrastructure**
+- **Redis-Backed Task Queue**: Ensures reliable task processing.
+- **Dockerized Deployment**: Easy setup and scaling.
+- **Bulk Database Operations**: Optimized for performance.
+- **API Rate Limit Handling**: Prevents API abuse.
 
 ---
+## **System Architecture** 🏗️
 
-## **Project Structure**
+### **Data Flow Diagram**
+```mermaid
+sequenceDiagram
+  participant User
+  participant NewsList
+  participant API
+  participant LocalStorage
+  
+  User->>NewsList: Selects stock symbol
+  NewsList->>LocalStorage: Check cached data
+  alt Cache valid
+    LocalStorage-->>NewsList: Return cached data
+  else Cache expired
+    NewsList->>API: Fetch news data
+    API-->>NewsList: Return fresh data
+    NewsList->>LocalStorage: Update cache
+  end
+  NewsList->>User: Display filtered news
+  User->>NewsList: Clicks refresh
+  NewsList->>LocalStorage: Clear cache
+  NewsList->>API: Force new fetch
+```
+## Celery Task Scheduler
+```
++------------------------------------------------+
+|              Celery Beat Scheduler             |
+|------------------------------------------------|
+|  - Schedules fetch_news_for_all_symbols task   |
+|  - Schedules periodic tasks for news processing|
++-----------------------+------------------------+
+                        │
+                        ▼
+         +-------------------------------+
+         |  fetch_news_for_all_symbols   |
+         |-------------------------------|
+         |  Query StockSymbol table to   |
+         |  get list of symbols          |
+         |  For each symbol:             |
+         |    call fetch_and_process_news|
+         +-------------------------------+
+                        │
+                        ▼
+    +------------------------------------------+
+    |  fetch_and_process_news (Celery Task)    |
+    |------------------------------------------|
+    | For a given symbol (e.g., IBM):          |
+    | 1. Try Alpha Vantage; if fails, fallback |
+    |    to Yahoo Finance, then Finnhub        |
+    | 2. Fetch articles (filter for latest news|
+    |    if fetch_latest_only==True)           |
+    | 3. Process articles:                     |
+    |    - Analyze sentiment using FinBERT     |
+    |    - Compute title_hash                  |
+    |    - Use bulk_create with unique_fields  |
+    +------------------------------------------+
+                        │
+                        ▼
+      +-------------------------------------+
+      |        Database (ProcessedNews)     |
+      |  - Stores processed articles        |
+      |  - Ensures uniqueness on title_hash |
+      |    and symbol                       |
+      +-------------------------------------+
+                        │
+                        ▼
+         +------------------------------+
+         |         API Endpoints       |
+         |------------------------------|
+         | /api/news/symbol-search/     |
+         | /api/news/analyzed/          |
+         | /api/news/get-news/          |
+         +------------------------------+
+                        │
+                        ▼
+         +------------------------------+
+         |        Frontend UI           |
+         |------------------------------|
+         |  Header.jsx (Symbol search)  |
+         |  NewsAnalysis.jsx (Display   |
+         |    processed news)           |
+         |  PredictionHistory.jsx (Show |
+         |    prediction history)       |
+         +------------------------------+
+                        │
+                        ▼
+         +------------------------------+
+         | CSV File for Training Model  |
+         |------------------------------|
+         | - Contains Symbol, OHCLV,    |
+         |   News, Sentiment, etc.      |
+         | - Used to train a price      |
+         |   prediction model           |
+         +------------------------------+
 
 ```
-├── stock_sentiment_engine/
-│   ├── api/              # REST API endpoints
-│   ├── frontend/         # Frontend for visualization
-│   ├── analysis/         # NLP and sentiment analysis
-|   ├── data_ingest /     # All data-fetching tasks.
-│   ├── static/           # Static files for the frontend
-│   ├── templates/        # HTML templates
-│   └── tests/            # Unit and integration tests
-└── README.md
+## API Endpoints 🌐
 
+1. Symbol Search
+Search for stock symbols using Alpha Vantage or Yahoo Finance as fallback.
+
+Endpoint:
+``` http
+GET /api/news/symbol-search/?q=Apple
 ```
-
-## **Data Sources**
-
-**Financial News:**
-API: NewsAPI
-Example Data:
-
-```
+Parameters:
+- *q (required): The search query (e.g., "Apple")*
+Response:
+```json
 {
-    "headline": "Tech stocks rally as inflation fears ease",
-    "date": "2024-01-07",
-    "source": "Reuters"
+  "results": [
+    {
+      "symbol": "AAPL",
+      "name": "Apple Inc.",
+      "exchange": "NASDAQ"
+    }
+  ]
 }
-
 ```
+2. Get Analyzed News
+Retrieve analyzed news for a stock symbol. Steps:
 
-**Stock Data:**
-API: Alpha Vantage
-Example Data:
+    1. Check the database cache.
+    2. Attempt to fetch from Alpha Vantage.
+    3. Fallback to Finnhub, then Yahoo Finance if needed.
+    4. Standardize and analyze each article, save it, and return the data.
 
+Endpoint:
+```http
+GET /api/news/analyzed/?format=api
 ```
+Parameters:
+- ```symbol``` (required): The stock symbol (e.g., "AAPL").
+- ```refresh``` (optional): Force a refresh of the data (default: ```false```).
+
+Response:
+```json
 {
-    "symbol": "AAPL",
-    "date": "2024-01-07",
-    "close": 179.45,
-    "open": 175.90
+  "symbol": "AAPL",
+  "news": [
+    {
+      "title": "Apple stock surges on strong earnings",
+      "summary": "Apple reported record-breaking earnings...",
+      "source": "Reuters",
+      "published_at": "2024-01-07T12:00:00Z",
+      "sentiment": "positive",
+      "confidence": 0.85,
+      "url": "https://example.com/apple-earnings"
+    }
+  ]
 }
-
 ```
+3. Get News
+Retrieve processed news for a given stock symbol. If a refresh is requested or no processed news exists, trigger an asynchronous task.
 
-## **Installation Guide**
+Endpoint:
 
-**Clone the Repository:**
-
+```http
+GET /api/news/get-news/
 ```
-git clone <https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines.git>
-cd stock_sentiment_engine
+Parameters:
+- ```symbol``` (required): The stock symbol (e.g., "AAPL").
+- ```refresh``` (optional): Force a refresh of the data (default: ```false```).
 
+Response:
+```json
+{
+  "status": "success",
+  "symbol": "AAPL",
+  "articles": [
+    {
+      "title": "Apple announces new product line",
+      "summary": "Apple unveiled its latest product...",
+      "source": "Bloomberg",
+      "published_at": "2024-01-07T10:00:00Z",
+      "sentiment": "neutral",
+      "confidence": 0.72,
+      "url": "https://example.com/apple-new-product"
+    }
+  ]
+}
 ```
-
-**Set Up Virtual Environment:**
-
-```
+## Installation (Manual Setup) ⚙️
+Backend:
+```bash
 python -m venv .venv
-source venv/bin/activate  # Linux/Mac
-.venv\\Scripts\\activate     # Windows
-
-```
-
-**Install Dependencies:**
-
-```
+source .venv/bin/activate
 pip install -r requirements.txt
-
 ```
-
-**Set Up Environment Variables: Create a .env file and add the following:**
-
+Frontend:
+```bash
+cd frontend
+npm install
+npm run build
 ```
-NEWS_API_KEY=your_newsapi_key
-ALPHA_VANTAGE_KEY=your_alphavantage_key
-SECRET_KEY=your_django_secret_key
-
-```
-
-**Run Migrations:**
-
-```
-python manage.py makemigrations
-python manage.py migrate
-
-```
-
-**Start the Server:**
-
-```
+Start Services:
+```bash
+redis-server &
+celery -A stock_sentiment_engine worker -l INFO &
 python manage.py runserver
+```
+Environment Variables (.env)
+```
+NEWS_API_KEY=your_key
+ALPHA_VANTAGE_KEY=your_key
+FINNHUB_KEY=your_key
+REDIS_URL=redis://localhost:6379/0
+CELERY_BROKER=redis://localhost:6379/1
+```
+## Contributing
+
+Contributions are always welcome!
+
+See `contributing.md` for ways to get started.
+
+Please adhere to this project's `code of conduct`.
 
 ```
-
-Access the Dashboard: Visit [http://127.0.0.1:8000](http://127.0.0.1:8000/) in your browser.
-
-## **Usage**
-
-**Fetching Data:**
-Use the fetch_data management command to fetch news and stock data:
-
+1. Fork repository.
+2. Create feature branch.
+3. Submit PR with:
+     - Test coverage.
+     - Updated documentation.
+     - Type annotations.
 ```
-python manage.py fetch_data
+## License 📄
 
-```
-
-**Making Predictions:**
-The model predicts stock price movement based on the sentiment score and displays the results on the dashboard.
-**Example Workflow:**
-Enter a stock symbol (e.g., AAPL) in the dashboard.
-View sentiment trends and predictions in real-time.
-
-## **Model Details**
-
-**Sentiment Analysis:**
-
-- Preprocessed headlines using tokenization, lemmatization, and stopword removal.
-- Sentiment classification using a pre-trained model (e.g., BERT or logistic regression).
-**Prediction Model:**
-- **Input:** Sentiment scores, stock open/close prices, volume, and other technical indicators.
-- **Algorithm:** Random Forest, Gradient Boosting, or LSTM.
-**Evaluation Metrics:** Accuracy, precision, recall, F1-score.
-
-## **Testing**
-
-**Unit Tests:**
-Run tests for APIs, ML models, and data pipelines:
-
-```
-python manage.py test
-
-```
-
-**Validation:**
-Validate predictions using historical stock data to ensure reliability.
-
-## **Performance Metrics**
-
-**Sentiment Classification:**
-
-- Accuracy: 85%
-- F1-Score: 0.83
-
-**Stock Movement Prediction:**
-
-- Accuracy: 78%
-- Precision: 0.80
-- Recall: 0.76
-
-## **Features Under Development**
-
-- Multi-language support for sentiment analysis.
-- Advanced visualization tools for user engagement.
-- Support for more data sources like Twitter and Reddit.
-
-## **Contributing**
-
-Fork the repository.
-**Create a feature branch:**
-
-```
-git checkout -b feature-name
-
-```
-
-**Commit your changes:**
-
-```
-git commit -m "Added new feature"
-
-```
-
-**Push the branch:**
-
-```
-git push origin feature-name
-
-```
-
-Open a pull request.
-
-## **License**
-
-This project is licensed under the MIT License. See the LICENSE file for details.
-
-## **Project Screenshots**
-
-## **Live Demo**
-
-Live Demo Link
-
-## **Contact**
-
-For questions or feedback, contact us at [anyega.alex.kamau@gmail.com](mailto:anyega.alex.kamau@gmail.com)
+MIT License - See [LICENSE](https://choosealicense.com/licenses/mit/)for details.
