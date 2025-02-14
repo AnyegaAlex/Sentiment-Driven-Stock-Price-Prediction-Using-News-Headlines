@@ -57,77 +57,69 @@ sequenceDiagram
   NewsList->>API: Force new fetch
 ```
 ## Celery Task Scheduler
-```
-+------------------------------------------------+
-|              Celery Beat Scheduler             |
-|------------------------------------------------|
-|  - Schedules fetch_news_for_all_symbols task   |
-|  - Schedules periodic tasks for news processing|
-+-----------------------+------------------------+
-                        │
-                        ▼
-         +-------------------------------+
-         |  fetch_news_for_all_symbols   |
-         |-------------------------------|
-         |  Query StockSymbol table to   |
-         |  get list of symbols          |
-         |  For each symbol:             |
-         |    call fetch_and_process_news|
-         +-------------------------------+
-                        │
-                        ▼
-    +------------------------------------------+
-    |  fetch_and_process_news (Celery Task)    |
-    |------------------------------------------|
-    | For a given symbol (e.g., IBM):          |
-    | 1. Try Alpha Vantage; if fails, fallback |
-    |    to Yahoo Finance, then Finnhub        |
-    | 2. Fetch articles (filter for latest news|
-    |    if fetch_latest_only==True)           |
-    | 3. Process articles:                     |
-    |    - Analyze sentiment using FinBERT     |
-    |    - Compute title_hash                  |
-    |    - Use bulk_create with unique_fields  |
-    +------------------------------------------+
-                        │
-                        ▼
-      +-------------------------------------+
-      |        Database (ProcessedNews)     |
-      |  - Stores processed articles        |
-      |  - Ensures uniqueness on title_hash |
-      |    and symbol                       |
-      +-------------------------------------+
-                        │
-                        ▼
-         +------------------------------+
-         |         API Endpoints       |
-         |------------------------------|
-         | /api/news/symbol-search/     |
-         | /api/news/analyzed/          |
-         | /api/news/get-news/          |
-         +------------------------------+
-                        │
-                        ▼
-         +------------------------------+
-         |        Frontend UI           |
-         |------------------------------|
-         |  Header.jsx (Symbol search)  |
-         |  NewsAnalysis.jsx (Display   |
-         |    processed news)           |
-         |  PredictionHistory.jsx (Show |
-         |    prediction history)       |
-         +------------------------------+
-                        │
-                        ▼
-         +------------------------------+
-         | CSV File for Training Model  |
-         |------------------------------|
-         | - Contains Symbol, OHCLV,    |
-         |   News, Sentiment, etc.      |
-         | - Used to train a price      |
-         |   prediction model           |
-         +------------------------------+
 
+```mermaid
+flowchart TB
+    %% Scheduler Section
+    subgraph Scheduler["Celery Beat Scheduler"]
+        A[Celery Beat] -->|Schedules| B(fetch_news_for_all_symbols)
+    end
+
+    %% Dynamic Symbol Query and Task Triggering
+    B -->|Queries| C[(StockSymbol Table)]
+    B -->|Triggers| D(fetch_and_process_news)
+
+    %% Processing Pipeline
+    subgraph Processing["News Processing Pipeline"]
+        D -->|"1. Try Alpha Vantage"| E{Success?}
+        E -->|No| F["2. Fallback to Yahoo Finance"]
+        F -->|No| G["3. Fallback to Finnhub"]
+        G --> H["Process articles"]
+        E -->|Yes| H
+        H --> I["Analyze sentiment (FinBERT)"]
+        I --> J["Compute title_hash"]
+        J --> K["Bulk create/update"]
+    end
+
+    %% Output Channels
+    subgraph Output["Output Channels"]
+        K -->|Stores| L[(Database\nProcessedNews)]
+        L --> M[API Endpoints]
+        M --> N[Frontend UI]
+        L --> O[CSV Training Data]
+    end
+
+    %% Monitoring & Logging
+    subgraph Monitoring["Monitoring & Logging"]
+        P[Log Processing Errors] --> Q[(Error Logs)]
+        R[Track API Usage] --> S[(Usage Metrics)]
+    end
+
+    %% Alerting System
+    subgraph Alerts["Alerting System"]
+        T[Rate Limit Alerts] --> U[Admin Notifications]
+        V[Data Integrity Checks] --> U
+    end
+
+    %% Feedback loops (described in comments)
+    %% Alerts (U) can prompt a review of scheduling (A)
+    %% Error logs (Q) may trigger re-processing (D)
+
+    %% Styling Classes
+    classDef scheduler fill:#f0f4ff,stroke:#4a90e2,stroke-width:2px;
+    classDef database fill:#e6f4ea,stroke:#34a853,stroke-width:2px;
+    classDef process fill:#fef7e6,stroke:#f9ab00,stroke-width:2px;
+    classDef output fill:#f5f5f5,stroke:#666,stroke-width:2px;
+    classDef monitoring fill:#fff0f0,stroke:#ff6b6b,stroke-width:2px;
+    classDef alerts fill:#fff3e0,stroke:#ffa726,stroke-width:2px;
+    
+    %% Assign Classes to Nodes
+    class A,B scheduler;
+    class C,L database;
+    class D,E,F,G,H,I,J,K process;
+    class M,N,O output;
+    class P,Q,R,S monitoring;
+    class T,U,V alerts;
 ```
 ## API Endpoints 🌐
 
