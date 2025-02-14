@@ -36,25 +36,39 @@ This project provides a **real-time stock sentiment analysis platform** that pre
 
 ### **Data Flow Diagram**
 ```mermaid
+%% Legend:
+%% - Dashed arrows (-->~) indicate asynchronous calls.
+%% - alt branches show alternative paths (e.g., errors).
+%% - par blocks indicate parallel processes (e.g., showing a loading indicator).
+
 sequenceDiagram
-  participant User
-  participant NewsList
-  participant API
-  participant LocalStorage
-  
-  User->>NewsList: Selects stock symbol
-  NewsList->>LocalStorage: Check cached data
-  alt Cache valid
-    LocalStorage-->>NewsList: Return cached data
-  else Cache expired
-    NewsList->>API: Fetch news data
-    API-->>NewsList: Return fresh data
-    NewsList->>LocalStorage: Update cache
-  end
-  NewsList->>User: Display filtered news
-  User->>NewsList: Clicks refresh
-  NewsList->>LocalStorage: Clear cache
-  NewsList->>API: Force new fetch
+    participant U as User
+    participant UI as NewsList UI
+    participant C as Cache (LocalStorage)
+    participant API as API Server
+    participant EH as Error Handler
+
+    U->>UI: Selects stock symbol
+    UI->>C: Check cache for symbol data
+    alt Cache valid
+        C-->>UI: Return cached news data\n(expires in 60 minutes)
+    else Cache expired or not found
+        UI->>~API: Fetch news data (async)
+        par Show loading indicator
+            UI->>U: Display loading spinner
+        end
+        alt API fetch successful
+            API-->>UI: Return fresh news data
+            UI->>C: Update cache with fresh data
+        else API fetch error
+            API-->>EH: Return error info
+            EH-->>UI: Display error message
+        end
+    end
+    UI->>U: Display filtered news data
+    U->>UI: Clicks refresh
+    UI->>C: Clear cache for symbol
+    UI->>~API: Force new fetch of news data (async)
 ```
 ## Celery Task Scheduler
 
