@@ -7,7 +7,7 @@ from celery import shared_task
 from celery.exceptions import MaxRetriesExceededError
 from datetime import datetime, timedelta
 from django.conf import settings
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.utils import timezone
 import dateutil.parser
 from .models import ProcessedNews, StockSymbol
@@ -22,7 +22,7 @@ LOG_FILE = os.path.join(settings.BASE_DIR, "logs", "news_fetch_log.txt")
 @shared_task(bind=True, autoretry_for=(Exception, requests.HTTPError), retry_backoff=60, max_retries=3)
 def fetch_and_process_news(self, symbol, fetch_latest_only=True):
     """
-    Fetch and process news articles with improved error handling and API-specific parsing
+    Fetch and process news articles with improved error handling and API-specific parsing.
     """
     try:
         articles = []
@@ -55,14 +55,14 @@ def fetch_and_process_news(self, symbol, fetch_latest_only=True):
         if fetch_latest_only:
             articles = _filter_recent_articles(articles)
         
-        created_count, duplicates = _process_articles(symbol, articles)
-        _write_log(f"Processed {created_count} new, {duplicates} duplicates for {symbol}")
+        new_articles, duplicate_count = _process_articles(symbol, articles)
+        _write_log(f"Processed {new_articles} new, {duplicate_count} duplicates for {symbol}")
 
         return {
             'status': 'success',
             'symbol': symbol,
-            'new_articles': created_count,
-            'duplicates': duplicates
+            'new_articles': new_articles,
+            'duplicates': duplicate_count
         }
     except Exception as e:
         logger.error(f"Critical failure processing {symbol}: {str(e)}", exc_info=True)
@@ -72,7 +72,7 @@ def fetch_and_process_news(self, symbol, fetch_latest_only=True):
             return {'status': 'failed', 'message': 'Max retries exceeded'}
 
 def _fetch_alpha_vantage(symbol):
-    """Alpha Vantage API with proper error handling"""
+    """Alpha Vantage API with proper error handling."""
     params = {
         'function': 'NEWS_SENTIMENT',
         'tickers': symbol,
@@ -96,7 +96,7 @@ def _fetch_alpha_vantage(symbol):
     return data['feed'][:MAX_ARTICLES]
 
 def _fetch_yahoo_finance(symbol):
-    """Yahoo Finance API with updated endpoint"""
+    """Yahoo Finance API with updated endpoint."""
     headers = {
         'x-rapidapi-key': settings.RAPIDAPI_KEY,
         'x-rapidapi-host': 'apidojo-yahoo-finance-v1.p.rapidapi.com'
@@ -110,7 +110,6 @@ def _fetch_yahoo_finance(symbol):
     response.raise_for_status()
     data = response.json()
     
-    # Handle different response structures
     if 'items' in data:
         return data['items']
     if 'news' in data:
@@ -118,7 +117,7 @@ def _fetch_yahoo_finance(symbol):
     return []
 
 def _fetch_finnhub(symbol):
-    """Finnhub API with date range parameters"""
+    """Finnhub API with date range parameters."""
     today = datetime.utcnow().date()
     seven_days_ago = today - timedelta(days=7)
     response = requests.get(
@@ -135,113 +134,73 @@ def _fetch_finnhub(symbol):
     return response.json()[:MAX_ARTICLES]
 
 def _filter_recent_articles(articles):
-    """Filter articles from last 24 hours with improved time handling"""
+    """Filter articles from the last 24 hours."""
     cutoff = timezone.now() - timedelta(hours=24)
     return [article for article in articles if _parse_date(article) >= cutoff]
 
 def _process_articles(symbol, articles):
-    """Process articles with API-specific field mapping"""
-    processed = []
-    existing_hashes = set()
-    batch_hashes = set()
+    """Process articles with API-specific field mapping using update_or_create."""
+    new_articles = 0
     duplicate_count = 0
 
-    # Pre-fetch existing hashes from database
-    existing_hashes.update(
-        ProcessedNews.objects.filter(symbol=symbol)
-                          .values_list('title_hash', flat=True)
-    )
-    
     for article in articles:
         try:
-            # Field extraction
             title = (
                 article.get('title') or 
                 article.get('headline') or 
                 article.get('description', '')
             ).strip().lower()
-
             if not title:
                 continue
 
             title_hash = hashlib.sha256(title.encode('utf-8')).hexdigest()
 
-            # Check duplicates at multiple levels
-            if title_hash in existing_hashes or title_hash in batch_hashes:
-                duplicate_count += 1
-                continue
-
-            # Process content
+            # Prepare content for sentiment analysis.
             content = f"{title} {article.get('summary', '')}"
             sentiment, confidence = analyze_sentiment(content)
 
-            
-            # Sentiment analysis
-            content = f"{title} {article.get('summary', '')}"
-            sentiment, confidence = analyze_sentiment(content)
-            
-            # API-specific sentiment data
-            if 'ticker_sentiment' in article:  # Alpha Vantage
+            # For Alpha Vantage API-specific sentiment data.
+            if 'ticker_sentiment' in article:
                 ticker_data = next(
-                    (ts for ts in article['ticker_sentiment'] 
-                     if ts.get('ticker') == symbol),
+                    (ts for ts in article['ticker_sentiment'] if ts.get('ticker') == symbol),
                     {}
                 )
-                sentiment = float(ticker_data.get('sentiment_score', sentiment))
-                confidence = float(ticker_data.get('relevance_score', confidence))
+                try:
+                    sentiment = float(ticker_data.get('sentiment_score', sentiment))
+                    confidence = float(ticker_data.get('relevance_score', confidence))
+                except ValueError:
+                    pass  # Keep the previously computed sentiment values if conversion fails.
 
-            # Common fields
-            processed.append(ProcessedNews(
-                symbol=symbol,
-                title=title[:200],
-                summary=article.get('summary', '')[:500],
-                source=(
-                    article.get('source') or 
-                    article.get('publisher', '')[:100]
-                ),
-                url=article.get('url') or article.get('link', ''),
-                published_at=_parse_date(article),
-                sentiment=sentiment,
-                confidence=confidence,
-                raw_data=article,
-                title_hash=hashlib.sha256(title.lower().encode()).hexdigest()
-            ))
+            defaults = {
+                "title": title[:200],
+                "summary": article.get('summary', '')[:500],
+                "source": (article.get('source') or article.get('publisher', '')[:100]),
+                "url": article.get('url') or article.get('link', ''),
+                "published_at": _parse_date(article),
+                "sentiment": sentiment,
+                "confidence": confidence,
+                "raw_data": article,
+            }
+
+            obj, created = ProcessedNews.objects.update_or_create(
+                title_hash=title_hash, 
+                symbol=symbol, 
+                defaults=defaults
+            )
+
+            if created:
+                new_articles += 1
+            else:
+                duplicate_count += 1
+
         except Exception as e:
             logger.error(f"Skipping article due to error: {str(e)}")
             continue
 
-    # Bulk create with conflict resolution
-    try:
-        with transaction.atomic():
-            created = ProcessedNews.objects.bulk_create(
-                processed,
-                update_conflicts=True,
-                unique_fields=['title_hash', 'symbol'],
-                update_fields=[
-                    'summary', 'sentiment', 'confidence', 
-                    'raw_data', 'published_at', 'source'
-                ]
-            )
-            return len(created), duplicate_count
-    except IntegrityError as e:
-        logger.error(
-            f"UNIQUE constraint failed for {symbol}. "
-            f"Batch size: {len(processed)}, "
-            f"Duplicates detected: {duplicate_count}. "
-            f"Error: {str(e)}"
-        )
-        # Add these metrics to your logging
-        logger.error(
-            f"Hash collision/race condition detected. "
-            f"First 5 hashes: {[a.title_hash[:8] for a in processed[:5]]}"
-        )
-        return 0, duplicate_count
-
-
-
+    return new_articles, duplicate_count
 
 def _parse_date(article):
-    """Universal date parser with timezone support"""
+    """Universal date parser with timezone support."""
     date_value = (
         article.get('time_published') or 
         article.get('datetime') or 
@@ -249,14 +208,12 @@ def _parse_date(article):
         article.get('pubDate')
     )
     
-       # Handle UNIX timestamps (Finnhub uses milliseconds)
     if isinstance(date_value, int):
         try:
             return datetime.fromtimestamp(date_value / 1000, tz=timezone.utc)
         except ValueError:
             return datetime.fromtimestamp(date_value, tz=timezone.utc)
     
-    # String-based formats
     for fmt in (
         '%Y%m%dT%H%M%S', 
         '%Y-%m-%dT%H:%M:%SZ', 
@@ -269,18 +226,14 @@ def _parse_date(article):
         except (ValueError, TypeError):
             continue
     
-    # Fallback to dateutil
     try:
         dt = dateutil.parser.parse(date_value)
         return timezone.make_aware(dt, timezone.utc)
-    except:
+    except Exception:
         logger.warning(f"Failed to parse date: {date_value}")
         return timezone.now()
 
 def _write_log(message):
-    """Thread-safe logging"""
+    """Thread-safe logging."""
     with open(LOG_FILE, "a") as f:
         f.write(f"{datetime.utcnow().isoformat()} - {message}\n")
-
-
-      

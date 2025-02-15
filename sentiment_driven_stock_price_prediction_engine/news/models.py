@@ -1,12 +1,12 @@
 # news/models.py
 from django.db import models
 from django.utils import timezone
-from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator, URLValidator
+from django.core.exceptions import ValidationError
 import hashlib
-from django.core.validators import URLValidator
 
 class ProcessedNews(models.Model):
-    
+
     SENTIMENT_CHOICES = [
         ('positive', 'Positive'),
         ('negative', 'Negative'),
@@ -64,17 +64,10 @@ class ProcessedNews(models.Model):
         default=dict, 
         help_text="Raw API response data"
     )
-    #latest URL at all times
-    def save(self, *args, **kwargs):
-        if self.pk:  # Existing instance
-            original = ProcessedNews.objects.get(pk=self.pk)
-            if self.url != original.url:
-                raise ValidationError("URL cannot be modified once set")
-        super().save(*args, **kwargs)
-
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    
     class Meta:
         verbose_name = 'Processed News Article'
         verbose_name_plural = 'Processed News Articles'
@@ -89,18 +82,23 @@ class ProcessedNews(models.Model):
                 name='unique_article_per_symbol'
             )   
         ]
-
+    
     def __str__(self):
         return f"{self.symbol} - {self.title[:50]}"
-
+    
     def save(self, *args, **kwargs):
-        """Generate title hash before saving"""
+        # For existing instances, ensure the URL is not modified.
+        if self.pk:
+            original = ProcessedNews.objects.get(pk=self.pk)
+            if self.url != original.url:
+                raise ValidationError("URL cannot be modified once set")
+        # Generate title hash if not already set.
         if not self.title_hash:
             self.title_hash = hashlib.sha256(
                 self.title.strip().lower().encode('utf-8')
             ).hexdigest()
         super().save(*args, **kwargs)
-
+    
     @property
     def sentiment_color(self):
         return {
@@ -108,7 +106,7 @@ class ProcessedNews(models.Model):
             'negative': 'red',
             'neutral': 'gray'
         }.get(self.sentiment, 'gray')
-
+    
     @property
     def is_recent(self):
         """Check if article was published within last 24 hours"""
@@ -120,7 +118,7 @@ class SymbolSearchCache(models.Model):
     results = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(db_index=True)
-
+    
     class Meta:
         verbose_name = 'Symbol Search Cache'
         verbose_name_plural = 'Symbol Search Caches'
@@ -128,23 +126,24 @@ class SymbolSearchCache(models.Model):
             models.Index(fields=['expires_at']),
         ]
         ordering = ['-created_at']
-
+    
     def save(self, *args, **kwargs):
         """Set default expiration (30 minutes) if not provided"""
         if not self.expires_at:
             self.expires_at = timezone.now() + timezone.timedelta(minutes=30)
         super().save(*args, **kwargs)
-
+    
     @property
     def is_valid(self):
         """Check if cache entry is still fresh"""
         return timezone.now() < self.expires_at
-
+    
     def __str__(self):
         return f"'{self.query}' cache (expires {self.expires_at})"
 
+
 class StockSymbol(models.Model):
     symbol = models.CharField(max_length=10, unique=True)
-
+    
     def __str__(self):
         return self.symbol
