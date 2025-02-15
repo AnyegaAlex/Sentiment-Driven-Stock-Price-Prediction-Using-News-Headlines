@@ -11,7 +11,7 @@ This project provides a **real-time stock sentiment analysis platform** that pre
 
 ### **1. Automated News Aggregation**
 - **Multi-Source Integration**: Fetches news from Alpha Vantage, Yahoo Finance, and Finnhub.
-- **Scheduled Fetching**: Celery-powered tasks run every 15 minutes.
+- **Scheduled Fetching**: Celery-powered tasks run every 4hours.
 - **Duplicate Prevention**: Uses SHA-256 hashing to avoid duplicate articles.
 
 ### **2. Advanced Sentiment Analysis**
@@ -20,10 +20,9 @@ This project provides a **real-time stock sentiment analysis platform** that pre
 - **Historical Trend Visualization**: Displays sentiment trends over time.
 
 ### **3. Predictive Dashboard**
-- **Interactive Charts**: Candlestick charts with sentiment overlay.
+- **Interactive Charts**: Charts with sentiment overlay.
 - **Source Distribution Heatmaps**: Visualizes news sources and their sentiment distribution.
 - **Confidence-Level Indicators**: Highlights high-confidence predictions.
-- **Mobile-Responsive Design**: Works seamlessly on all devices.
 
 ### **4. Enterprise-Grade Infrastructure**
 - **Redis-Backed Task Queue**: Ensures reliable task processing.
@@ -73,21 +72,19 @@ sequenceDiagram
 ## Celery Task Scheduler
 
 ```mermaid
+%%{init: {'theme': 'neutral'}}%%
 flowchart TB
-    %% Scheduler Section
     subgraph Scheduler["Celery Beat Scheduler"]
         A[Celery Beat] -->|Schedules| B(fetch_news_for_all_symbols)
     end
 
-    %% Dynamic Symbol Query and Task Triggering
     B -->|Queries| C[(StockSymbol Table)]
     B -->|Triggers| D(fetch_and_process_news)
 
-    %% Processing Pipeline
     subgraph Processing["News Processing Pipeline"]
-        D -->|"1. Try Alpha Vantage"| E{Success?}
-        E -->|No| F["2. Fallback to Yahoo Finance"]
-        F -->|No| G["3. Fallback to Finnhub"]
+        D -->|"Try Alpha Vantage"| E{Success?}
+        E -->|No| F["Fallback: Yahoo Finance"]
+        F -->|No| G["Fallback: Finnhub"]
         G --> H["Process articles"]
         E -->|Yes| H
         H --> I["Analyze sentiment (FinBERT)"]
@@ -95,7 +92,6 @@ flowchart TB
         J --> K["Bulk create/update"]
     end
 
-    %% Output Channels
     subgraph Output["Output Channels"]
         K -->|Stores| L[(Database\nProcessedNews)]
         L --> M[API Endpoints]
@@ -103,31 +99,24 @@ flowchart TB
         L --> O[CSV Training Data]
     end
 
-    %% Monitoring & Logging
     subgraph Monitoring["Monitoring & Logging"]
-        P[Log Processing Errors] --> Q[(Error Logs)]
+        P[Log Errors] --> Q[(Error Logs)]
         R[Track API Usage] --> S[(Usage Metrics)]
     end
 
-    %% Alerting System
     subgraph Alerts["Alerting System"]
         T[Rate Limit Alerts] --> U[Admin Notifications]
-        V[Data Integrity Checks] --> U
+        V[Data Checks] --> U
     end
 
-    %% Feedback loops (described in comments)
-    %% Alerts (U) can prompt a review of scheduling (A)
-    %% Error logs (Q) may trigger re-processing (D)
-
-    %% Styling Classes
-    classDef scheduler fill:#f0f4ff,stroke:#4a90e2,stroke-width:2px;
-    classDef database fill:#e6f4ea,stroke:#34a853,stroke-width:2px;
-    classDef process fill:#fef7e6,stroke:#f9ab00,stroke-width:2px;
-    classDef output fill:#f5f5f5,stroke:#666,stroke-width:2px;
-    classDef monitoring fill:#fff0f0,stroke:#ff6b6b,stroke-width:2px;
-    classDef alerts fill:#fff3e0,stroke:#ffa726,stroke-width:2px;
+    %% Styling matching original
+    classDef scheduler fill:#f0f4ff,stroke:#4a90e2;
+    classDef database fill:#e6f4ea,stroke:#34a853;
+    classDef process fill:#fef7e6,stroke:#f9ab00;
+    classDef output fill:#f5f5f5,stroke:#666;
+    classDef monitoring fill:#fff0f0,stroke:#ff6b6b;
+    classDef alerts fill:#fff3e0,stroke:#ffa726;
     
-    %% Assign Classes to Nodes
     class A,B scheduler;
     class C,L database;
     class D,E,F,G,H,I,J,K process;
@@ -137,28 +126,35 @@ flowchart TB
 ```
 ## API Endpoints 🌐
 
-1. Symbol Search
+### 1. Symbol Search
 Search for stock symbols using Alpha Vantage or Yahoo Finance as fallback.
 
-Endpoint:
+#### Endpoint:
 ``` http
 GET /api/news/symbol-search/?q=Apple
 ```
-Parameters:
+#### Parameters:
 - *q (required): The search query (e.g., "Apple")*
-Response:
+#### Response:
 ```json
-{
-  "results": [
+HTTP 200 OK
+Allow: OPTIONS, GET
+Content-Type: application/json
+Vary: Accept
+[
     {
-      "symbol": "AAPL",
-      "name": "Apple Inc.",
-      "exchange": "NASDAQ"
-    }
-  ]
-}
+        "1. symbol": "APLE",
+        "2. name": "Apple Hospitality REIT Inc",
+        "3. type": "Equity",
+        "4. region": "United States",
+        "5. marketOpen": "09:30",
+        "6. marketClose": "16:00",
+        "7. timezone": "UTC-04",
+        "8. currency": "USD",
+        "9. matchScore": "0.8889"
+    },
 ```
-2. Get Analyzed News
+### 2. Get Analyzed News
 Retrieve analyzed news for a stock symbol. Steps:
 
     1. Check the database cache.
@@ -166,88 +162,107 @@ Retrieve analyzed news for a stock symbol. Steps:
     3. Fallback to Finnhub, then Yahoo Finance if needed.
     4. Standardize and analyze each article, save it, and return the data.
 
-Endpoint:
+#### Endpoint:
 ```http
 GET /api/news/analyzed/?format=api
 ```
-Parameters:
+#### Parameters:
 - ```symbol``` (required): The stock symbol (e.g., "AAPL").
 - ```refresh``` (optional): Force a refresh of the data (default: ```false```).
 
-Response:
+#### Response:
 ```json
+HTTP 200 OK
+Allow: OPTIONS, GET
+Content-Type: application/json
+Vary: Accept
+
 {
-  "symbol": "AAPL",
-  "news": [
-    {
-      "title": "Apple stock surges on strong earnings",
-      "summary": "Apple reported record-breaking earnings...",
-      "source": "Reuters",
-      "published_at": "2024-01-07T12:00:00Z",
-      "sentiment": "positive",
-      "confidence": 0.85,
-      "url": "https://example.com/apple-earnings"
-    }
-  ]
-}
+    "symbol": "IBM",
+    "news": [
+        {
+            "title": "Seagate Inks Deal to Acquire Intevac in $119 Million All-Cash Deal",
+            "summary": "STX will buy Intevac for $4.00 per share in an all-cash transaction. The buyout is expected to close by late March or early April 2025.",
+            "source": "Zacks Commentary",
+            "published_at": "2025-02-14T14:56:00Z",
+            "sentiment": "neutral",
+            "confidence": 0.904671311378479
+        },
 ```
-3. Get News
+### 3. Get News
 Retrieve processed news for a given stock symbol. If a refresh is requested or no processed news exists, trigger an asynchronous task.
 
-Endpoint:
+#### Endpoint:
 
 ```http
 GET /api/news/get-news/
 ```
-Parameters:
+#### Parameters:
 - ```symbol``` (required): The stock symbol (e.g., "AAPL").
 - ```refresh``` (optional): Force a refresh of the data (default: ```false```).
 
-Response:
+#### Response:
 ```json
+HTTP 200 OK
+Allow: OPTIONS, GET
+Content-Type: application/json
+Vary: Accept
+
 {
-  "status": "success",
-  "symbol": "AAPL",
-  "articles": [
-    {
-      "title": "Apple announces new product line",
-      "summary": "Apple unveiled its latest product...",
-      "source": "Bloomberg",
-      "published_at": "2024-01-07T10:00:00Z",
-      "sentiment": "neutral",
-      "confidence": 0.72,
-      "url": "https://example.com/apple-new-product"
-    }
-  ]
-}
+    "symbol": "IBM",
+    "news": [
+        {
+            "title": "Seagate Inks Deal to Acquire Intevac in $119 Million All-Cash Deal",
+            "summary": "STX will buy Intevac for $4.00 per share in an all-cash transaction. The buyout is expected to close by late March or early April 2025.",
+            "source": "Zacks Commentary",
+            "published_at": "2025-02-14T14:56:00Z",
+            "sentiment": "neutral",
+            "confidence": 0.904671311378479
+        },
 ```
 ## Installation (Manual Setup) ⚙️
-Backend:
+### Backend:
 ```bash
 python -m venv .venv
-source .venv/bin/activate
+source .venv/Scripts/activate
 pip install -r requirements.txt
 ```
-Frontend:
+### Frontend:
 ```bash
 cd frontend
 npm install
-npm run build
+npm run dev
 ```
-Start Services:
+### Start Services:
 ```bash
-redis-server &
-celery -A stock_sentiment_engine worker -l INFO &
+redis-server
+celery -A sentiment_driven_stock_price_prediction_engine worker --pool=solo --loglevel=info
 python manage.py runserver
 ```
-Environment Variables (.env)
+### Environment Variables (.env)
 ```
-NEWS_API_KEY=your_key
-ALPHA_VANTAGE_KEY=your_key
-FINNHUB_KEY=your_key
-REDIS_URL=redis://localhost:6379/0
-CELERY_BROKER=redis://localhost:6379/1
+//Backend (.env)//
+
+NEWS_API_KEY=
+ALPHA_VANTAGE_KEY=
+FINNHUB_API_KEY=
+RAPIDAPI_KEY=
+RAPIDAPI_HOST=
+DB_NAME=stock_analysis
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_HOST=localhost
+CELERY_BROKER_URL=
+
+//Frontend (.env)//
+
+VITE_ALPHA_VANTAGE_KEY=
+VITE_RAPIDAPI_KEY=
+VITE_RAPIDAPI_HOST=
+REACT_APP_API_BASE_URL=
+
 ```
+
 ## Contributing
 
 Contributions are always welcome!
