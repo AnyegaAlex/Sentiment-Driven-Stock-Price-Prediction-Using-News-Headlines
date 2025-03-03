@@ -1,5 +1,7 @@
+import React from "react";
+
 const NewsSkeleton = () => (
-  <div className="space-y-4">
+  <div role="status" className="space-y-4">
     {[...Array(2)].map((_, index) => (
       <div key={index} className="p-6 bg-white rounded-lg shadow-sm">
         <div className="animate-pulse space-y-4">
@@ -13,6 +15,7 @@ const NewsSkeleton = () => (
         </div>
       </div>
     ))}
+    <span className="sr-only">Loading news...</span>
   </div>
 );
 

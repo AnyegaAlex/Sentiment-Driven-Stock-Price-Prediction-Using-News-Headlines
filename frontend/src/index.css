@@ -1,3 +1,4 @@
+@import "tailwindcss";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -15,4 +16,13 @@
 ::-webkit-scrollbar-thumb {
   background: #4b5563;
   border-radius: 4px;
+}
+
+:root {
+  --radius: 0.375rem;
+  --background: 210, 50%, 98%;
+  --foreground: 210, 50%, 20%;
+  --primary: 200, 100%, 50%;
+  --primary-foreground: 0, 0%, 100%;
+  /* Define other color variables as well */
 }

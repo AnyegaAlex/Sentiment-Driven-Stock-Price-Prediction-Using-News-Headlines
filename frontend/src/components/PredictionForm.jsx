@@ -2,6 +2,7 @@ import { useState } from "react";
 import axios from "axios";
 
 const PredictionForm = () => {
+  // Form state for input values and API responses
   const [formData, setFormData] = useState({
     openPrice: "",
     closePrice: "",
@@ -10,16 +11,20 @@ const PredictionForm = () => {
   });
   const [prediction, setPrediction] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
+  // Handle changes for each input field
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
 
+  // Handle form submission to fetch prediction
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setPrediction("");
+    setLoading(true);
 
     try {
       const response = await axios.post(
@@ -37,6 +42,8 @@ const PredictionForm = () => {
     } catch (err) {
       console.error(err);
       setError("Failed to fetch prediction. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -103,19 +110,28 @@ const PredictionForm = () => {
         </div>
         <button
           type="submit"
-          className="w-full p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          disabled={loading}
+          className="w-full p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:opacity-50"
         >
-          Predict
+          {loading ? "Predicting..." : "Predict"}
         </button>
       </form>
 
+      {/* Display prediction if available */}
       {prediction && (
-        <div className="mt-4 p-3 rounded-lg bg-green-100 text-green-700">
+        <div
+          role="status"
+          className="mt-4 p-3 rounded-lg bg-green-100 text-green-700"
+        >
           <strong>Prediction:</strong> {prediction.toUpperCase()}
         </div>
       )}
+      {/* Display error message if any */}
       {error && (
-        <div className="mt-4 p-3 rounded-lg bg-red-100 text-red-700">
+        <div
+          role="alert"
+          className="mt-4 p-3 rounded-lg bg-red-100 text-red-700"
+        >
           <strong>Error:</strong> {error}
         </div>
       )}

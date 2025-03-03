@@ -4,7 +4,8 @@ import PropTypes from 'prop-types';
 class ErrorBoundary extends React.Component {
   state = { hasError: false, errorInfo: null };
 
-  static getDerivedStateFromError(error) {
+  // Rename the parameter to _error to indicate it's intentionally unused.
+  static getDerivedStateFromError(_error) {
     // Update state so the next render shows the fallback UI.
     return { hasError: true };
   }
@@ -22,24 +23,29 @@ class ErrorBoundary extends React.Component {
 
   handleRetry = () => {
     this.setState({ hasError: false, errorInfo: null });
+    // Optionally, trigger a full page reload:
+    // window.location.reload();
   };
 
   render() {
     if (this.state.hasError) {
       return (
-        <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-          <h2 className="text-lg font-semibold text-red-800 mb-2">
-            Something went wrong
+        <div 
+          role="alert" 
+          className="p-4 bg-red-50 rounded-lg border border-red-200 max-w-md mx-auto mt-4"
+        >
+          <h2 className="text-xl sm:text-lg font-semibold text-red-800 mb-2">
+            Oops! Something went wrong.
           </h2>
-          <p className="text-red-700 mb-4">
-            Error: {this.state.errorInfo?.error?.toString()}
+          <p className="text-red-700 mb-2">
+            {this.state.errorInfo?.error?.toString() || "An unknown error occurred."}
           </p>
           <p className="text-red-700 mb-4">
-            Stack: {this.state.errorInfo?.componentStack}
+            Please try again or contact support if the problem persists.
           </p>
           <button
             onClick={this.handleRetry}
-            className="px-4 py-2 bg-red-100 text-red-800 rounded hover:bg-red-200"
+            className="w-full sm:w-auto px-4 py-2 bg-red-100 text-red-800 rounded hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
           >
             Retry
           </button>

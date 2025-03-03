@@ -1,4 +1,3 @@
-# news/external_apis.py
 import logging
 import requests
 from datetime import datetime
@@ -12,7 +11,7 @@ def parse_published_at(date_str):
     Adjust formats as needed.
     """
     try:
-        # Example: if date_str is a UNIX timestamp (for Finnhub)
+        # If date_str is a UNIX timestamp (for Finnhub)
         if isinstance(date_str, (int, float)):
             return datetime.fromtimestamp(date_str)
         # Otherwise, try to parse as ISO format
@@ -31,7 +30,7 @@ def fetch_alpha(symbol: str):
             params={
                 'function': 'NEWS_SENTIMENT',
                 'tickers': symbol,
-                'apikey': settings.ALPHA_VANTAGE_API_KEY,
+                'apikey': settings.ALPHA_VANTAGE_KEY,  # Updated key name for consistency
             },
             timeout=5
         )

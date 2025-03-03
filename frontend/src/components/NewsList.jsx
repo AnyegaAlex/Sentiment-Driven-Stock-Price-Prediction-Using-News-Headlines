@@ -1,253 +1,254 @@
-import { useEffect, useCallback, useState } from "react";
-import axios from "axios";
-import { motion } from "framer-motion";
+import React, { useState } from "react";
 import PropTypes from "prop-types";
-import NewsSkeleton from "./NewsSkeleton";
-import { FaSyncAlt } from "react-icons/fa";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Card, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Info } from "lucide-react";
+import { FaExternalLinkAlt } from "react-icons/fa";
+import { AiFillSmile, AiFillMeh, AiFillFrown } from "react-icons/ai";
+import KeyPhraseChip from "@/components/KeyPhraseChip";
 
-// Configure API client
-const newsApi = axios.create({
-  baseURL: "http://127.0.0.1:8000/api/news",
-  timeout: 5000,
-});
+const NewsList = ({ news }) => {
+  const [sentimentFilter, setSentimentFilter] = useState("all");
+  const [expandedPhrases, setExpandedPhrases] = useState({});
 
-const NewsList = ({ stockSymbol = "IBM", newsData = [], setNewsData }) => {
-  const [filter, setFilter] = useState("all");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const CACHE_TTL = 60 * 60 * 1000; // 1 hour
-
-  const fetchNews = useCallback(async (symbol) => {
-    try {
-      const response = await newsApi.get("/analyzed/", {
-        params: { symbol },
-        validateStatus: (status) => status >= 200 && status < 500,
-      });
-
-      if (response.status === 429) {
-        throw new Error("API rate limit exceeded. Please try again later.");
-      }
-
-      if (!response.data?.news) {
-        throw new Error("Invalid news data format from API");
-      }
-
-      return response.data.news.map(article => ({
-        url: article.url || "#",
-        title: article.title || "No title",
-        summary: article.summary || "",
-        sentiment: article.sentiment?.toLowerCase() || "neutral",
-        confidence: article.confidence || 0.5,
-        published_at: article.published_at || new Date().toISOString(),
-        source: article.source || "Unknown",
-        raw_data: article.raw_data || {},
-      }));
-      
-    } catch (err) {
-      const errorMessage = err.response?.data?.error || 
-                         err.message || 
-                         "Failed to fetch news data";
-      throw new Error(errorMessage);
-    }
-  }, []);
-
-  const fetchWithCache = useCallback(async () => {
-    const cacheKey = `news-${stockSymbol}`;
-    
-    try {
-      const cachedData = localStorage.getItem(cacheKey);
-      const now = Date.now();
-
-      if (cachedData) {
-        const { data, timestamp } = JSON.parse(cachedData);
-        if (now - timestamp < CACHE_TTL && data?.length > 0) {
-          setLastUpdated(timestamp);
-          return data;
-        }
-      }
-
-      const freshData = await fetchNews(stockSymbol);
-      localStorage.setItem(cacheKey, JSON.stringify({
-        data: freshData,
-        timestamp: now
-      }));
-      return freshData;
-    } catch (err) {
-      localStorage.removeItem(cacheKey);
-      throw err;
-    }
-  }, [stockSymbol, fetchNews]);
-
-  const loadNews = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const articles = await fetchWithCache();
-      setNewsData(articles);
-      setLastUpdated(Date.now());
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchWithCache, setNewsData]);
-
-  useEffect(() => {
-    if (!stockSymbol) return;
-    
-    const abortController = new AbortController();
-    loadNews();
-    
-    return () => abortController.abort();
-  }, [stockSymbol, loadNews]);
-
-  const handleRefresh = () => {
-    localStorage.removeItem(`news-${stockSymbol}`);
-    loadNews();
+  const sentimentIcons = {
+    positive: <AiFillSmile className="w-5 h-5 text-green-600" aria-hidden="true" />,
+    neutral: <AiFillMeh className="w-5 h-5 text-yellow-600" aria-hidden="true" />,
+    negative: <AiFillFrown className="w-5 h-5 text-red-600" aria-hidden="true" />,
   };
 
-  const getSentimentStyle = (sentiment) => {
-    const styles = {
-      positive: "bg-green-100 text-green-800",
-      negative: "bg-red-100 text-red-800",
-      neutral: "bg-gray-100 text-gray-800"
-    };
-    return styles[sentiment] || styles.neutral;
+  // Filter news based on sentiment
+  const filteredNews = sentimentFilter === "all"
+    ? news
+    : news.filter((item) => item.sentiment === sentimentFilter);
+
+  // Toggle expanded key phrases
+  const toggleExpandPhrases = (index) => {
+    setExpandedPhrases((prev) => ({ ...prev, [index]: !prev[index] }));
   };
 
-  const filteredNews = Array.isArray(newsData) 
-    ? newsData.filter(item => filter === "all" || item.sentiment === filter)
-    : [];
+  // Render key phrases with "Show More" functionality
+  const renderKeyPhrases = (item, index) => {
+    if (!item.key_phrases) return null;
+
+    const phrases = Array.isArray(item.key_phrases)
+      ? item.key_phrases
+      : item.key_phrases.split(",").map((p) => p.trim()).filter(Boolean);
+
+    const isExpanded = expandedPhrases[index];
+    const visiblePhrases = isExpanded ? phrases : phrases.slice(0, 5);
+
+    return (
+      <div className="mt-2 flex flex-col gap-2">
+        <div className="flex flex-wrap gap-2">
+          {visiblePhrases.map((phrase) => (
+            <KeyPhraseChip
+              key={phrase}
+              phrase={phrase}
+              onClick={() => console.log("Clicked phrase:", phrase)}
+              aria-label={`Key phrase: ${phrase}`}
+            />
+          ))}
+        </div>
+        {phrases.length > 5 && (
+          <button
+            className="text-primary hover:underline font-medium text-sm self-start"
+            onClick={() => toggleExpandPhrases(index)}
+            aria-expanded={isExpanded}
+            aria-controls={`key-phrases-${index}`}
+          >
+            {isExpanded ? "Show Less" : "Show More..."}
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  // Get badge classes for sentiment or reliability
+  const getBadgeClass = (type, value) => {
+    if (type === "sentiment") {
+      if (value === "positive") return "bg-green-100 text-green-800";
+      if (value === "negative") return "bg-red-100 text-red-800";
+      return "bg-yellow-100 text-yellow-800";
+    } else if (type === "reliability") {
+      if (value >= 80) return "bg-green-100 text-green-800";
+      if (value >= 50) return "bg-yellow-100 text-yellow-800";
+      return "bg-red-100 text-red-800";
+    }
+    return "";
+  };
+
+  // Parse date safely
+  const parseDate = (dateString) => {
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch {
+      return "Invalid Date";
+    }
+  };
+
+  if (!news || news.length === 0) {
+    return <p className="text-center text-gray-500">No news available.</p>;
+  }
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-4 md:mb-0">
-          {stockSymbol} News Analysis
-        </h1>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50"
-          >
-            <FaSyncAlt className={loading ? "animate-spin" : ""} />
-            Refresh Data
-          </button>
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="px-3 py-2 border rounded-lg bg-white"
-            disabled={loading}
-          >
-            {["all", "positive", "negative", "neutral"].map((option) => (
-              <option key={option} value={option}>
-                {option.charAt(0).toUpperCase() + option.slice(1)}
-              </option>
-            ))}
-          </select>
-        </div>
+    <div className="container mx-auto px-4 py-8">
+      {/* Sentiment Filter */}
+      <div className="mb-8 flex justify-center">
+        <Select
+          value={sentimentFilter}
+          onValueChange={setSentimentFilter}
+          aria-label="Filter by sentiment"
+        >
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder="Filter Sentiment" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Sentiments</SelectItem>
+            <SelectItem value="positive">Positive</SelectItem>
+            <SelectItem value="neutral">Neutral</SelectItem>
+            <SelectItem value="negative">Negative</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
-      {lastUpdated && (
-        <div className="text-sm text-gray-500 mb-4">
-          Last updated: {new Date(lastUpdated).toLocaleString()}
-        </div>
-      )}
-
-      {loading && <NewsSkeleton />}
-
-      {error && (
-        <div className="p-4 bg-red-50 rounded-lg text-red-600 mb-4">
-          {error} {error.includes("rate limit") && "(try again in 60 minutes)"}
-        </div>
-      )}
-
-      {!loading && !error && (
-        <div className="space-y-4">
-          {filteredNews.length === 0 ? (
-            <div className="p-4 bg-gray-50 rounded-lg text-center text-gray-600">
-              No news matching current filters
-            </div>
-          ) : (
-            filteredNews.map((article, index) => (
-              <NewsCard 
-                key={`${article.url}-${index}`}
-                article={article}
-                getSentimentStyle={getSentimentStyle}
-                index={index}
+      {/* News Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {filteredNews.map((item, index) => (
+          <Card key={`${item.url}-${index}`} className="h-full flex flex-col">
+            {/* Banner Image */}
+            {item.banner_image_url ? (
+              <img
+                src={item.banner_image_url}
+                alt={item.title}
+                className="w-full h-48 object-cover rounded-t-lg"
+                loading="lazy"
+                onError={(e) => {
+                  e.target.src = "/fallback-image.jpg";
+                  e.target.alt = "Image unavailable";
+                }}
               />
-            ))
-          )}
-        </div>
-      )}
+            ) : (
+              <div className="w-full h-48 bg-muted flex items-center justify-center rounded-t-lg">
+                <div className="text-muted-foreground">No Image</div>
+              </div>
+            )}
+
+            {/* Card Content */}
+            <CardContent className="p-4 flex flex-col gap-4 flex-1">
+              {/* Title */}
+              <CardTitle className="text-base font-semibold">
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-1"
+                  aria-label={`Read full article: ${item.title}`}
+                >
+                  {item.title}
+                  <FaExternalLinkAlt className="inline-block text-xs mt-0.5" aria-hidden="true" />
+                </a>
+              </CardTitle>
+
+              {/* Summary */}
+              <CardDescription className="text-sm line-clamp-3">
+                {item.summary || "No summary available"}
+              </CardDescription>
+
+              {/* Metadata Grid */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="space-y-0.5">
+                  <p className="text-muted-foreground">Source</p>
+                  <p className="font-medium">{item.source || "Unknown"}</p>
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-muted-foreground">Published</p>
+                  <p className="font-medium">
+                    {parseDate(item.published_at)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Reliability */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Reliability:</span>
+                <Badge className={getBadgeClass("reliability", item.source_reliability)}>
+                  {item.source_reliability}%
+                </Badge>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="w-4 h-4 text-muted-foreground cursor-pointer" aria-label="Reliability info" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[200px]">
+                    Source reliability score based on historical accuracy.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+
+              {/* Sentiment & Confidence */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Sentiment:</span>
+                  {sentimentIcons[item.sentiment] || sentimentIcons.neutral}
+                  <Badge className={getBadgeClass("sentiment", item.sentiment)}>
+                    {item.sentiment.charAt(0).toUpperCase() + item.sentiment.slice(1)}
+                  </Badge>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Confidence:</span>
+                  <Progress value={(item.confidence || 0) * 100} className="flex-1 h-2" />
+                  <span className="text-xs w-12 text-right">
+                    {Math.round((item.confidence || 0) * 100)}%
+                  </span>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info className="w-4 h-4 text-muted-foreground cursor-pointer" aria-label="Confidence info" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[200px]">
+                      Model confidence in sentiment classification.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+
+              {/* Key Phrases */}
+              <div className="pt-2 border-t border-border">
+                <h4 className="text-sm font-medium mb-2">Key Phrases</h4>
+                {renderKeyPhrases(item, index)}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 };
 
-const NewsCard = ({ article, getSentimentStyle, index }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ delay: index * 0.05 }}
-    className="p-6 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow"
-  >
-    <div className="flex flex-col space-y-3">
-      <div className="flex items-start justify-between">
-        <h3 className="text-lg font-semibold">
-          <a
-            href={article.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:text-blue-800 hover:underline"
-          >
-            {article.title}
-          </a>
-        </h3>
-        <span
-          className={`px-2 py-1 text-xs font-medium rounded-full ${getSentimentStyle(article.sentiment)}`}
-        >
-          {article.sentiment}
-        </span>
-      </div>
-      <p className="text-gray-600">{article.summary}</p>
-      <div className="flex items-center justify-between text-sm text-gray-500">
-        <span>
-          {new Date(article.published_at).toLocaleDateString(undefined, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })}
-        </span>
-        <span className="italic max-w-[50%] truncate">
-          {article.source || "Unknown source"}
-        </span>
-      </div>
-    </div>
-  </motion.div>
-);
-
 NewsList.propTypes = {
-  stockSymbol: PropTypes.string,
-  newsData: PropTypes.array,
-  setNewsData: PropTypes.func.isRequired,
-};
-
-NewsCard.propTypes = {
-  article: PropTypes.shape({
-    url: PropTypes.string.isRequired,
-    title: PropTypes.string.isRequired,
-    summary: PropTypes.string,
-    sentiment: PropTypes.string.isRequired,
-    published_at: PropTypes.string.isRequired,
-    source: PropTypes.string,
-    confidence: PropTypes.number.isRequired,
-  }).isRequired,
-  index: PropTypes.number.isRequired,
-  getSentimentStyle: PropTypes.func.isRequired,
+  news: PropTypes.arrayOf(
+    PropTypes.shape({
+      title: PropTypes.string.isRequired,
+      summary: PropTypes.string.isRequired,
+      source: PropTypes.string.isRequired,
+      url: PropTypes.string.isRequired,
+      published_at: PropTypes.string.isRequired,
+      sentiment: PropTypes.string.isRequired,
+      confidence: PropTypes.number.isRequired,
+      key_phrases: PropTypes.string.isRequired,
+      source_reliability: PropTypes.number.isRequired,
+      banner_image_url: PropTypes.string,
+    })
+  ).isRequired,
 };
 
 export default NewsList;

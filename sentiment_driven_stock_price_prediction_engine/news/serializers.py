@@ -9,17 +9,26 @@ class ProcessedNewsSerializer(serializers.ModelSerializer):
     symbol = serializers.CharField(read_only=True)
 
     class Meta:
-        model = ProcessedNews  # Matches our model from tasks.py implementation
+        model = ProcessedNews  
         fields = [
             'id',
-            'symbol',  # Direct field from your ProcessedNews model
+            'symbol',  
             'title',
-            'summary',  # Matches model field name (not description)
+            'summary',  
             'source',
             'url',
             'published_at',
             'sentiment',
-            'confidence',  # Renamed from sentiment_score to match model
-            'raw_data'  # Consider excluding if not needed in frontend
+            'confidence',
+            'banner_image_url',  
+            'raw_data' 
         ]
         read_only_fields = ['sentiment', 'confidence']
+
+def get_banner_image_url(self, obj):
+        request = self.context.get("request")
+        if obj.banner_image and hasattr(obj.banner_image, "url"):
+            if request:
+                return request.build_absolute_uri(obj.banner_image.url)
+            return obj.banner_image.url
+        return None

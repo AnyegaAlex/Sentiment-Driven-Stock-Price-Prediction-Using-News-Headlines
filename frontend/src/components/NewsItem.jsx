@@ -1,14 +1,21 @@
-// src/components/NewsItem.jsx
 import PropTypes from "prop-types";
 
 const NewsItem = ({ article }) => {
   return (
     <li className="p-4 bg-white shadow rounded">
+      {article.banner_image_url && (
+        <img
+          src={article.banner_image_url}
+          alt="Article banner"
+          className="w-full h-48 object-cover rounded mb-4"
+        />
+      )}
       <a
         href={article.url}
         target="_blank"
         rel="noopener noreferrer"
         className="text-xl font-semibold text-blue-600 hover:underline"
+        aria-label={`Read full article: ${article.title}`}
       >
         {article.title}
       </a>
@@ -31,6 +38,7 @@ NewsItem.propTypes = {
     summary: PropTypes.string,
     published_at: PropTypes.string.isRequired,
     source: PropTypes.string,
+    banner_image_url: PropTypes.string, // Optional banner image URL
   }).isRequired,
 };
 

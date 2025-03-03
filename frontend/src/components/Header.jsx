@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import PropTypes from "prop-types";
-import { 
-  FaSearch, 
-  FaSyncAlt, 
-  FaUserCircle, 
-  FaCalendarAlt, 
-  FaChartLine, 
-  FaNewspaper, 
-  FaHistory 
+import {
+  FaSearch,
+  FaSyncAlt,
+  FaUserCircle,
+  FaCalendarAlt,
+  FaChartLine,
+  FaNewspaper,
+  FaHistory,
 } from "react-icons/fa";
 import axios from "axios";
 import SearchSkeleton from "./SearchSkeleton";
@@ -30,7 +30,7 @@ const Header = ({ setSymbol, setNewsData }) => {
 
   const activeTab = location.pathname.split("/")[1] || "dashboard";
 
-  // Wrap fetchSymbolsYahoo in useCallback so that it remains stable across renders.
+  // Fetch symbol suggestions from Yahoo Finance
   const fetchSymbolsYahoo = useCallback(async (searchQuery) => {
     try {
       const response = await axios.get(
@@ -59,7 +59,7 @@ const Header = ({ setSymbol, setNewsData }) => {
     }
   }, [RAPIDAPI_KEY, RAPIDAPI_HOST]);
 
-  // Wrap fetchSymbolsFinnhub in useCallback as well.
+  // Fetch symbol suggestions from Finnhub
   const fetchSymbolsFinnhub = useCallback(async (searchQuery) => {
     try {
       const response = await axios.get("https://finnhub.io/api/v1/search", {
@@ -83,7 +83,7 @@ const Header = ({ setSymbol, setNewsData }) => {
     }
   }, [FINNHUB_KEY]);
 
-  // Wrap fetchSymbols in useCallback and include the helper functions in the dependency array.
+  // Fetch symbols using a fallback chain (Alpha Vantage → Yahoo Finance → Finnhub)
   const fetchSymbols = useCallback(
     async (searchQuery) => {
       try {
@@ -152,6 +152,7 @@ const Header = ({ setSymbol, setNewsData }) => {
     setSuggestions([]);
     setNewsData([]); // Clear current news so that NewsList refetches
     localStorage.setItem("lastSymbol", symbol);
+    navigate(`/${activeTab}/${symbol}`); // Navigate to the selected symbol's page
   };
 
   return (
