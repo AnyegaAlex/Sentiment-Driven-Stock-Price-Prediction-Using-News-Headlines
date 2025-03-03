@@ -346,19 +346,29 @@ Vary: Accept
 python -m venv .venv
 source .venv/Scripts/activate
 pip install -r requirements.txt
+
+cd sentiment_driven_stock_price_prediction_engine
+python manage.py runserver
 ```
+
 ### Frontend:
 ```bash
+cd .venv
+Scripts/activate
+
 cd frontend
 npm install
 npm run dev
 ```
+
 ### Start Services:
 ```bash
 redis-server
 celery -A sentiment_driven_stock_price_prediction_engine worker --pool=solo --loglevel=info
 python manage.py runserver
+npm run dev
 ```
+
 ### Environment Variables (.env)
 ```
 //Backend (.env)//
