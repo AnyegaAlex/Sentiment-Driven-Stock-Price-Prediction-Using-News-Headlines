@@ -25,7 +25,7 @@ colorama==0.4.6
 confection==0.1.5
 cron-descriptor==1.4.5
 cymem==2.0.11
-dask==2025.2.0
+dask[dataframe]==2023.10.0
 Django==5.1.5
 django-celery-beat==2.7.0
 django-celery-results==2.5.1
