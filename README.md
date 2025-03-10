@@ -284,7 +284,7 @@ Retrieve analyzed news for a stock symbol. Steps:
 
 #### Endpoint:
 ```http
-GET /api/news/analyzed/?format=api
+GET /api/news/analyzed/
 ```
 #### Parameters:
 - ```symbol``` (required): The stock symbol (e.g., "AAPL").
