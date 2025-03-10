@@ -1,4 +1,4 @@
-# Dockerfile
+# Use the official Python 3.10 slim image
 FROM python:3.10-slim
 WORKDIR /app
 COPY requirements.txt requirements.txt
