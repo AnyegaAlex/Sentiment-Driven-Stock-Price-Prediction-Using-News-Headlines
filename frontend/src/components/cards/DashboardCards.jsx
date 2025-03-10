@@ -1,4 +1,3 @@
-// src/components/DashboardCards.jsx
 import PropTypes from 'prop-types';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
@@ -129,8 +128,12 @@ const DashboardCards = ({ symbol = 'IBM' }) => {
   const fetchNewsData = useCallback(async (signal) => {
     try {
       setLoading(true);
-      const { data } = await axios.get(`/api/news/get-news/?symbol=${symbol}`, { signal });
-      processNewsData(data.news || []);
+      const { data } = await axios.get(`http://127.0.0.1:8000/api/news/analyzed/?symbol=${symbol}`, { signal });
+      if (data.news && data.news.length > 0) {
+        processNewsData(data.news);
+      } else {
+        setError('No news data available for this symbol.');
+      }
     } catch (err) {
       if (axios.isCancel(err)) {
         console.log('Request canceled', err.message);
@@ -198,7 +201,12 @@ const DashboardCards = ({ symbol = 'IBM' }) => {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-40 w-full rounded-lg" />
+          <Card key={i} className="p-4 shadow-sm border border-gray-100">
+            <Skeleton className="h-6 w-1/2 mb-4" />
+            <Skeleton className="h-4 w-full mb-2" />
+            <Skeleton className="h-4 w-3/4 mb-4" />
+            <Skeleton className="h-24 w-full" />
+          </Card>
         ))}
       </div>
     );
@@ -212,7 +220,7 @@ const DashboardCards = ({ symbol = 'IBM' }) => {
           tooltip="Weighted average of news sentiment (0 = negative, 1 = positive)"
         >
           <div className="flex justify-between items-baseline">
-            <span className="text-2xl font-bold text-gray-800">
+            <span className="text-3xl font-bold text-gray-900">
               {metrics.sentiment.toFixed(2)}
             </span>
             <span className={`text-sm ${metrics.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -234,7 +242,7 @@ const DashboardCards = ({ symbol = 'IBM' }) => {
           tooltip="24-hour prediction based on sentiment and market analysis"
         >
           <div className="flex justify-between items-baseline">
-            <span className={`text-2xl font-bold ${
+            <span className={`text-3xl font-bold ${
               metrics.direction === 'increase' ? 'text-green-600' : 
               metrics.direction === 'decrease' ? 'text-red-600' : 'text-gray-600'
             }`}>
@@ -257,7 +265,7 @@ const DashboardCards = ({ symbol = 'IBM' }) => {
           tooltip="Historical accuracy of previous forecasts"
         >
           <div className="flex justify-between items-baseline">
-            <span className="text-2xl font-bold text-gray-800">89%</span>
+            <span className="text-3xl font-bold text-gray-800">89%</span>
             <span className="text-sm text-gray-500">Last 100 predictions</span>
           </div>
           <div className="h-24 mt-3">
@@ -265,7 +273,10 @@ const DashboardCards = ({ symbol = 'IBM' }) => {
               <AreaChart data={historicalTrend} aria-label="Accuracy trend chart">
                 <XAxis dataKey="date" hide />
                 <YAxis hide domain={[75, 100]} />
-                <RechartsTooltip />
+                <RechartsTooltip 
+                  contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }}
+                  formatter={(value) => `${value}%`}
+                />
                 <Area
                   type="monotone"
                   dataKey="accuracy"

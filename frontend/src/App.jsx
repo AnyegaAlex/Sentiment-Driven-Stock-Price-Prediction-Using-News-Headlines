@@ -1,5 +1,4 @@
 // src/App.jsx
-import { useState } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
@@ -9,58 +8,25 @@ import PredictionHistory from "./pages/PredictionHistory";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { DashboardProvider } from "./context/DashboardContext";  // ✅
 
-// Create a QueryClient instance
 const queryClient = new QueryClient();
 
-const App = () => {
-  const [selectedSymbol, setSelectedSymbol] = useState("IBM");
-  const [newsData, setNewsData] = useState([]);
-
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Router>
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Router>
+        <DashboardProvider> {/* ✅ Wrap all routes */}
           <div className="min-h-screen bg-gray-50 flex flex-col">
-            {/* Wrapping the header in an ErrorBoundary */}
             <ErrorBoundary>
-              <Header setSymbol={setSelectedSymbol} setNewsData={setNewsData} />
+              <Header />
             </ErrorBoundary>
-            {/* Wrapping main content in ErrorBoundary to catch route-level errors */}
             <ErrorBoundary>
               <main className="flex-grow">
                 <Routes>
-                  <Route
-                    path="/"
-                    element={
-                      <Dashboard
-                        stockSymbol={selectedSymbol}
-                        newsData={newsData}
-                        setNewsData={setNewsData}
-                      />
-                    }
-                  />
-                  {/* Static dashboard route */}
-                  <Route
-                    path="/dashboard"
-                    element={
-                      <Dashboard
-                        stockSymbol={selectedSymbol}
-                        newsData={newsData}
-                        setNewsData={setNewsData}
-                      />
-                    }
-                  />
-                  {/* Dynamic dashboard route */}
-                  <Route
-                    path="/dashboard/:symbol"
-                    element={
-                      <Dashboard
-                        newsData={newsData}
-                        setNewsData={setNewsData}
-                      />
-                    }
-                  />
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/dashboard/:symbol" element={<Dashboard />} />
                   <Route path="/news-analysis" element={<NewsAnalysis />} />
                   <Route path="/prediction-history" element={<PredictionHistory />} />
                 </Routes>
@@ -68,10 +34,10 @@ const App = () => {
             </ErrorBoundary>
             <Footer />
           </div>
-        </Router>
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
-};
+        </DashboardProvider>
+      </Router>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
 
 export default App;

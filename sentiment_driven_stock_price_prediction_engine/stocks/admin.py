@@ -1,7 +1,7 @@
 from django.contrib import admin
-from .models import Stock  # Changed from StockData to Stock
+from .models import StockOpinion
 
-@admin.register(Stock)
-class StockAdmin(admin.ModelAdmin):
-    list_display = ('symbol', 'name', 'created_at')
-    search_fields = ('symbol', 'name')
+@admin.register(StockOpinion)
+class StockOpinionAdmin(admin.ModelAdmin):
+    list_display = ('symbol', 'action', 'timestamp')
+    search_fields = ('symbol', 'action')

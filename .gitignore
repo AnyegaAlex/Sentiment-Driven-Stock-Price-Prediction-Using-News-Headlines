@@ -67,5 +67,6 @@ node_modules/
 dist/
 build/
 
-
 stock_price_model.pkl
+
+stock-sentiment-ui/
