@@ -6,6 +6,7 @@ from pathlib import Path
 from celery.schedules import crontab
 import os
 from dotenv import load_dotenv
+import dj_database_url
 
 # Load environment variables first
 load_dotenv()
@@ -16,7 +17,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Security Settings
 SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-development-key")
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost 127.0.0.1 [::1]").split()
+# ''ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost 127.0.0.1 [::1]").split()
+ALLOWED_HOSTS = ['.onrender.com']  # Allows *.onrender.com subdomains
 
 # Application definition
 INSTALLED_APPS = [
@@ -49,6 +51,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 ROOT_URLCONF = 'sentiment_driven_stock_price_prediction_engine.urls'
@@ -84,11 +87,22 @@ WSGI_APPLICATION = 'sentiment_driven_stock_price_prediction_engine.wsgi.applicat
 # }
 
 # Using SQLite for development:
-DATABASES = {
+'''DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
+}
+'''
+
+# Using PostgreSQL in production:
+# Replace the SQLite DATABASES configuration with PostgreSQL:
+DATABASES = {
+    'default': dj_database_url.config(
+        # Replace this value with your local database's connection string.
+        default='postgresql://postgres:postgres@localhost:5432/mysite',
+        conn_max_age=600
+    )
 }
 
 # Password validation
@@ -109,6 +123,14 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# This production code might break development mode, so we check whether we're in DEBUG mode
+if not DEBUG:
+    # Tell Django to copy static assets into a path called `staticfiles` (this is specific to Render)
+    STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+    # Enable the WhiteNoise storage backend, which compresses static files to reduce disk use
+    # and renames the files with unique names for each version to support long-term caching
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

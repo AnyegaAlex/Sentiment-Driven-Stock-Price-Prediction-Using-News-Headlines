@@ -1,0 +1,54 @@
+# render.yaml
+databases:
+  - name: tradingdb
+    plan: free
+    databaseName: tradingdb
+    user: tradingadmin
+    region: singapore  # Free tier available
+    ipAllowList: 
+      - 0.0.0.0/0
+
+services:
+  - type: web
+    name: trading-algo
+    region: singapore
+    plan: free
+    runtime: python
+    buildCommand: |
+      python -m pip install --upgrade pip
+      pip install -r requirements.txt
+      python manage.py migrate
+      python manage.py collectstatic --noinput
+    startCommand: |
+      gunicorn mysite.asgi:application \
+        --workers 2 \
+        --timeout 60 \
+        --worker-class uvicorn.workers.UvicornWorker
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tradingdb
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: trading-redis
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://*.onrender.com"
+      - key: WEB_CONCURRENCY
+        value: 2
+      - key: PYTHONBUFFERED
+        value: 1
+
+  - type: redis
+    name: trading-redis
+    plan: free
+    region: singapore
+    maxmemoryPolicy: allkeys-lru  # Critical for free tier
