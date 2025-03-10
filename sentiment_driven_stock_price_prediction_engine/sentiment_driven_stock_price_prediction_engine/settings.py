@@ -17,7 +17,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Security Settings
 SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-development-key")
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-# ''ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost 127.0.0.1 [::1]").split()
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost 127.0.0.1 [::1]").split()
 ALLOWED_HOSTS = ['.onrender.com']  # Allows *.onrender.com subdomains
 
 # Application definition
@@ -75,17 +75,17 @@ TEMPLATES = [
 WSGI_APPLICATION = 'sentiment_driven_stock_price_prediction_engine.wsgi.application'
 
 # Uncomment this block for PostgreSQL in production
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': os.getenv('DB_NAME', 'stock_analysis'),
-#         'USER': os.getenv('DB_USER', 'postgres'),
-#         'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
-#         'HOST': os.getenv('DB_HOST', 'localhost'),
-#         'PORT': os.getenv('DB_PORT', '5432'),
-#     }
-# }
-
+'''DATABASES = {
+     'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('DB_NAME', 'tradingdb'),
+        'USER': os.getenv('DB_USER', 'tradingadmin'),
+        'PASSWORD': os.getenv('DB_PASSWORD', '2001154805Ak*'),
+        'HOST': os.getenv('DB_HOST', 'db'),
+        'PORT': os.getenv('DB_PORT', '5432'),
+     }
+ }
+'''
 # Using SQLite for development:
 '''DATABASES = {
     'default': {
@@ -97,13 +97,14 @@ WSGI_APPLICATION = 'sentiment_driven_stock_price_prediction_engine.wsgi.applicat
 
 # Using PostgreSQL in production:
 # Replace the SQLite DATABASES configuration with PostgreSQL:
+
 DATABASES = {
     'default': dj_database_url.config(
-        # Replace this value with your local database's connection string.
-        default='postgresql://postgres:postgres@localhost:5432/mysite',
+        default='postgresql://tradingadmin:2001154805Ak*@db:5432/tradingdb',
         conn_max_age=600
     )
 }
+
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
