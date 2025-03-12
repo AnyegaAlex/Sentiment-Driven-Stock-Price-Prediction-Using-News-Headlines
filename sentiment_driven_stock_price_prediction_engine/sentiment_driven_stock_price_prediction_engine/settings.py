@@ -100,7 +100,7 @@ WSGI_APPLICATION = 'sentiment_driven_stock_price_prediction_engine.wsgi.applicat
 
 DATABASES = {
     'default': dj_database_url.config(
-        default='postgresql://tradingadmin:2001154805Ak*@db:5432/tradingdb',
+        default='postgresql://tradingadmin:2001154805Ak*@localhost:5432/tradingdb',
         conn_max_age=600
     )
 }
