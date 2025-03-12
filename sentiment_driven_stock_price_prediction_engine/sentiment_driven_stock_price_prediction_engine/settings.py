@@ -98,13 +98,25 @@ WSGI_APPLICATION = 'sentiment_driven_stock_price_prediction_engine.wsgi.applicat
 # Using PostgreSQL in production:
 # Replace the SQLite DATABASES configuration with PostgreSQL:
 
+# Database
 DATABASES = {
     'default': dj_database_url.config(
-        default='postgresql://tradingadmin:2001154805Ak*@localhost:5432/tradingdb',
-        conn_max_age=600
+        conn_max_age=600,
+        conn_health_checks=True,
+        ssl_require=True  # Required for Render PostgreSQL
     )
 }
 
+# For local development (optional)
+if os.getenv('DJANGO_DEVELOPMENT') == 'true':
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT'),
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
