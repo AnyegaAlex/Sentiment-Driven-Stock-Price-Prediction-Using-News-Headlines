@@ -22,6 +22,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Create the logs directory
+RUN mkdir -p /app/logs
+
 # Collect static files (required for Django production)
 RUN python manage.py collectstatic --noinput
 
