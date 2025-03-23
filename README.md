@@ -1,6 +1,11 @@
 
 # Sentiment-Driven Stock Price Prediction Using News Headlines 📈
 
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
+![Django](https://img.shields.io/badge/Django-4.2-brightgreen)
+![Celery](https://img.shields.io/badge/Celery-5.3-lightgrey)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14-blue)
+
 ## **Overview** 🔍
 This project delivers a real-time stock sentiment analysis platform that leverages cutting-edge NLP and machine learning to predict stock price movements based on financial news headlines. It features automated, multi-source data pipelines that aggregate and deduplicate news from sources like Alpha Vantage, Yahoo Finance, and Finnhub. The system employs advanced sentiment analysis using FinBERT and spaCy to extract key insights, which are then integrated into an interactive dashboard for market monitoring. Designed to empower investors, the platform provides actionable, data-driven insights by correlating news sentiment with stock price trends—enabling smarter, more informed decision-making.
 
