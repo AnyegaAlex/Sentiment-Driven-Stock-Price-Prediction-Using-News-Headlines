@@ -3,10 +3,10 @@ import axios from 'axios';
 import { 
   Card,
   CardHeader,
-  CardBody,
+  CardContent, 
   CardFooter,
-  Progress 
 } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { 
   FaArrowUp, 
   FaArrowDown, 
@@ -125,7 +125,7 @@ const PredictionHistory = () => {
                 <Skeleton className="h-6 w-3/4" />
                 <Skeleton className="h-4 w-1/2 mt-2" />
               </CardHeader>
-              <CardBody className="space-y-4">
+              <CardContent className="space-y-4">
                 <div>
                   <Skeleton className="h-4 w-1/3" />
                   <Skeleton className="h-3 w-full mt-2" />
@@ -134,7 +134,7 @@ const PredictionHistory = () => {
                   <Skeleton className="h-4 w-1/3" />
                   <Skeleton className="h-3 w-full mt-2" />
                 </div>
-              </CardBody>
+              </CardContent>
             </Card>
           ))}
         </div>
@@ -194,7 +194,7 @@ const PredictionHistory = () => {
               </p>
             </CardHeader>
 
-            <CardBody className="p-4 space-y-4">
+            <CardContent className="p-4 space-y-4">
               {/* Movement Indicator */}
               <div className="flex items-center space-x-2">
                 <div className="flex items-center">
@@ -240,7 +240,7 @@ const PredictionHistory = () => {
                   indicatorColor="bg-blue-500 dark:bg-blue-400"
                 />
               </div>
-            </CardBody>
+            </CardContent>
 
             <CardFooter className="p-4 border-t dark:border-gray-700">
               <button
