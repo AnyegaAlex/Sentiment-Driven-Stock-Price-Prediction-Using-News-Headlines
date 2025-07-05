@@ -2,9 +2,10 @@
 FROM python:3.10-slim
 
 # Set environment variables
-ENV PIP_ROOT_USER_ACTION=ignore
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DJANGO_SETTINGS_MODULE=sentiment_driven_stock_price_prediction_engine.settings
 
 # Install system dependencies required for Python packages
 RUN apt-get update && apt-get install -y \
@@ -25,13 +26,21 @@ COPY . .
 # Create the logs directory
 RUN mkdir -p /app/logs
 
-# Collect static files (required for Django production)
-RUN python manage.py collectstatic --noinput
+# Create required directories
+RUN mkdir -p /app/{staticfiles,logs}
 
-# Run application (with Render-compatible settings)
-CMD gunicorn \
-    --workers 2 \
-    --timeout 120 \
-    --worker-tmp-dir /dev/shm \
-    --bind 0.0.0.0:${PORT:-8000} \
-    sentiment_driven_stock_price_prediction_engine.wsgi:application
+# Conditional collectstatic (only in production)
+ARG BUILD_ENV=production
+RUN if [ "$BUILD_ENV" = "production" ]; then \
+      python manage.py collectstatic --noinput; \
+    fi
+
+
+# Run application
+CMD ["gunicorn", \
+    "--workers", "2", \
+    "--timeout", "120", \
+    "--worker-tmp-dir", "/dev/shm", \
+    "--bind", "0.0.0.0:${PORT:-8000}", \
+    "--log-file", "-", \
+    "sentiment_driven_stock_price_prediction_engine.wsgi:application"]

@@ -4,6 +4,10 @@ Django settings for sentiment_driven_stock_price_prediction_engine project.
 
 from pathlib import Path
 from celery.schedules import crontab
+CELERY_IMPORTS = (
+    'news.tasks',
+    'stocks.tasks',
+)
 import os
 from dotenv import load_dotenv
 import dj_database_url
@@ -34,6 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'sentiment_driven_stock_price_prediction_engine.celery_app',
     
     # Third-party apps
     'django_celery_beat',
@@ -41,7 +46,6 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'drf_yasg',
-    'celery',
     
     # Local apps
     'news',
@@ -100,6 +104,15 @@ WSGI_APPLICATION = 'sentiment_driven_stock_price_prediction_engine.wsgi.applicat
     }
 }
 '''
+# Update security settings
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 # Using PostgreSQL in production:
 # Replace the SQLite DATABASES configuration with PostgreSQL:
