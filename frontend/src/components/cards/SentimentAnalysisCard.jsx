@@ -1,253 +1,433 @@
-// src/components/SentimentAnalysisCard.jsx
-import React from "react";
-import PropTypes from "prop-types";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Line } from "react-chartjs-2";
-import { ArrowDown, ArrowUp, Newspaper, ExternalLink } from "lucide-react";
+import React, { useState, useEffect, useMemo } from 'react';
+import PropTypes from 'prop-types';
+import axios from 'axios';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Line, Bar } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { 
+  AlertTriangle, 
+  Smile, 
+  Meh, 
+  Frown,
+  TrendingUp,
+  TrendingDown
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
-const SentimentAnalysisCard = ({ data }) => {
-  // Safe default data to avoid undefined errors
-  const safeData = data || {
-    factors: { aggregated_sentiment: 0, news_count: 0 },
-    news_data: [],
-    confidence: { sentiment: "0%" },
-    risk_metrics: { risk_reward_ratio: "1:3" },
-  };
+// Register ChartJS components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
-  // Destructure with defaults
-  const {
-    factors: { aggregated_sentiment, news_count },
-    news_data: newsItems,
-    confidence: { sentiment: sentimentConfidence },
-    risk_metrics: { risk_reward_ratio },
-  } = safeData;
+const SentimentAnalysisCard = ({ symbol }) => {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [timeRange, setTimeRange] = useState('7d');
 
-  // Memoized sentiment distribution calculation
-  const sentimentDistribution = React.useMemo(() => ({
-    positive: newsItems.filter(n => n.sentiment === 'positive').length,
-    neutral: newsItems.filter(n => n.sentiment === 'neutral').length,
-    negative: newsItems.filter(n => n.sentiment === 'negative').length,
-  }), [newsItems]);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(`/api/sentiment-analysis`, {
+          params: { 
+            symbol,
+            time_range: timeRange 
+          },
+          timeout: 10000
+        });
+        setData(response.data);
+      } catch (err) {
+        setError(err.response?.data?.error || 'Failed to fetch sentiment data');
+        console.error('Sentiment analysis error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Calculate percentages
-  const totalNews = newsItems.length || 1;
-  const positivePct = ((sentimentDistribution.positive / totalNews) * 100).toFixed(1);
-  const neutralPct = ((sentimentDistribution.neutral / totalNews) * 100).toFixed(1);
-  const negativePct = ((sentimentDistribution.negative / totalNews) * 100).toFixed(1);
+    fetchData();
+  }, [symbol, timeRange]);
 
-  // Sentiment percentage and bullish/bearish flag
-  const sentimentPercentage = ((aggregated_sentiment + 1) / 2) * 100;
-  const isBullish = sentimentPercentage >= 50;
+  const { sentimentScore, isBullish, isBearish, sentimentDistribution } = useMemo(() => {
+    if (!data) return {};
+    
+    const score = ((data.sentiment + 1) / 2) * 100;
+    return {
+      sentimentScore: score,
+      isBullish: score >= 60,
+      isBearish: score <= 40,
+      sentimentDistribution: {
+        positive: Math.round(score),
+        neutral: Math.abs(score - 50) * 2,
+        negative: 100 - Math.round(score)
+      }
+    };
+  }, [data]);
 
-  // Render fallback if no data
+  const historicalData = useMemo(() => ({
+    labels: ['6d ago', '5d ago', '4d ago', '3d ago', '2d ago', 'Yesterday', 'Today'],
+    datasets: [{
+      label: 'Sentiment Score',
+      data: [45, 52, 60, 58, 65, 70, sentimentScore || 50],
+      borderColor: isBullish ? '#22c55e' : isBearish ? '#ef4444' : '#eab308',
+      backgroundColor: 'rgba(75, 192, 192, 0.2)',
+      tension: 0.4,
+      fill: true
+    }]
+  }), [sentimentScore, isBullish, isBearish]);
+
+  const distributionData = useMemo(() => ({
+    labels: ['Positive', 'Neutral', 'Negative'],
+    datasets: [{
+      label: 'Sentiment Distribution',
+      data: [
+        sentimentDistribution?.positive || 0,
+        sentimentDistribution?.neutral || 0,
+        sentimentDistribution?.negative || 0
+      ],
+      backgroundColor: [
+        'rgba(34, 197, 94, 0.7)',
+        'rgba(234, 179, 8, 0.7)',
+        'rgba(239, 68, 68, 0.7)'
+      ],
+      borderColor: [
+        'rgba(34, 197, 94, 1)',
+        'rgba(234, 179, 8, 1)',
+        'rgba(239, 68, 68, 1)'
+      ],
+      borderWidth: 1
+    }]
+  }), [sentimentDistribution]);
+
+  if (loading) {
+    return <LoadingSkeleton />;
+  }
+
+  if (error) {
+    return <ErrorDisplay error={error} />;
+  }
+
   if (!data) {
-    return (
-      <Card className="bg-black text-gray-100 border-gray-800 rounded-xl shadow-lg">
-        <CardContent className="text-center py-6 text-gray-400">
-          No sentiment data available
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
   return (
-    <Card className="bg-black text-gray-100 border-gray-800 rounded-xl shadow-lg">
+    <Card className="bg-gray-900 border-gray-800 rounded-lg shadow-lg">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <CardTitle className="text-xl font-bold">
-              Sentiment Analysis {isBullish ? "🚀" : "📉"}
-            </CardTitle>
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-              <Newspaper className="w-4 h-4" />
-              <span>{news_count} articles analyzed</span>
-            </div>
-          </div>
-          <div className="w-32 h-12">
-            <Line
-              data={{
-                labels: ['-6d', '-5d', '-4d', '-3d', '-2d', '-1d', 'Now'],
-                datasets: [{
-                  data: [0.2, -0.1, 0.4, -0.3, 0.6, 0.1, aggregated_sentiment],
-                  borderColor: '#3b82f6',
-                  tension: 0.4,
-                }],
-              }}
-              options={{
-                responsive: true,
-                plugins: { legend: { display: false } },
-                scales: { y: { display: false }, x: { display: false } },
-              }}
-            />
-          </div>
+        <div className="flex justify-between items-center">
+          <CardTitle className="text-xl font-bold">
+            Market Sentiment Analysis
+          </CardTitle>
+          <TimeRangeSelector 
+            timeRange={timeRange} 
+            onChange={setTimeRange} 
+          />
         </div>
       </CardHeader>
 
       <CardContent className="space-y-6">
-        {/* Sentiment Metrics Grid */}
-        <div className="grid grid-cols-3 gap-4">
-          <MetricBadge 
-            label="Positive" 
-            value={positivePct} 
-            color="green" 
-            icon={<ArrowUp className="w-4 h-4" />}
-          />
-          <MetricBadge 
-            label="Neutral" 
-            value={neutralPct} 
-            color="yellow"
-          />
-          <MetricBadge 
-            label="Negative" 
-            value={negativePct} 
-            color="red" 
-            icon={<ArrowDown className="w-4 h-4" />}
-          />
-        </div>
+        <SentimentSummary 
+          distribution={sentimentDistribution} 
+        />
 
-        {/* Confidence & Risk Metrics */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="p-4 bg-gray-900 rounded-lg">
-            <p className="text-sm text-gray-400">Sentiment Confidence</p>
-            <p className="text-2xl font-bold">{sentimentConfidence}</p>
-          </div>
-          <div className="p-4 bg-gray-900 rounded-lg">
-            <p className="text-sm text-gray-400">Risk/Reward Ratio</p>
-            <p className="text-2xl font-bold">{risk_reward_ratio}</p>
-          </div>
-        </div>
+        <SentimentTrendChart 
+          data={historicalData} 
+          isBullish={isBullish}
+          isBearish={isBearish}
+        />
 
-        {/* News List */}
-        <div className="border-t border-gray-800 my-4" />
-        <h3 className="text-lg font-semibold">Top News</h3>
-        <div className="max-h-96 overflow-y-auto pr-2">
-          {newsItems.length === 0 ? (
-            <div className="text-gray-400 text-center py-4">
-              No recent news analysis available
-            </div>
-          ) : (
-            newsItems.map((news, index) => (
-              <NewsItem key={index} news={news} />
-            ))
-          )}
-        </div>
+        <SentimentDistributionChart 
+          data={distributionData} 
+        />
+
+        <NewsSourceAnalysis 
+          newsCount={data.news_count}
+          sourceStats={data.source_stats}
+        />
       </CardContent>
     </Card>
   );
 };
 
-// Sub-components with prop validation
-const MetricBadge = ({ label, value, color, icon }) => (
-  <div className={`p-4 rounded-lg ${
-    color === 'green' ? 'bg-green-900/20 border-green-800' :
-    color === 'red' ? 'bg-red-900/20 border-red-800' :
-    'bg-yellow-900/20 border-yellow-800'
-  } border`}>
-    <div className="flex items-center gap-2">
-      {icon && React.cloneElement(icon, { 
-        className: `w-5 h-5 ${
-          color === 'green' ? 'text-green-400' :
-          color === 'red' ? 'text-red-400' :
-          'text-yellow-400'
-        }` 
-      })}
-      <span className={`text-sm ${
-        color === 'green' ? 'text-green-300' :
-        color === 'red' ? 'text-red-300' :
-        'text-yellow-300'
-      }`}>
-        {label}
-      </span>
-    </div>
-    <div className="text-2xl font-bold mt-2">{value}%</div>
+// Sub-components
+const LoadingSkeleton = () => (
+  <Card className="bg-gray-900 border-gray-800">
+    <CardHeader>
+      <Skeleton className="h-8 w-1/2" />
+    </CardHeader>
+    <CardContent className="space-y-4">
+      <Skeleton className="h-6 w-full" />
+      <Skeleton className="h-32 w-full" />
+      <Skeleton className="h-6 w-3/4" />
+    </CardContent>
+  </Card>
+);
+
+const ErrorDisplay = ({ error }) => (
+  <Card className="bg-gray-900 border-gray-800">
+    <CardHeader>
+      <CardTitle className="text-red-500 flex items-center gap-2">
+        <AlertTriangle className="w-5 h-5" />
+        Error Loading Sentiment
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="text-gray-400">{error}</p>
+    </CardContent>
+  </Card>
+);
+
+const TimeRangeSelector = ({ timeRange, onChange }) => (
+  <div className="flex gap-2">
+    {['7d', '30d'].map((range) => (
+      <Button 
+        key={range}
+        variant={timeRange === range ? 'default' : 'outline'}
+        size="sm"
+        onClick={() => onChange(range)}
+        className="text-xs"
+      >
+        {range.toUpperCase()}
+      </Button>
+    ))}
   </div>
 );
 
-MetricBadge.propTypes = {
-  label: PropTypes.string.isRequired,
-  value: PropTypes.string.isRequired,
-  color: PropTypes.oneOf(["green", "red", "yellow"]).isRequired,
-  icon: PropTypes.element,
-};
-
-const NewsItem = ({ news }) => (
-  <a
-    href={news.url}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="group block p-4 bg-gray-900 rounded-lg hover:bg-gray-800 hover:shadow-lg transition-all duration-200 mb-2"
-    aria-label={`Read news article: ${news.title}`}
-    tabIndex={0}
-  >
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex-1">
-        <div className="flex items-center gap-2 mb-2">
-          <Badge 
-            variant={news.sentiment} 
-            className="text-xs"
-            aria-label={`${news.sentiment} sentiment`}
-          >
-            {news.sentiment}
-          </Badge>
-          <span className="text-sm text-gray-400">
-            {news.source} (Reliability: {news.source_reliability}%)
-          </span>
-        </div>
-        <p className="text-sm font-medium group-hover:text-blue-400 transition-colors">
-          {news.title}
-        </p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {news.key_phrases?.map((phrase, i) => (
-            <span 
-              key={i} 
-              className="px-2 py-1 text-xs bg-gray-800 rounded-md"
-              aria-label="Key phrase"
-            >
-              {phrase}
-            </span>
-          ))}
-        </div>
-      </div>
-      <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-blue-400" />
-    </div>
-  </a>
+const SentimentSummary = ({ distribution }) => (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <SentimentMetric 
+      icon={<Smile className="w-5 h-5 text-green-500" />}
+      label="Positive"
+      value={distribution.positive}
+      trend="+2.5% (7d)"
+      variant="positive"
+    />
+    <SentimentMetric 
+      icon={<Meh className="w-5 h-5 text-yellow-500" />}
+      label="Neutral"
+      value={distribution.neutral}
+      trend="+1.2% (7d)"
+      variant="neutral"
+    />
+    <SentimentMetric 
+      icon={<Frown className="w-5 h-5 text-red-500" />}
+      label="Negative"
+      value={distribution.negative}
+      trend="-3.7% (7d)"
+      variant="negative"
+    />
+  </div>
 );
 
-NewsItem.propTypes = {
-  news: PropTypes.shape({
-    url: PropTypes.string.isRequired,
-    title: PropTypes.string.isRequired,
-    sentiment: PropTypes.oneOf(["positive", "neutral", "negative"]).isRequired,
-    source: PropTypes.string.isRequired,
-    source_reliability: PropTypes.number.isRequired,
-    key_phrases: PropTypes.arrayOf(PropTypes.string).isRequired,
-  }).isRequired,
+const SentimentMetric = ({ icon, label, value, trend, variant }) => {
+  const trendIcon = variant === 'negative' ? 
+    <TrendingDown className="w-4 h-4 text-red-500" /> : 
+    <TrendingUp className="w-4 h-4" />;
+  
+  return (
+    <div className="bg-gray-800/50 p-4 rounded-lg">
+      <div className="flex items-center gap-2 text-gray-400">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <p className={cn(
+        "text-2xl font-bold mt-2",
+        variant === 'positive' ? 'text-green-500' :
+        variant === 'negative' ? 'text-red-500' : 'text-yellow-500'
+      )}>
+        {value}%
+      </p>
+      <div className="flex items-center gap-1 mt-1">
+        {trendIcon}
+        <Badge variant={variant} className="text-xs">
+          {trend}
+        </Badge>
+      </div>
+    </div>
+  );
+};
+
+const SentimentTrendChart = ({ data, isBullish, isBearish }) => (
+  <div className="bg-gray-800/50 p-4 rounded-lg">
+    <h3 className="font-semibold text-lg mb-4">Sentiment Trend</h3>
+    <div className="h-64">
+      <Line 
+        data={data}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'rgba(17, 24, 39, 0.9)',
+              titleColor: '#fff',
+              bodyColor: '#d1d5db',
+              borderColor: 'rgba(255, 255, 255, 0.1)',
+              borderWidth: 1
+            }
+          },
+          scales: {
+            y: {
+              min: 0,
+              max: 100,
+              grid: { color: 'rgba(255, 255, 255, 0.1)' },
+              ticks: { color: '#9ca3af' }
+            },
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.1)' },
+              ticks: { color: '#9ca3af' }
+            }
+          }
+        }}
+      />
+    </div>
+  </div>
+);
+
+const SentimentDistributionChart = ({ data }) => (
+  <div className="bg-gray-800/50 p-4 rounded-lg">
+    <h3 className="font-semibold text-lg mb-4">Sentiment Distribution</h3>
+    <div className="h-64">
+      <Bar
+        data={data}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'rgba(17, 24, 39, 0.9)',
+              titleColor: '#fff',
+              bodyColor: '#d1d5db',
+              borderColor: 'rgba(255, 255, 255, 0.1)',
+              borderWidth: 1
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              grid: { color: 'rgba(255, 255, 255, 0.1)' },
+              ticks: { color: '#9ca3af' }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: '#9ca3af' }
+            }
+          }
+        }}
+      />
+    </div>
+  </div>
+);
+
+const NewsSourceAnalysis = ({ newsCount, sourceStats }) => (
+  <div className="bg-gray-800/50 p-4 rounded-lg">
+    <h3 className="font-semibold text-lg mb-4">News Source Analysis</h3>
+    <div className="grid grid-cols-2 gap-4">
+      <SourceMetric 
+        label="Total Articles"
+        value={newsCount}
+      />
+      <SourceMetric 
+        label="Tier 1 Sources"
+        value={sourceStats?.tier1_count || 0}
+      />
+      <SourceMetric 
+        label="Avg Reliability"
+        value={`${Math.round(
+          (sourceStats?.reliability_sum || 0) / (newsCount || 1)
+        )}%`}
+      />
+      <SourceMetric 
+        label="Top Source"
+        value={sourceStats?.tier1_sources?.[0] || 'N/A'}
+      />
+    </div>
+  </div>
+);
+
+const SourceMetric = ({ label, value }) => (
+  <div className="bg-gray-700/50 p-3 rounded">
+    <p className="text-sm text-gray-400">{label}</p>
+    <p className="text-xl font-bold">{value}</p>
+  </div>
+);
+
+// PropTypes
+ErrorDisplay.propTypes = {
+  error: PropTypes.string.isRequired
+};
+TimeRangeSelector.propTypes = {
+  timeRange: PropTypes.string.isRequired,
+  onChange: PropTypes.func.isRequired
+};
+SentimentSummary.propTypes = {
+  distribution: PropTypes.shape({
+    positive: PropTypes.number,
+    neutral: PropTypes.number,
+    negative: PropTypes.number
+  }).isRequired
+};SentimentTrendChart.propTypes = {
+  data: PropTypes.object.isRequired,
+  isBullish: PropTypes.bool,
+  isBearish: PropTypes.bool
+};
+SentimentDistributionChart.propTypes = {
+  data: PropTypes.object.isRequired
+};
+NewsSourceAnalysis.propTypes = {
+  newsCount: PropTypes.number.isRequired,
+  sourceStats: PropTypes.shape({
+    tier1_count: PropTypes.number,
+    reliability_sum: PropTypes.number,
+    tier1_sources: PropTypes.arrayOf(PropTypes.string)
+  })
 };
 
 SentimentAnalysisCard.propTypes = {
-  data: PropTypes.shape({
-    factors: PropTypes.shape({
-      aggregated_sentiment: PropTypes.number,
-      news_count: PropTypes.number,
-    }),
-    news_data: PropTypes.arrayOf(
-      PropTypes.shape({
-        title: PropTypes.string.isRequired,
-        url: PropTypes.string.isRequired,
-        source: PropTypes.string.isRequired,
-        sentiment: PropTypes.oneOf(["positive", "neutral", "negative"]),
-        source_reliability: PropTypes.number,
-        key_phrases: PropTypes.arrayOf(PropTypes.string),
-      })
-    ),
-    confidence: PropTypes.shape({
-      sentiment: PropTypes.string,
-    }),
-    risk_metrics: PropTypes.shape({
-      risk_reward_ratio: PropTypes.string,
-    }),
-  }),
+  symbol: PropTypes.string.isRequired
+};
+
+SentimentMetric.propTypes = {
+  icon: PropTypes.node.isRequired,
+  label: PropTypes.string.isRequired,
+  value: PropTypes.number.isRequired,
+  trend: PropTypes.string.isRequired,
+  variant: PropTypes.oneOf(['positive', 'neutral', 'negative']).isRequired
+};
+
+SourceMetric.propTypes = {
+  label: PropTypes.string.isRequired,
+  value: PropTypes.oneOfType([
+    PropTypes.string,
+    PropTypes.number
+  ]).isRequired
 };
 
 export default SentimentAnalysisCard;

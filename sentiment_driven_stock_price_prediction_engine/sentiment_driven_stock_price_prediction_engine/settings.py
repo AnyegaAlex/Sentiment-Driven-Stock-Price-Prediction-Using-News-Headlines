@@ -17,8 +17,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Security Settings
 SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-development-key")
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost 127.0.0.1 [::1]").split()
-ALLOWED_HOSTS = ['.onrender.com']  # Allows *.onrender.com subdomains
+# Base hosts for security
+BASE_ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split()
+
+# Add local hosts when in DEBUG mode
+if DEBUG:
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]"] + BASE_ALLOWED_HOSTS
+else:
+    ALLOWED_HOSTS = [".onrender.com"] + BASE_ALLOWED_HOSTS
 
 # Application definition
 INSTALLED_APPS = [

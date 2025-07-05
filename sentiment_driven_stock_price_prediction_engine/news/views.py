@@ -167,7 +167,7 @@ def get_analyzed_news(request):
     3. Fallback to Finnhub, then Yahoo Finance if needed.
     4. Standardize and analyze each article, save it, and return the data.
     """
-    symbol = request.GET.get('symbol', 'IBM').upper()
+    symbol = request.GET.get('symbol', '').upper()
 
     try:
         # Check cache first
@@ -269,7 +269,7 @@ def get_news(request):
     Retrieve processed news for a given stock symbol.
     If a refresh is requested or no processed news exists, trigger an asynchronous task.
     """
-    symbol = request.GET.get('symbol', 'IBM').upper()
+    symbol = request.GET.get('symbol', '').upper()
     force_refresh = request.GET.get('refresh', 'false').lower() == 'true'
 
     if force_refresh or not ProcessedNews.objects.filter(symbol=symbol).exists():

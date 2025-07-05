@@ -4,7 +4,7 @@ import PropTypes from "prop-types";
 const DashboardContext = createContext();
 
 export const DashboardProvider = ({ children }) => {
-  const [stockSymbol, setStockSymbol] = useState("IBM");
+  const [stockSymbol, setStockSymbol] = useState("");
   const [newsData, setNewsData] = useState([]);
 
   return (

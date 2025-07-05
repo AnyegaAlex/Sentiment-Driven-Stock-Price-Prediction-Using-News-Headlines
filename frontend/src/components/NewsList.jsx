@@ -1,254 +1,242 @@
-import React, { useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import PropTypes from "prop-types";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Card, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
+import axios from "axios";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Info } from "lucide-react";
-import { FaExternalLinkAlt } from "react-icons/fa";
-import { AiFillSmile, AiFillMeh, AiFillFrown } from "react-icons/ai";
-import KeyPhraseChip from "@/components/KeyPhraseChip";
+import { Button } from "@/components/ui/button";
+import { Info, ExternalLink } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
-const NewsList = ({ news }) => {
-  const [sentimentFilter, setSentimentFilter] = useState("all");
-  const [expandedPhrases, setExpandedPhrases] = useState({});
+const NewsList = ({ symbol }) => {
+  const [news, setNews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const sentimentIcons = {
-    positive: <AiFillSmile className="w-5 h-5 text-green-600" aria-hidden="true" />,
-    neutral: <AiFillMeh className="w-5 h-5 text-yellow-600" aria-hidden="true" />,
-    negative: <AiFillFrown className="w-5 h-5 text-red-600" aria-hidden="true" />,
-  };
+  const sentimentConfig = useMemo(() => ({
+    positive: { 
+      icon: "📈", 
+      badgeClass: "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200",
+      progressClass: "bg-green-500"
+    },
+    neutral: { 
+      icon: "➖", 
+      badgeClass: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+      progressClass: "bg-gray-500"
+    },
+    negative: { 
+      icon: "📉", 
+      badgeClass: "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200",
+      progressClass: "bg-red-500"
+    }
+  }), []);
 
-  // Filter news based on sentiment
-  const filteredNews = sentimentFilter === "all"
-    ? news
-    : news.filter((item) => item.sentiment === sentimentFilter);
+  useEffect(() => {
+    const fetchNews = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(`/api/news/analyzed`, {
+          params: { symbol },
+          timeout: 10000
+        });
+        setNews(response.data || []);
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching news:", err);
+        setError(err.response?.data?.message || "Failed to load news. Please try again later.");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Toggle expanded key phrases
-  const toggleExpandPhrases = (index) => {
-    setExpandedPhrases((prev) => ({ ...prev, [index]: !prev[index] }));
-  };
+    fetchNews();
+  }, [symbol]);
 
-  // Render key phrases with "Show More" functionality
-  const renderKeyPhrases = (item, index) => {
-    if (!item.key_phrases) return null;
+  const parseDate = useMemo(() => (dateString) => {
+    if (!dateString) return "Date not available";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return dateString;
+    }
+  }, []);
 
-    const phrases = Array.isArray(item.key_phrases)
-      ? item.key_phrases
-      : item.key_phrases.split(",").map((p) => p.trim()).filter(Boolean);
-
-    const isExpanded = expandedPhrases[index];
-    const visiblePhrases = isExpanded ? phrases : phrases.slice(0, 5);
-
+  const renderKeyPhrases = (phrases) => {
+    if (!phrases?.length) return null;
     return (
-      <div className="mt-2 flex flex-col gap-2">
-        <div className="flex flex-wrap gap-2">
-          {visiblePhrases.map((phrase) => (
-            <KeyPhraseChip
-              key={phrase}
-              phrase={phrase}
-              onClick={() => console.log("Clicked phrase:", phrase)}
-              aria-label={`Key phrase: ${phrase}`}
-            />
-          ))}
-        </div>
-        {phrases.length > 5 && (
-          <button
-            className="text-primary hover:underline font-medium text-sm self-start"
-            onClick={() => toggleExpandPhrases(index)}
-            aria-expanded={isExpanded}
-            aria-controls={`key-phrases-${index}`}
+      <div className="mt-2 flex flex-wrap gap-1">
+        {phrases.slice(0, 3).map((phrase, i) => (
+          <Badge 
+            key={i} 
+            variant="outline" 
+            className="text-xs px-2 py-0.5 rounded-full"
           >
-            {isExpanded ? "Show Less" : "Show More..."}
-          </button>
-        )}
+            {phrase}
+          </Badge>
+        ))}
       </div>
     );
   };
 
-  // Get badge classes for sentiment or reliability
-  const getBadgeClass = (type, value) => {
-    if (type === "sentiment") {
-      if (value === "positive") return "bg-green-100 text-green-800";
-      if (value === "negative") return "bg-red-100 text-red-800";
-      return "bg-yellow-100 text-yellow-800";
-    } else if (type === "reliability") {
-      if (value >= 80) return "bg-green-100 text-green-800";
-      if (value >= 50) return "bg-yellow-100 text-yellow-800";
-      return "bg-red-100 text-red-800";
-    }
-    return "";
-  };
+  if (loading) {
+    return (
+      <div className="p-4">
+        <h2 className="text-xl font-semibold mb-4">Latest News for {symbol?.toUpperCase() || "..."}</h2>
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Card key={index} className="p-4 space-y-3">
+              <Skeleton className="h-5 w-4/5" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+              <div className="flex justify-between items-center pt-2">
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-4 w-16" />
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
-  // Parse date safely
-  const parseDate = (dateString) => {
-    try {
-      return new Date(dateString).toLocaleDateString();
-    } catch {
-      return "Invalid Date";
-    }
-  };
+  if (error) {
+    return (
+      <div className="p-4">
+        <h2 className="text-xl font-semibold mb-4">Latest News for {symbol?.toUpperCase() || "..."}</h2>
+        <div className="text-red-500 dark:text-red-400 p-4 border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20">
+          {error}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="mt-2"
+            onClick={() => window.location.reload()}
+          >
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
-  if (!news || news.length === 0) {
-    return <p className="text-center text-gray-500">No news available.</p>;
+  if (!news.length) {
+    return (
+      <div className="p-4">
+        <h2 className="text-xl font-semibold mb-4">Latest News for {symbol?.toUpperCase() || "..."}</h2>
+        <div className="text-muted-foreground p-4 border rounded-lg text-center">
+          No news articles found for this stock.
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Sentiment Filter */}
-      <div className="mb-8 flex justify-center">
-        <Select
-          value={sentimentFilter}
-          onValueChange={setSentimentFilter}
-          aria-label="Filter by sentiment"
-        >
-          <SelectTrigger className="w-full sm:w-[200px]">
-            <SelectValue placeholder="Filter Sentiment" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Sentiments</SelectItem>
-            <SelectItem value="positive">Positive</SelectItem>
-            <SelectItem value="neutral">Neutral</SelectItem>
-            <SelectItem value="negative">Negative</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="p-4">
+      <h2 className="text-xl font-semibold mb-4">Latest News for {symbol?.toUpperCase()}</h2>
+      
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[80vh] overflow-y-auto pr-2">
+        {news.map((item, index) => {
+          const sentiment = item.sentiment?.toLowerCase() || 'neutral';
+          const config = sentimentConfig[sentiment] || sentimentConfig.neutral;
+          
+          return (
+            <Card key={`${item.url}-${index}`} className="flex flex-col h-full hover:shadow-md transition-shadow">
+              <CardContent className="flex flex-col space-y-3 p-4 h-full">
+                {/* Title */}
+                <h3 className="font-semibold text-base line-clamp-2">
+                  {item.title || "No title available"}
+                </h3>
 
-      {/* News Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filteredNews.map((item, index) => (
-          <Card key={`${item.url}-${index}`} className="h-full flex flex-col">
-            {/* Banner Image */}
-            {item.banner_image_url ? (
-              <img
-                src={item.banner_image_url}
-                alt={item.title}
-                className="w-full h-48 object-cover rounded-t-lg"
-                loading="lazy"
-                onError={(e) => {
-                  e.target.src = "/fallback-image.jpg";
-                  e.target.alt = "Image unavailable";
-                }}
-              />
-            ) : (
-              <div className="w-full h-48 bg-muted flex items-center justify-center rounded-t-lg">
-                <div className="text-muted-foreground">No Image</div>
-              </div>
-            )}
+                {/* Optional Image */}
+                {item.image && (
+                  <img
+                    src={item.image}
+                    alt={item.title}
+                    className="w-full h-40 object-cover rounded-md"
+                    loading="lazy"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                )}
 
-            {/* Card Content */}
-            <CardContent className="p-4 flex flex-col gap-4 flex-1">
-              {/* Title */}
-              <CardTitle className="text-base font-semibold">
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline inline-flex items-center gap-1"
-                  aria-label={`Read full article: ${item.title}`}
-                >
-                  {item.title}
-                  <FaExternalLinkAlt className="inline-block text-xs mt-0.5" aria-hidden="true" />
-                </a>
-              </CardTitle>
+                {/* Summary */}
+                <p className="text-sm text-muted-foreground line-clamp-3">
+                  {item.summary || "No summary available."}
+                </p>
 
-              {/* Summary */}
-              <CardDescription className="text-sm line-clamp-3">
-                {item.summary || "No summary available"}
-              </CardDescription>
-
-              {/* Metadata Grid */}
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="space-y-0.5">
-                  <p className="text-muted-foreground">Source</p>
-                  <p className="font-medium">{item.source || "Unknown"}</p>
+                {/* Metadata */}
+                <div className="text-xs text-muted-foreground mt-auto flex justify-between items-center">
+                  <span>{parseDate(item.date)}</span>
+                  <span className="italic truncate max-w-[120px]">{item.source}</span>
                 </div>
-                <div className="space-y-0.5">
-                  <p className="text-muted-foreground">Published</p>
-                  <p className="font-medium">
-                    {parseDate(item.published_at)}
-                  </p>
-                </div>
-              </div>
 
-              {/* Reliability */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Reliability:</span>
-                <Badge className={getBadgeClass("reliability", item.source_reliability)}>
-                  {item.source_reliability}%
-                </Badge>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Info className="w-4 h-4 text-muted-foreground cursor-pointer" aria-label="Reliability info" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[200px]">
-                    Source reliability score based on historical accuracy.
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-
-              {/* Sentiment & Confidence */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Sentiment:</span>
-                  {sentimentIcons[item.sentiment] || sentimentIcons.neutral}
-                  <Badge className={getBadgeClass("sentiment", item.sentiment)}>
-                    {item.sentiment.charAt(0).toUpperCase() + item.sentiment.slice(1)}
+                {/* Sentiment & Confidence */}
+                <div className="flex justify-between items-center">
+                  <Badge className={cn(
+                    "px-3 py-1 rounded-full text-xs capitalize",
+                    config.badgeClass
+                  )}>
+                    {config.icon} {sentiment}
                   </Badge>
+
+                  {item.confidence && (
+                    <Tooltip>
+                      <TooltipTrigger className="flex items-center gap-1">
+                        <Info className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-xs">Confidence: {item.confidence.toFixed(0)}%</span>
+                      </TooltipTrigger>
+                      <TooltipContent className="w-40">
+                        <Progress 
+                          value={item.confidence} 
+                          className={config.progressClass}
+                        />
+                        <div className="text-center text-xs mt-1">Analysis Confidence</div>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Confidence:</span>
-                  <Progress value={(item.confidence || 0) * 100} className="flex-1 h-2" />
-                  <span className="text-xs w-12 text-right">
-                    {Math.round((item.confidence || 0) * 100)}%
-                  </span>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Info className="w-4 h-4 text-muted-foreground cursor-pointer" aria-label="Confidence info" />
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-[200px]">
-                      Model confidence in sentiment classification.
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              </div>
+                {/* Key Phrases */}
+                {renderKeyPhrases(item.keyPhrases)}
 
-              {/* Key Phrases */}
-              <div className="pt-2 border-t border-border">
-                <h4 className="text-sm font-medium mb-2">Key Phrases</h4>
-                {renderKeyPhrases(item, index)}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                {/* Read Full Article */}
+                {item.url && (
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-2 text-xs gap-1"
+                  >
+                    <a 
+                      href={item.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      aria-label={`Read full article: ${item.title}`}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Read Full Article
+                    </a>
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
 };
 
 NewsList.propTypes = {
-  news: PropTypes.arrayOf(
-    PropTypes.shape({
-      title: PropTypes.string.isRequired,
-      summary: PropTypes.string.isRequired,
-      source: PropTypes.string.isRequired,
-      url: PropTypes.string.isRequired,
-      published_at: PropTypes.string.isRequired,
-      sentiment: PropTypes.string.isRequired,
-      confidence: PropTypes.number.isRequired,
-      key_phrases: PropTypes.string.isRequired,
-      source_reliability: PropTypes.number.isRequired,
-      banner_image_url: PropTypes.string,
-    })
-  ).isRequired,
+  symbol: PropTypes.string.isRequired,
 };
 
 export default NewsList;

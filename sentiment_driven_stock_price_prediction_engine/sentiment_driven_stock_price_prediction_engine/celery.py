@@ -27,3 +27,28 @@ app.conf.beat_schedule = {
         'schedule': crontab(minute=0, hour='*/2'),  # Runs every 2 hours
     },
 }
+
+
+@app.task
+def calculate_performance_metrics():
+    from .models import PredictionRecord, ModelPerformance
+    from sklearn.metrics import accuracy_score, f1_score
+    
+    records = PredictionRecord.objects.filter(
+        actual_outcome__isnull=False
+    ).order_by('-created_at')[:1000]
+    
+    if not records.exists():
+        return
+    
+    y_true = [r.actual_outcome for r in records]
+    y_pred = [r.prediction for r in records]
+    
+    ModelPerformance.objects.create(
+        accuracy=accuracy_score(y_true, y_pred),
+        f1_score=f1_score(y_true, y_pred, pos_label='UP'),
+        precision=precision_score(y_true, y_pred, pos_label='UP'),
+        recall=recall_score(y_true, y_pred, pos_label='UP'),
+        prediction_count=len(records),
+        sharpe_ratio=calculate_sharpe(records)
+    )

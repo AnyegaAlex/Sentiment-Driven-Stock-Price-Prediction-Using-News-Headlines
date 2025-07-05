@@ -21,7 +21,7 @@ class NewsAPIView(APIView):
     attempts to fetch from external APIs in fallback order.
     """
     def get(self, request):
-        symbol = request.query_params.get('symbol', 'IBM')
+        symbol = request.query_params.get('symbol', '')
         cutoff = timezone.now() - timezone.timedelta(minutes=CACHE_TTL_MINUTES)
         local_data = ProcessedNews.objects.filter(symbol=symbol, updated_at__gte=cutoff)
         if local_data.exists():
