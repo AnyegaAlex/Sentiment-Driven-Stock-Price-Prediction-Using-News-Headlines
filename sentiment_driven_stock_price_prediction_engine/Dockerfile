@@ -35,12 +35,14 @@ RUN if [ "$BUILD_ENV" = "production" ]; then \
       python manage.py collectstatic --noinput; \
     fi
 
+# Optional but recommended
+EXPOSE 8000
 
-# Run application
-CMD ["gunicorn", \
-    "--workers", "2", \
-    "--timeout", "120", \
-    "--worker-tmp-dir", "/dev/shm", \
-    "--bind", "0.0.0.0:${PORT:-8000}", \
-    "--log-file", "-", \
-    "sentiment_driven_stock_price_prediction_engine.wsgi:application"]
+# Run application with port binding from Render
+CMD gunicorn \
+    --workers 2 \
+    --timeout 120 \
+    --worker-tmp-dir /dev/shm \
+    --bind 0.0.0.0:${PORT:-8000} \
+    --log-file - \
+    sentiment_driven_stock_price_prediction_engine.wsgi:application
