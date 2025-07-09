@@ -34,11 +34,6 @@ COPY . .
 # Create required directories
 RUN mkdir -p /app/{staticfiles,logs,media}
 
-# Conditional collectstatic (only in production)
-ARG BUILD_ENV=production
-RUN if [ "$BUILD_ENV" = "production" ]; then \
-      python manage.py collectstatic --noinput; \
-    fi
 
 # Optional but recommended
 EXPOSE 8000

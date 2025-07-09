@@ -20,6 +20,10 @@ if [ "$ENABLE_CELERY" = "true" ]; then
         --without-gossip &
 fi
 
+# ✅ Run collectstatic before starting Gunicorn
+echo "Running collectstatic..."
+python manage.py collectstatic --noinput
+
 # Start Gunicorn
 echo "Starting Gunicorn on port ${PORT:-8000}..."
 exec gunicorn \
