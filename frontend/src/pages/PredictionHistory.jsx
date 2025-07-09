@@ -45,7 +45,7 @@ const PredictionHistory = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await axios.get('http://localhost:8000/api/stocks/history/');
+        const res = await axios.get('https://sentiment-driven-stock-price-prediction.onrender.com/api/stocks/history/');
         if (res.data && Array.isArray(res.data)) {
           setPredictions(res.data);
         } else {

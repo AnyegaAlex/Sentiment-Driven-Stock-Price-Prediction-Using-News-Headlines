@@ -12,7 +12,7 @@ const useFetchNews = (stockSymbol) => {
     setLoading(true);
     setError(null);
     axios
-      .get(`http://127.0.0.1:8000/api/news/analyzed/?symbol=${stockSymbol}`, {
+      .get(`https://sentiment-driven-stock-price-prediction.onrender.com/api/news/analyzed/?symbol=${stockSymbol}`, {
         signal: controller.signal,
       })
       .then((response) => {
