@@ -24,11 +24,15 @@ fi
 echo "Running collectstatic..."
 python manage.py collectstatic --noinput
 
+
+
 # Start Gunicorn
 echo "Starting Gunicorn on port ${PORT:-8000}..."
+mkdir -p /app/logs
+touch /app/logs/app.log
 exec gunicorn \
-    --workers ${GUNICORN_WORKERS:-2} \
-    --timeout 120 \
+    --workers ${GUNICORN_WORKERS:-1} \
+    --timeout 90 \
     --worker-tmp-dir /dev/shm \
     --bind 0.0.0.0:${PORT:-8000} \
     --log-file - \
