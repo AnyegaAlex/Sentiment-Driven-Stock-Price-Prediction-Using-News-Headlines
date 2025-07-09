@@ -31,7 +31,7 @@ fi
 echo "Starting Gunicorn on port ${PORT:-8000}..."
 exec gunicorn \
     --workers ${GUNICORN_WORKERS:-1} \
-    --timeout 90 \
+    --timeout 120 \
     --worker-tmp-dir /dev/shm \
     --bind 0.0.0.0:${PORT:-8000} \
     --log-file - \
