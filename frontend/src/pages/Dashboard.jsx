@@ -46,7 +46,7 @@ const Dashboard = () => {
 
   const fetchAnalyzedNews = useCallback(async (symbol) => {
     try {
-      const response = await fetch(`sentiment-driven-stock-price-prediction.onrender.com/api/news/analyzed?symbol=${symbol}`);
+      const response = await fetch(`/api/news/analyzed?symbol=${symbol}`);
       const data = await response.json();
       setNewsData(data);
     } catch (error) {

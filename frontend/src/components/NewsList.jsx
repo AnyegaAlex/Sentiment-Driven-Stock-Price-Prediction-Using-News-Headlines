@@ -37,7 +37,7 @@ const NewsList = ({ symbol }) => {
     const fetchNews = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`sentiment-driven-stock-price-prediction.onrender.com/api/news/analyzed`, {
+        const response = await axios.get(`/api/news/analyzed`, {
           params: { symbol },
           timeout: 10000
         });

@@ -66,7 +66,7 @@ const NewsAnalysis = ({ symbol = "" }) => {
   useEffect(() => {
     const fetchSymbols = async () => {
       try {
-        const response = await axios.get("https://sentiment-driven-stock-price-prediction.onrender.com/api/stocks/symbols/");
+        const response = await axios.get("/api/stocks/symbols/");
         if (response.data?.symbols) {
           setAvailableSymbols(response.data.symbols);
         }
@@ -89,7 +89,7 @@ const NewsAnalysis = ({ symbol = "" }) => {
       
       try {
         const response = await axios.get(
-          `https://sentiment-driven-stock-price-prediction.onrender.com/api/news/get-news/?symbol=${selectedSymbol}`
+          `/api/news/get-news/?symbol=${selectedSymbol}`
         );
         
         if (response.data?.news) {

@@ -62,7 +62,7 @@ const TechnicalIndicatorsCard = ({ symbol }) => {
       try {
         setLoading(true);
         const response = await axios.get(
-          `sentiment-driven-stock-price-prediction.onrender.com/api/stock-opinion`,
+          `/api/stock-opinion`,
           {
             params: { 
               symbol,

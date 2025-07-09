@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Configure base URL with fallbacks
 const baseURL = import.meta.env.VITE_API_BASE_URL || 
-                'https://sentiment-driven-stock-price-prediction.onrender.com';
+  'https://sentiment-driven-stock-price-prediction.onrender.com';
 
 const api = axios.create({
   baseURL: baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL, // Remove trailing slash

@@ -42,7 +42,7 @@ const StockOpinionCard = ({ symbol, riskType = 'medium', holdTime = 'medium-term
       setIsRefreshing(true);
       setError(null);
       
-      const response = await axios.get(`sentiment-driven-stock-price-prediction.onrender.com/api/stock-analysis`, {
+      const response = await axios.get(`/api/stock-analysis`, {
         params: { symbol, risk_type: riskType, hold_time: holdTime },
         timeout: 10000
       });
