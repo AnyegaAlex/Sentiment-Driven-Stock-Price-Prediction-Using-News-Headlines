@@ -84,26 +84,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'sentiment_driven_stock_price_prediction_engine.wsgi.application'
 
-# Uncomment this block for PostgreSQL in production
-'''DATABASES = {
-     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', 'tradingdb'),
-        'USER': os.getenv('DB_USER', 'tradingadmin'),
-        'PASSWORD': os.getenv('DB_PASSWORD', '2001154805Ak*'),
-        'HOST': os.getenv('DB_HOST', 'db'),
-        'PORT': os.getenv('DB_PORT', '5432'),
-     }
- }
-'''
-# Using SQLite for development:
-'''DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
-'''
 # Update security settings
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 if not DEBUG:
@@ -123,7 +103,13 @@ DATABASES = {
     'default': dj_database_url.config(
         conn_max_age=600,
         conn_health_checks=True,
-        ssl_require=True 
+        ssl_require=True,
+        engine_options={
+            'pool_size': 5,  # Reduced from default 20
+            'max_overflow': 3,
+            'pool_timeout': 30,
+            'pool_recycle': 300  # Recycle connections every 5 minutes
+        }
     )
 }
 
@@ -156,6 +142,8 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_DIRS = [BASE_DIR / 'static']
+WHITENOISE_MAX_AGE = 86400  # 1 day cache
+WHITENOISE_IMMUTABLE_FILES = True
 
 # This production code might break development mode, so we check whether we're in DEBUG mode
 if not DEBUG:
@@ -171,8 +159,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CORS Configuration
 CORS_ORIGIN_ALLOW_ALL = False
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+    "https://sentiment-driven-stock-price-predic.vercel.app "
 ]
 CORS_ALLOW_METHODS = [
     'GET',
@@ -190,7 +177,9 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
-
+CSRF_TRUSTED_ORIGINS = [
+    "https://sentiment-driven-stock-price-predic.vercel.app "
+]
 # REST Framework Configuration
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
@@ -214,6 +203,9 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+# Celery memory limits
+CELERYD_MAX_MEMORY_PER_CHILD = 256000  # 256MB
+CELERYD_FORCE_EXECV = True  # Prevents memory leaks
 
 CELERY_TASK_ANNOTATIONS = {
     'news.tasks.fetch_and_process_news': {'rate_limit': '5/m'},
@@ -230,6 +222,19 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute=0),
     },
 }
+
+CELERY_TASK_ROUTES = {
+    'news.tasks.*': {'queue': 'news'},
+    'stocks.tasks.*': {'queue': 'stocks'},
+    '*.fetch_*': {'queue': 'periodic'},
+    '*.calculate_*': {'queue': 'metrics'},
+}
+
+#Celery Worker Memory Limits (Critical Fix)
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 100  # Restart worker after 100 tasks to prevent leaks
+CELERY_WORKER_MAX_MEMORY_MB = 1024  # Kill worker if exceeding 1GB
+CELERY_TASK_SOFT_TIME_LIMIT = 300  # 5 min soft limit
+CELERY_TASK_TIME_LIMIT = 600  # 10 min hard limit
 
 # API Keys
 ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY")
@@ -269,11 +274,15 @@ LOGGING = {
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': 'redis://localhost:6379/1',  # Use database 1 for caching
+        'LOCATION': os.getenv('REDIS_URL', 'redis://localhost:6379/1'),  # Use database 1 for caching
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            'SOCKET_CONNECT_TIMEOUT': 10,  # 10 seconds
-            'SOCKET_TIMEOUT': 10,  # 10 seconds
+            'SOCKET_CONNECT_TIMEOUT': 10, 
+            'SOCKET_TIMEOUT': 5,
+            'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+            'IGNORE_EXCEPTIONS': True,
+            'MAX_ENTRIES': 1000,  # Limit cached items
+            'CULL_FREQUENCY': 3,  # Remove 1/3 of entries when limit reached
         },
         'KEY_PREFIX': 'sentiment_analysis',  # Prefix for all cache keys
     }
@@ -289,6 +298,11 @@ FINBERT_CONFIG = {
     'min_text_length': 25,
     'max_text_length': 1500,
     'confidence_threshold': 0.45,
+    'model_options': {
+        'device_map': 'auto',  # Let transformers manage GPU/CPU
+        'low_cpu_mem_usage': True,
+        'torch_dtype': 'auto'
+    },
     'circuit_breaker': {
         'failure_threshold': 5,
         'recovery_timeout': 300

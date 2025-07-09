@@ -1,3 +1,4 @@
+import gc
 import hashlib
 import logging
 import os
@@ -7,7 +8,7 @@ from celery import shared_task
 from celery.exceptions import MaxRetriesExceededError, Retry
 from datetime import datetime, timedelta
 from django.conf import settings
-from django.db import transaction, IntegrityError
+from django.db import transaction, IntegrityError, connection
 from django.utils import timezone
 import dateutil.parser
 from .models import ProcessedNews
@@ -19,37 +20,70 @@ logger = logging.getLogger(__name__)
 API_TIMEOUT = 15  # seconds
 MAX_ARTICLES = 100
 LOG_FILE = os.path.join(settings.BASE_DIR, "logs", "news_fetch_log.txt")
+BATCH_SIZE = 20  # Process articles in batches
 
-# Load spaCy for key phrase extraction
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    print("Downloading the 'en_core_web_sm' model...")
-    from spacy.cli import download
-    download("en_core_web_sm")
-    nlp = spacy.load("en_core_web_sm")
+# Lazy-loaded NLP model
+_nlp = None
+
+def get_nlp():
+    """Lazy loader for spaCy model to prevent multiple loads"""
+    global _nlp
+    if _nlp is None:
+        try:
+            _nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+        except OSError:
+            logger.info("Downloading spaCy model...")
+            from spacy.cli import download
+            download("en_core_web_sm")
+            _nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+    return _nlp
+
+def cleanup_resources():
+    """Release memory-intensive resources."""
+    global _nlp
+    if _nlp:
+        try:
+            _nlp.vocab.strings.clear()
+            del _nlp
+        except Exception as e:
+            logger.warning(f"NLP cleanup failed: {e}")
+        _nlp = None
+    gc.collect()
+    if connection.connection is not None:
+        connection.close()
 
 
 def normalize_title(title):
-    """
-    Normalize the title by removing extra spaces, punctuation, and converting to lowercase.
-    """
-    if not title:
-        return ""
-    title = re.sub(r'\s+', ' ', title.strip().lower())
-    title = re.sub(r'[^\w\s]', '', title)
-    return title
-
+    return re.sub(r'[^\w\s]', '', title.strip().lower()) if title else ""
 
 def extract_key_phrases(text):
-    """
-    Extract key phrases from the article content using spaCy.
-    """
-    doc = nlp(text)
-    key_phrases = [chunk.text for chunk in doc.noun_chunks if len(chunk.text.split()) > 1]
-    return list(set(key_phrases))[:5]  # Limit to top 5 unique key phrases
+    """Extract key noun phrases (up to 5)"""
+    if not text or len(text) > 10000:
+        return []
+    try:
+        doc = get_nlp()(text[:10000])
+        return list({chunk.text for chunk in doc.noun_chunks if len(chunk.text.split()) > 1})[:5]
+    except Exception as e:
+        logger.error(f"Key phrase extraction failed: {str(e)}")
+        return []
 
-
+def _parse_date(article):
+    value = article.get("time_published") or article.get("datetime") or article.get("date") or article.get("pubDate")
+    if not value:
+        return None
+    try:
+        if isinstance(value, int):
+            return datetime.fromtimestamp(value / 1000 if value > 1e12 else value, tz=timezone.utc)
+        for fmt in ("%Y%m%dT%H%M%S", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d %H:%M:%S"):
+            try:
+                return timezone.make_aware(datetime.strptime(value, fmt), timezone.utc)
+            except ValueError:
+                continue
+        return timezone.make_aware(dateutil.parser.parse(value), timezone.utc)
+    except Exception:
+        logger.warning(f"Date parse failed: {value}")
+        return None
+    
 def get_source_reliability(source):
     """
     Assign a reliability score to the source based on predefined rules.
@@ -61,6 +95,75 @@ def get_source_reliability(source):
         "yahoo finance": 80,
     }
     return trusted_sources.get(source.lower(), 50)  # Default to 50% for unknown sources
+
+def _process_article(article, symbol):
+    try:
+        title = normalize_title(article.get("title") or article.get("headline") or article.get("description", ""))
+        if not title:
+            return None, False
+        published_at = _parse_date(article)
+        if not published_at:
+            return None, False
+
+        rounded_timestamp = round(published_at.timestamp() / 60) * 60
+        hash_input = f"{title}_{rounded_timestamp}".encode("utf-8")
+        title_hash = hashlib.sha256(hash_input).hexdigest()
+
+        content = f"{title} {article.get('summary', '')}"
+        sentiment = analyze_sentiment(content)
+        key_phrases = extract_key_phrases(content)
+
+        defaults = {
+            "title": title[:200],
+            "summary": article.get("summary", "")[:500],
+            "source": (article.get("source") or article.get("publisher", ""))[:100],
+            "url": article.get("url") or article.get("link", ""),
+            "published_at": published_at,
+            "sentiment": sentiment.get("label", "neutral").lower(),
+            "sentiment_score": float(sentiment.get("score", 0.0)),
+            "key_phrases": ", ".join(key_phrases),
+            "source_reliability": get_source_reliability(article.get("source")),
+            "banner_image_url": article.get("banner_image_url", ""),
+            "raw_data": article,
+        }
+
+        with transaction.atomic():
+            _, created = ProcessedNews.objects.update_or_create(
+                title_hash=title_hash,
+                symbol=symbol,
+                defaults=defaults
+            )
+        return title_hash, created
+    except Exception as e:
+        logger.error(f"Processing failed: {e}")
+        return None, False
+
+def _process_articles(symbol, articles):
+    seen_hashes = set()
+    new_count = dup_count = 0
+
+    for i in range(0, len(articles), BATCH_SIZE):
+        batch = articles[i:i+BATCH_SIZE]
+        for article in batch:
+            title_hash, created = _process_article(article, symbol)
+            if not title_hash:
+                continue
+            if title_hash in seen_hashes:
+                dup_count += 1
+                continue
+            seen_hashes.add(title_hash)
+            if created:
+                new_count += 1
+            else:
+                dup_count += 1
+        del batch
+        gc.collect()
+    return new_count, dup_count
+
+def _filter_recent_articles(articles):
+    """Filter articles from last 24 hours"""
+    cutoff = timezone.now() - timedelta(hours=24)
+    return [a for a in articles if (dt := _parse_date(a)) and dt >= cutoff]
 
 
 def _fetch_alpha_vantage(symbol):
@@ -80,17 +183,9 @@ def _fetch_alpha_vantage(symbol):
     response.raise_for_status()
     data = response.json()
     if 'feed' not in data:
-        if 'Error Message' in data:
-            raise ValueError(f"Alpha Vantage Error: {data['Error Message']}")
-        raise ValueError("Invalid Alpha Vantage response structure")
+        raise ValueError(data.get('Error Message', 'Invalid response'))
+    return [{'banner_image_url': a.get('banner_image', ''), **a} for a in data['feed'][:MAX_ARTICLES]]
     
-    # Process articles: assign banner_image_url based on Alpha Vantage's field
-    articles = data['feed'][:MAX_ARTICLES]
-    for article in articles:
-        article['banner_image_url'] = article.get('banner_image', '')
-    return articles
-
-
 def _fetch_finnhub(symbol):
     """Finnhub API with date range parameters."""
     today = datetime.utcnow().date()
@@ -106,11 +201,7 @@ def _fetch_finnhub(symbol):
         timeout=API_TIMEOUT
     )
     response.raise_for_status()
-    # Process articles: assign banner_image_url based on Finnhub's field
-    articles = response.json()[:MAX_ARTICLES]
-    for article in articles:
-        article['banner_image_url'] = article.get('image', '')
-    return articles
+    return [{'banner_image_url': a.get('image', ''), **a} for a in response.json()[:MAX_ARTICLES]]
 
 
 def _fetch_yahoo_finance(symbol):
@@ -128,36 +219,20 @@ def _fetch_yahoo_finance(symbol):
     response.raise_for_status()
     data = response.json()
     
-    # Determine which key contains the news articles
-    if 'items' in data:
-        articles = data['items']
-    elif 'news' in data:
-        articles = data['news']
-    else:
-        articles = []
-    
-    # Process articles: assign banner_image_url using Yahoo Finance's field
-    for article in articles:
-        # Yahoo Finance may use 'thumbnail' field with nested data
-        article['banner_image_url'] = article.get('thumbnail', {}).get('resolutions', [{}])[0].get('url', '')
-    return articles
+    articles = data.get('items', data.get('news', []))
+    return [{
+        'banner_image_url': a.get('thumbnail', {}).get('resolutions', [{}])[0].get('url', ''),
+        **a
+    } for a in articles[:MAX_ARTICLES]]
 
-
-def _filter_recent_articles(articles):
-    """Filter articles from the last 24 hours."""
-    cutoff = timezone.now() - timedelta(hours=24)
-    filtered_articles = []
-    for article in articles:
-        published_at = _parse_date(article)
-        if published_at is None:
-            logger.warning("Skipping article with invalid date during filtering")
-            continue
-        if published_at >= cutoff:
-            filtered_articles.append(article)
-    return filtered_articles
-
-
-@shared_task(bind=True, autoretry_for=(requests.HTTPError, ConnectionError), retry_backoff=120, max_retries=2, retry_jitter=True)
+@shared_task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=120,
+    max_retries=2,
+    time_limit=300,
+    soft_time_limit=240
+)
 def fetch_and_process_news(self, symbol, fetch_latest_only=True):
     """
     Fetch and process news articles with improved error handling and API-specific parsing.
@@ -168,203 +243,50 @@ def fetch_and_process_news(self, symbol, fetch_latest_only=True):
       4. Process each article: normalize, analyze sentiment, extract key phrases, and save.
     """
     try:
-        # Step 1: Check database cache for recent articles
         cutoff = timezone.now() - timedelta(hours=24)
-        cached_articles = ProcessedNews.objects.filter(
-            symbol=symbol,
-            published_at__gte=cutoff
-        ).order_by('-published_at')[:MAX_ARTICLES]
+        if ProcessedNews.objects.filter(symbol=symbol, published_at__gte=cutoff).exists():
+            logger.info(f"Cached articles exist for {symbol}")
+            return {'status': 'success', 'new_articles': 0, 'duplicates': 0}
 
-        if cached_articles.exists():
-            logger.info(f"Found {len(cached_articles)} cached articles for {symbol}")
-            return {
-                'status': 'success',
-                'symbol': symbol,
-                'new_articles': 0,
-                'duplicates': len(cached_articles)
-            }
-
-        # Step 2: Fetch articles from APIs
+        fetchers = [_fetch_alpha_vantage, _fetch_finnhub, _fetch_yahoo_finance]
         articles = []
-        # Attempt fetching articles from each API in sequence, break on successful fetch api_providers
-        for provider_name, fetcher in [
-            ('alphavantage', _fetch_alpha_vantage),
-            ('finnhub', _fetch_finnhub),
-            ('yahoo', _fetch_yahoo_finance)
-        ]:
+        for fetch in fetchers:
             try:
-                logger.info(f"Attempting {provider_name} for {symbol}")
-                articles = fetcher(symbol)
+                articles = fetch(symbol)
                 if articles:
-                    logger.info(f"Retrieved {len(articles)} articles from {provider_name}")
                     break
-            except requests.HTTPError as e:
-                if e.response.status_code == 429:
-                    logger.warning(f"Rate limited by {provider_name}. Retrying...")
-                    raise self.retry(exc=e, countdown=60)
-                logger.warning(f"{provider_name} HTTP error: {str(e)}")
             except Exception as e:
-                logger.warning(f"{provider_name} failed: {str(e)}")
+                logger.warning(f"API fetch failed: {e}")
                 continue
 
         if not articles:
-            logger.error(f"No articles found for {symbol}")
             return {'status': 'error', 'message': 'No articles found'}
 
         if fetch_latest_only:
             articles = _filter_recent_articles(articles)
 
-        new_articles, duplicate_count = _process_articles(symbol, articles)
-        _write_log(f"Processed {new_articles} new, {duplicate_count} duplicates for {symbol}")
+        new_count, dup_count = _process_articles(symbol, articles)
         return {
             'status': 'success',
-            'symbol': symbol,
-            'new_articles': new_articles,
-            'duplicates': duplicate_count
+            'new_articles': new_count,
+            'duplicates': dup_count
         }
+
+    except MemoryError:
+        logger.critical("Memory exhausted during processing.")
+        cleanup_resources()
+        raise self.retry(countdown=300)
     except Exception as e:
-        logger.error(f"Critical failure processing {symbol}: {str(e)}", exc_info=True)
-        try:
-            raise self.retry(exc=e, countdown=300)
-        except MaxRetriesExceededError:
-            return {'status': 'failed', 'message': 'Max retries exceeded'}
-
-
-def _process_articles(symbol, articles):
-    """
-    Process articles by:
-      - Deduplicating based on a unique hash computed from title and publication date.
-      - Analyzing sentiment and extracting key phrases.
-      - Determining source reliability.
-      - Atomically updating or creating records in the database.
-    """
-    new_articles = 0
-    duplicate_count = 0
-
-    # Phase 1: In-memory deduplication using consistent hashing.
-    seen_hashes = set()
-    deduped_articles = []
-    for article in articles:
-        title = normalize_title(
-            article.get('title') or article.get('headline') or article.get('description', '')
-        )
-        if not title:
-            continue
-
-        published_at = _parse_date(article)
-        if not published_at:
-            logger.warning("Skipping article with invalid date")
-            continue
-
-        # Round published timestamp to the nearest minute for consistent deduplication.
-        rounded_timestamp = round(published_at.timestamp() / 60) * 60
-        unique_string = f"{title}_{rounded_timestamp}"
-        title_hash = hashlib.sha256(unique_string.encode('utf-8')).hexdigest()
-
-        if title_hash not in seen_hashes:
-            seen_hashes.add(title_hash)
-            # Store the computed hash for later use.
-            article['computed_title_hash'] = title_hash
-            deduped_articles.append(article)
-    articles = deduped_articles
-
-    # Phase 2: Process each deduplicated article and update the database.
-    for article in articles:
-        try:
-            title = normalize_title(
-                article.get('title') or article.get('headline') or article.get('description', '')
-            )
-            if not title:
-                continue
-
-            published_at = _parse_date(article)
-            if not published_at:
-                continue
-
-            # Compute hash consistently (rounding to nearest minute)
-            rounded_timestamp = round(published_at.timestamp() / 60) * 60
-            unique_string = f"{title}_{rounded_timestamp}"
-            title_hash = hashlib.sha256(unique_string.encode('utf-8')).hexdigest()
-
-            # Prepare content and analyze sentiment
-            content = f"{title} {article.get('summary', '')}"
-            sentiment_result = analyze_sentiment(content)
-            sentiment = sentiment_result.get('label', 'neutral').lower()
-            sentiment_score = sentiment_result.get('score', 0.0)
-            key_phrases = extract_key_phrases(content)
-            source = article.get('source') or article.get('publisher', '')
-            source_reliability = get_source_reliability(source)
-
-            defaults = {
-                "title": title[:200],
-                "summary": article.get('summary', '')[:500],
-                "source": source[:100],
-                "url": article.get('url') or article.get('link', ''),
-                "published_at": published_at,
-                "sentiment": sentiment,
-                "sentiment_score": sentiment_score,
-                "key_phrases": ", ".join(key_phrases),
-                "source_reliability": source_reliability,
-                "banner_image_url": article.get('banner_image_url', ''),
-                "raw_data": article,
-            }
-
-            with transaction.atomic():
-                obj, created = ProcessedNews.objects.update_or_create(
-                    title_hash=title_hash,
-                    symbol=symbol,
-                    defaults=defaults
-                )
-            if created:
-                new_articles += 1
-            else:
-                duplicate_count += 1
-        except IntegrityError as e:
-            logger.warning(f"IntegrityError: {str(e)}")
-            duplicate_count += 1
-        except Exception as e:
-            logger.error(f"Skipping article: {str(e)}")
-    return new_articles, duplicate_count
-
-def _parse_date(article):
-    """Universal date parser with strict error handling."""
-    date_value = (
-        article.get('time_published') or 
-        article.get('datetime') or 
-        article.get('date') or 
-        article.get('pubDate')
-    )
-    if not date_value:
-        logger.warning("No date found in article")
-        return None
-
-    if isinstance(date_value, int):
-        try:
-            return datetime.fromtimestamp(date_value / 1000, tz=timezone.utc)
-        except ValueError:
-            return datetime.fromtimestamp(date_value, tz=timezone.utc)
-
-    for fmt in (
-        '%Y%m%dT%H%M%S', 
-        '%Y-%m-%dT%H:%M:%SZ', 
-        '%Y-%m-%d %H:%M:%S',
-        '%a, %d %b %Y %H:%M:%S %Z'
-    ):
-        try:
-            dt = datetime.strptime(date_value, fmt)
-            return timezone.make_aware(dt, timezone.utc)
-        except (ValueError, TypeError):
-            continue
-
-    try:
-        dt = dateutil.parser.parse(date_value)
-        return timezone.make_aware(dt, timezone.utc)
-    except Exception:
-        logger.error(f"Unparseable date: {date_value}")
-        return None
-
+        logger.error(f"Unexpected error: {e}")
+        cleanup_resources()
+        raise self.retry(exc=e, countdown=300)
+    finally:
+        cleanup_resources()
 
 def _write_log(message):
-    """Thread-safe logging."""
-    with open(LOG_FILE, "a") as f:
-        f.write(f"{datetime.utcnow().isoformat()} - {message}\n")
+    """Thread-safe logging"""
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(f"{datetime.utcnow().isoformat()} - {message}\n")
+    except Exception as e:
+        logger.error(f"Log write failed: {str(e)}")

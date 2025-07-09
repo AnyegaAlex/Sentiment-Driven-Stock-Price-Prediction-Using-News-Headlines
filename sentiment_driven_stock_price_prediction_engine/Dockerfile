@@ -5,12 +5,18 @@ FROM python:3.10-slim
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DJANGO_SETTINGS_MODULE=sentiment_driven_stock_price_prediction_engine.settings
+    DJANGO_SETTINGS_MODULE=sentiment_driven_stock_price_prediction_engine.settings \
+    CELERY_WORKER_CONCURRENCY=2 \
+    CELERY_MAX_TASKS_PER_CHILD=50 \
+    CELERYD_MAX_MEMORY_PER_CHILD=256000 \
+    OMP_NUM_THREADS=1 \
+    CELERYD_PREFETCH_MULTIPLIER=1
 
 # Install system dependencies required for Python packages
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -18,7 +24,8 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir gunicorn psutil 
 
 # Copy application code
 COPY . .
@@ -27,7 +34,7 @@ COPY . .
 RUN mkdir -p /app/logs
 
 # Create required directories
-RUN mkdir -p /app/{staticfiles,logs}
+RUN mkdir -p /app/{staticfiles,logs,media}
 
 # Conditional collectstatic (only in production)
 ARG BUILD_ENV=production
@@ -38,11 +45,7 @@ RUN if [ "$BUILD_ENV" = "production" ]; then \
 # Optional but recommended
 EXPOSE 8000
 
-# Run application with port binding from Render
-CMD gunicorn \
-    --workers 2 \
-    --timeout 120 \
-    --worker-tmp-dir /dev/shm \
-    --bind 0.0.0.0:${PORT:-8000} \
-    --log-file - \
-    sentiment_driven_stock_price_prediction_engine.wsgi:application
+# Main application and Celery worker launch script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
