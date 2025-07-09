@@ -54,7 +54,7 @@ const SentimentAnalysisCard = ({ symbol }) => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`/api/sentiment-analysis`, {
+        const response = await axios.get(`sentiment-driven-stock-price-prediction.onrender.com/api/sentiment-analysis`, {
           params: { 
             symbol,
             time_range: timeRange 
