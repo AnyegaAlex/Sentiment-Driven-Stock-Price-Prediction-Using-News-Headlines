@@ -101,27 +101,25 @@ if not DEBUG:
 # Database
 DATABASES = {
     'default': dj_database_url.config(
+        default='sqlite:///db.sqlite3',
         conn_max_age=600,
-        conn_health_checks=True,
-        ssl_require=True,
-        engine_options={
-            'pool_size': 5,  # Reduced from default 20
-            'max_overflow': 3,
-            'pool_timeout': 30,
-            'pool_recycle': 300  # Recycle connections every 5 minutes
-        }
     )
 }
+
+# Add PostgreSQL connection pooling separately
+if not DEBUG:
+    DATABASES['default']['OPTIONS'] = {
+        'pool_size': 5,
+        'max_overflow': 3,
+        'pool_timeout': 30,
+        'pool_recycle': 300,
+    }
 
 # For local development (optional)
 if os.getenv('DJANGO_DEVELOPMENT') == 'true':
     DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME'),
-        'USER': os.getenv('DB_USER'),
-        'PASSWORD': os.getenv('DB_PASSWORD'),
-        'HOST': os.getenv('DB_HOST'),
-        'PORT': os.getenv('DB_PORT'),
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 
 # Password validation
@@ -159,7 +157,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CORS Configuration
 CORS_ORIGIN_ALLOW_ALL = False
 CORS_ALLOWED_ORIGINS = [
-    "https://sentiment-driven-stock-price-predic.vercel.app "
+    "https://sentiment-driven-stock-price-predic.vercel.app"
 ]
 CORS_ALLOW_METHODS = [
     'GET',
@@ -178,7 +176,7 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 CSRF_TRUSTED_ORIGINS = [
-    "https://sentiment-driven-stock-price-predic.vercel.app "
+    "https://sentiment-driven-stock-price-predic.vercel.app"
 ]
 # REST Framework Configuration
 REST_FRAMEWORK = {
