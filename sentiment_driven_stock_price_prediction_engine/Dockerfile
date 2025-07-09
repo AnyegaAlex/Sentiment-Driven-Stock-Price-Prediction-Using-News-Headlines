@@ -12,6 +12,9 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     OMP_NUM_THREADS=1 \
     CELERYD_PREFETCH_MULTIPLIER=1
 
+# Set working directory
+WORKDIR /app
+
 # Install system dependencies required for Python packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
@@ -19,19 +22,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
-WORKDIR /app
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir gunicorn psutil 
 
 # Copy application code
 COPY . .
-
-# Create the logs directory
-RUN mkdir -p /app/logs
 
 # Create required directories
 RUN mkdir -p /app/{staticfiles,logs,media}
