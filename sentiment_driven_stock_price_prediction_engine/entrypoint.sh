@@ -24,14 +24,15 @@ if [ "$ENABLE_CELERY" = "true" ]; then
         --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-50} \
         --prefetch-multiplier=${CELERYD_PREFETCH_MULTIPLIER:-1} \
         --without-mingle \
-        --without-gossip &
+        --without-gossip \
+        --pool=solo &
 fi
 
 # Start Gunicorn
 echo "Starting Gunicorn on port ${PORT:-8000}..."
 exec gunicorn \
-    --workers ${GUNICORN_WORKERS:-1} \
-    --timeout 120 \
+    --workers=1 \
+    --timeout 90 \
     --worker-tmp-dir /dev/shm \
     --bind 0.0.0.0:${PORT:-8000} \
     --log-file - \
