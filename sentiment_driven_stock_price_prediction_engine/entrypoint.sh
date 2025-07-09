@@ -6,6 +6,13 @@ set -e
 # Optional: handle termination signals gracefully
 trap 'echo "Stopping processes..."; kill -TERM "$PID" 2>/dev/null' TERM INT
 
+# Ensure logs directory and file exist
+mkdir -p /app/logs
+touch /app/logs/app.log
+
+# Run collectstatic before starting Gunicorn
+echo "Running collectstatic..."
+python manage.py collectstatic --noinput
 
 # Start Celery worker in background if enabled
 if [ "$ENABLE_CELERY" = "true" ]; then
@@ -20,16 +27,8 @@ if [ "$ENABLE_CELERY" = "true" ]; then
         --without-gossip &
 fi
 
-# ✅ Run collectstatic before starting Gunicorn
-echo "Running collectstatic..."
-python manage.py collectstatic --noinput
-
-
-
 # Start Gunicorn
 echo "Starting Gunicorn on port ${PORT:-8000}..."
-mkdir -p /app/logs
-touch /app/logs/app.log
 exec gunicorn \
     --workers ${GUNICORN_WORKERS:-1} \
     --timeout 90 \
