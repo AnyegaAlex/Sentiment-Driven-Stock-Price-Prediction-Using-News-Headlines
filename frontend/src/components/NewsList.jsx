@@ -36,35 +36,42 @@ const NewsList = ({ symbol = 'IBM' }) => {
   const [error, setError] = useState(null);
   const displaySymbol = symbol?.toUpperCase() || "IBM";
 
-  const fetchNews = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+const fetchNews = async () => {
+    setLoading(true);
+    setError(null);
 
-      // Try real API first
-      try {
-        const response = await axios.get(`/api/news/analyzed`, {
-          params: { symbol: displaySymbol },
-          timeout: 5000 // Shorter timeout for production
-        });
-        if (response.data) {
-          setNews(response.data);
-          return;
+    try {
+      // Try real API first only if not in mock mode
+      if (import.meta.env.VITE_USE_MOCK_DATA !== "true") {
+        try {
+          const response = await axios.get(`/api/news/analyzed`, {
+            params: { symbol: displaySymbol },
+            timeout: 3000
+          });
+          if (response?.data) {
+            setNews(response.data);
+            return;
+          }
+        } catch (apiError) {
+          console.log("API request failed, falling back to mock data");
+          // Create proper error object
+          const apiErrorObj = {
+            message: apiError.response?.data?.message || apiError.message || "API request failed",
+            code: apiError.response?.status || 500
+          };
+          setError(apiErrorObj);
         }
-      } catch (apiError) {
-        console.log("API request failed, falling back to mock data");
       }
 
       // Fallback to mock data
-      try {
-        const mockData = await fetchMockNews(displaySymbol);
-        setNews(mockData);
-      } catch (mockError) {
-        console.error("Mock data failed:", mockError);
-        throw new Error("Failed to load both API and mock data");
-      }
+      const mockData = await fetchMockNews(displaySymbol);
+      setNews(mockData);
     } catch (err) {
-      setError(err.message || "Failed to load news data");
+      // Ensure error is properly formatted
+    const errorObj = {
+      message: err.message || 'Failed to load news data',
+      code: 500};
+      setError(errorObj);
     } finally {
       setLoading(false);
     }
@@ -126,12 +133,13 @@ const NewsList = ({ symbol = 'IBM' }) => {
     );
   }
 
-  if (error) {
+    if (error) {
     return (
       <div className="p-4">
         <h2 className="text-xl font-semibold mb-4">Latest News for {displaySymbol}</h2>
         <div className="text-red-500 dark:text-red-400 p-4 border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20">
-          {error}
+          {/* Access the message property of the error object */}
+          {error.message || 'An unknown error occurred'}
           <Button 
             variant="outline" 
             size="sm" 
