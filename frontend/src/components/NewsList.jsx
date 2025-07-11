@@ -67,14 +67,14 @@ const fetchNews = async () => {
       const mockData = await fetchMockNews(displaySymbol);
       setNews(mockData);
     } catch (err) {
-      // Ensure error is properly formatted
-    const errorObj = {
-      message: err.message || 'Failed to load news data',
-      code: 500};
-      setError(errorObj);
-    } finally {
-      setLoading(false);
-    }
+  const errorObj = {
+    message: err.message || 'Failed to load news data',
+    code: 500
+  };
+    setError(errorObj);
+  } finally {
+    setLoading(false);
+  }
   };
 
   useEffect(() => {
@@ -134,24 +134,23 @@ const fetchNews = async () => {
   }
 
     if (error) {
-    return (
-      <div className="p-4">
-        <h2 className="text-xl font-semibold mb-4">Latest News for {displaySymbol}</h2>
-        <div className="text-red-500 dark:text-red-400 p-4 border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20">
-          {/* Access the message property of the error object */}
-          {error.message || 'An unknown error occurred'}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="mt-2"
-            onClick={fetchNews}
-          >
-            Retry
-          </Button>
+      return (
+        <div className="p-4">
+          <h2 className="text-xl font-semibold mb-4">Latest News for {displaySymbol}</h2>
+          <div className="text-red-500 dark:text-red-400 p-4 border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20">
+            {error.message || 'An unknown error occurred'}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="mt-2"
+              onClick={fetchNews}
+            >
+              Retry
+            </Button>
+          </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
   if (!news.length) {
     return (
@@ -264,6 +263,9 @@ const fetchNews = async () => {
 
 NewsList.propTypes = {
   symbol: PropTypes.string,
+  newsData: PropTypes.array,
+  loading: PropTypes.bool
 };
+
 
 export default React.memo(NewsList);
