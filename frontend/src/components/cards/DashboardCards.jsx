@@ -126,38 +126,44 @@ const DashboardCards = ({ symbol }) => {
   const [error, setError] = useState(null);
   const [stockData, setStockData] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const IS_MOCK = process.env.NODE_ENV === 'production';
 
-  const fetchStockData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await axios.get(`/api/stock-analysis`, {
-        params: { 
-          symbol,
-          risk_type: 'high',
-          hold_time: 'long-term',
-          detail_level: 'detailed'
-        },
-        timeout: 10000
-      });
-      
-      setStockData(response.data);
+const fetchStockData = useCallback(async () => {
+  try {
+    setLoading(true);
+    setError(null);
+
+    if (IS_MOCK) {
+      const mock = await import('@/services/mockStockAnalysisData');
+      const mockData = mock.getMockData(symbol);
+      setStockData(mockData);
       setLastUpdated(new Date());
-      localStorage.setItem(`stockData-${symbol}`, JSON.stringify({
-        data: response.data,
-        timestamp: new Date().toISOString()
-      }));
-    } catch (err) {
-      const cachedData = localStorage.getItem(`stockData-${symbol}`);
-      if (!cachedData) {
-        setError(err.response?.data?.error || 'Failed to fetch stock data');
-      }
-      console.error('API Error:', err);
-    } finally {
-      setLoading(false);
+      return;
     }
-  }, [symbol]);
+
+    const response = await axios.get(`/api/stock-analysis`, {
+      params: { 
+        symbol,
+        risk_type: 'high',
+        hold_time: 'long-term',
+        detail_level: 'detailed'
+      },
+      timeout: 10000
+    });
+
+    setStockData(response.data);
+    setLastUpdated(new Date());
+
+  } catch (err) {
+    const cachedData = localStorage.getItem(`stockData-${symbol}`);
+    if (!cachedData) {
+      setError(err.response?.data?.error || 'Failed to fetch stock data');
+    }
+    console.error('API Error:', err);
+  } finally {
+    setLoading(false);
+  }
+}, [symbol]);
 
   useEffect(() => {
     const cachedData = localStorage.getItem(`stockData-${symbol}`);

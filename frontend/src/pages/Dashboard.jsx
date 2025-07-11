@@ -29,6 +29,7 @@ const Dashboard = () => {
 
   // Fetch data functions
   const fetchStockOpinion = useCallback(async (symbol, prefs) => {
+    console.warn("Backend offline — using mock stock opinion data.");
     setIsLoading(true);
     try {
       const response = await fetch(
@@ -62,10 +63,15 @@ const Dashboard = () => {
   const fetchAnalyzedNews = useCallback(async (symbol) => {
     try {
       const response = await fetch(`/api/news/analyzed?symbol=${symbol}`);
+      if (!response.ok) throw new Error("News API error");
       const data = await response.json();
       setNewsData(data);
     } catch (error) {
-      console.error("Failed to fetch analyzed news:", error);
+      console.warn("Using mock news due to fetch error:", error.message);
+      setNewsData([
+        { id: 1, title: "Mock News Headline", sentiment: "neutral", summary: "This is a sample news item." },
+        { id: 2, title: "Another News", sentiment: "positive", summary: "Another mock news story." },
+      ]);
     }
   }, []);
 
@@ -84,12 +90,7 @@ const Dashboard = () => {
         fetchAnalyzedNews(symbol);
       }
     }
-  }, [
-    symbol, 
-    preferencesSet, 
-    fetchStockOpinion, 
-    fetchAnalyzedNews
-  ]);
+  }, [ symbol, preferencesSet, fetchStockOpinion, fetchAnalyzedNews ]);
 
   const handlePreferencesSubmit = () => {
     const prefs = { risk: riskType, holdTime, detailed };
