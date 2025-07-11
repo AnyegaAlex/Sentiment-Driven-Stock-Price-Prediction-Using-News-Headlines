@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-
+import { fetchMockTechnicalData } from '@/services/mockTechnicalData';
 
 
 
@@ -60,29 +60,41 @@ const TechnicalIndicatorsCard = ({ symbol }) => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setLoading(true);
-        const response = await axios.get(
-          `/api/stock-opinion`,
-          {
-            params: { 
-              symbol,
-              detail_level: 'detailed',
-              timeframe 
-            },
-            timeout: 10000
+            setLoading(true);
+            setError(null);
+            
+            // Try real API first, fall back to mock data
+            let response;
+            try {
+              response = await axios.get(`/api/stock-opinion`, {
+                params: { 
+                  symbol,
+                  detail_level: 'detailed',
+                  timeframe 
+                },
+                timeout: 10000
+              });
+              
+              if (!response.data?.technical) {
+                throw new Error('Invalid API response structure');
+              }
+              
+              setData(response.data);
+            } catch (apiError) {
+              console.warn("Using mock data due to API error:", apiError);
+              const mockData = await fetchMockTechnicalData(symbol, timeframe);
+              setData(mockData);
+            }
+          } catch (err) {
+            setError(err.response?.data?.error || err.message || 'Failed to fetch technical data');
+            console.error('Error:', err);
+          } finally {
+            setLoading(false);
           }
-        );
-        setData(response.data);
-      } catch (err) {
-        setError(err.response?.data?.error || 'Failed to fetch technical data');
-        console.error('Technical indicators error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
+        };
 
-    fetchData();
-  }, [symbol, timeframe]);
+        fetchData();
+      }, [symbol, timeframe]);
 
   const chartData = useMemo(() => {
     if (!data?.technical) return null;
@@ -145,20 +157,20 @@ const TechnicalIndicatorsCard = ({ symbol }) => {
   }
 
   return (
-    <Card className="bg-gray-900 border-gray-800 rounded-lg shadow-lg">
-      <CardHeader>
-        <div className="flex justify-between items-center">
-          <CardTitle className="text-xl font-bold">
+    <Card className="border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
+      <CardHeader className="pb-2">
+        <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2">
+          <CardTitle className="text-lg sm:text-xl font-semibold">
             Technical Indicators
+          </CardTitle>
             <Tooltip>
               <TooltipTrigger>
-                <Info className="inline ml-2 w-4 h-4 text-gray-400" />
+                <Info className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500 dark:text-gray-400" />
               </TooltipTrigger>
-              <TooltipContent className="bg-gray-800 border border-gray-700">
+              <TooltipContent side="top" className="max-w-[300px]">
                 Technical indicators for {symbol}
               </TooltipContent>
             </Tooltip>
-          </CardTitle>
           <TimeframeSelector 
             timeframe={timeframe} 
             onChange={setTimeframe} 
@@ -166,21 +178,60 @@ const TechnicalIndicatorsCard = ({ symbol }) => {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4 sm:space-y-6">
         {/* Price Trend Chart */}
         {chartData && (
-          <div className="bg-gray-800/50 p-4 rounded-lg">
-            <div className="h-64">
+          <div className="bg-gray-50 dark:bg-gray-800/50 p-3 sm:p-4 rounded-lg">
+            <div className="h-[200px] sm:h-[250px]">
               <Line
                 data={chartData}
-                options={chartOptions}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: {
+                      position: 'top',
+                      labels: {
+                        font: {
+                          size: window.innerWidth < 640 ? 10 : 12
+                        }
+                      }
+                    }
+                  },
+                  scales: {
+                    y: {
+                      grid: { 
+                        color: 'rgba(0, 0, 0, 0.1)',
+                        display: false 
+                      },
+                      ticks: { 
+                        color: '#6b7280',
+                        font: {
+                          size: window.innerWidth < 640 ? 10 : 12
+                        }
+                      }
+                    },
+                    x: {
+                      grid: { 
+                        color: 'rgba(0, 0, 0, 0.1)',
+                        display: false 
+                      },
+                      ticks: { 
+                        color: '#6b7280',
+                        font: {
+                          size: window.innerWidth < 640 ? 10 : 12
+                        }
+                      }
+                    }
+                  }
+                }}
               />
             </div>
           </div>
         )}
 
         {/* Key Indicators */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 sm:gap-4">
           <TrendIndicator 
             isUptrend={isUptrend} 
             sma50={data.technical.sma_50}
@@ -214,14 +265,26 @@ const TechnicalIndicatorsCard = ({ symbol }) => {
 
 // Sub-components
 const LoadingSkeleton = () => (
-  <Card className="bg-gray-900 border-gray-800">
+  <Card className="border border-gray-200 dark:border-gray-700">
     <CardHeader>
-      <Skeleton className="h-8 w-1/2" />
+      <div className="flex justify-between items-center">
+        <Skeleton className="h-6 w-[160px] sm:w-[200px]" />
+        <Skeleton className="h-8 w-[100px]" />
+      </div>
     </CardHeader>
     <CardContent className="space-y-4">
-      <Skeleton className="h-6 w-full" />
-      <Skeleton className="h-32 w-full" />
-      <Skeleton className="h-6 w-3/4" />
+      <Skeleton className="h-[200px] sm:h-[250px] rounded-lg" />
+      <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 sm:gap-4">
+        <Skeleton className="h-24 rounded-lg" />
+        <Skeleton className="h-24 rounded-lg" />
+      </div>
+      <Skeleton className="h-24 rounded-lg" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
+        <Skeleton className="h-20 rounded-lg" />
+        <Skeleton className="h-20 rounded-lg" />
+        <Skeleton className="h-20 rounded-lg" />
+        <Skeleton className="h-20 rounded-lg" />
+      </div>
     </CardContent>
   </Card>
 );
@@ -285,48 +348,38 @@ const chartOptions = {
 };
 
 const TrendIndicator = ({ isUptrend, sma50, sma200 }) => (
-  <div className="bg-gray-800/50 p-4 rounded-lg">
+  <div className="bg-gray-50 dark:bg-gray-800/50 p-3 sm:p-4 rounded-lg">
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <CandlestickChart className="w-5 h-5 text-blue-500" />
-        <span className="text-gray-400">Trend</span>
+        <CandlestickChart className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
+        <span className="text-sm sm:text-base text-gray-600 dark:text-gray-400">Trend</span>
       </div>
       <Badge 
         variant={isUptrend ? 'positive' : 'negative'}
-        className="uppercase"
+        className="text-xs sm:text-sm"
       >
-        {isUptrend ? (
-          <>
-            <TrendingUp className="w-4 h-4 mr-1" />
-            Uptrend
-          </>
-        ) : (
-          <>
-            <TrendingDown className="w-4 h-4 mr-1" />
-            Downtrend
-          </>
-        )}
+        {isUptrend ? 'Uptrend' : 'Downtrend'}
       </Badge>
     </div>
-    <div className="mt-3 grid grid-cols-2 gap-4">
+    <div className="mt-2 grid grid-cols-2 gap-2 sm:gap-4">
       <div>
-        <p className="text-sm text-gray-400">SMA 50</p>
-        <p className="text-lg font-bold">${sma50.toFixed(2)}</p>
+        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">SMA 50</p>
+        <p className="text-base sm:text-lg font-bold">${sma50.toFixed(2)}</p>
       </div>
       <div>
-        <p className="text-sm text-gray-400">SMA 200</p>
-        <p className="text-lg font-bold">${sma200.toFixed(2)}</p>
+        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">SMA 200</p>
+        <p className="text-base sm:text-lg font-bold">${sma200.toFixed(2)}</p>
       </div>
     </div>
   </div>
 );
 
 const MomentumIndicator = ({ rsi, isOversold, isOverbought }) => (
-  <div className="bg-gray-800/50 p-4 rounded-lg">
+  <div className="bg-gray-50 dark:bg-gray-800/50 p-3 sm:p-4 rounded-lg">
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <Gauge className="w-5 h-5 text-purple-500" />
-        <span className="text-gray-400">Momentum</span>
+        <Gauge className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500" />
+        <span className="text-sm sm:text-base text-gray-600 dark:text-gray-400">Momentum</span>
       </div>
       <Badge 
         variant={
@@ -338,11 +391,11 @@ const MomentumIndicator = ({ rsi, isOversold, isOverbought }) => (
         {isOversold ? 'Oversold' : isOverbought ? 'Overbought' : 'Neutral'}
       </Badge>
     </div>
-    <div className="mt-3">
-      <p className="text-sm text-gray-400">RSI (14)</p>
-      <div className="flex items-center gap-4">
-        <p className="text-lg font-bold">{rsi.toFixed(1)}</p>
-        <div className="w-full bg-gray-700 rounded-full h-2.5">
+    <div className="mt-2">
+      <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">RSI (14)</p>
+      <div className="flex items-center gap-2 sm:gap-4">
+        <p className="text-base sm:text-lg font-bold">{rsi.toFixed(1)}</p>
+        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
           <div 
             className={`h-2.5 rounded-full ${
               isOversold ? 'bg-green-500' : 
@@ -357,9 +410,9 @@ const MomentumIndicator = ({ rsi, isOversold, isOverbought }) => (
 );
 
 const KeyLevels = ({ current, support, resistance }) => (
-  <div className="bg-gray-800/50 p-4 rounded-lg">
-    <h3 className="font-semibold text-lg mb-3">Key Levels</h3>
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  <div className="bg-gray-50 dark:bg-gray-800/50 p-3 sm:p-4 rounded-lg">
+    <h3 className="font-medium sm:font-semibold text-base sm:text-lg mb-2 sm:mb-3">Key Levels</h3>
+    <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 sm:gap-4">
       <LevelIndicator 
         label="Current Price"
         value={current}

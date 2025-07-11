@@ -35,6 +35,7 @@ ChartJS.register(
   Tooltip, 
   Legend
 );
+import { fetchMockPredictions } from '@/services/mockPredictionHistory';
 
 const PredictionHistory = () => {
   const [predictions, setPredictions] = useState([]);
@@ -45,11 +46,22 @@ const PredictionHistory = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await axios.get('/api/stocks/history/');
-        if (res.data && Array.isArray(res.data)) {
-          setPredictions(res.data);
-        } else {
-          throw new Error('Invalid data format received');
+        setLoading(true);
+        
+        // Try real API first, fall back to mock data
+        let response;
+        try {
+          response = await axios.get('/api/stocks/history/');
+          
+          if (!response.data || !Array.isArray(response.data)) {
+            throw new Error('Invalid data format received');
+          }
+          
+          setPredictions(response.data);
+        } catch (apiError) {
+          console.warn("Using mock data due to API error:", apiError);
+          const mockData = await fetchMockPredictions();
+          setPredictions(mockData);
         }
       } catch (error) {
         console.error('Error fetching prediction data:', error);

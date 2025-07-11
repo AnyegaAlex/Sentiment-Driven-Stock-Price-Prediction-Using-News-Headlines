@@ -31,7 +31,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-
+import { fetchMockSentimentData } from '@/services/mockSentimentData';
 // Register ChartJS components
 ChartJS.register(
   CategoryScale,
@@ -54,17 +54,32 @@ const SentimentAnalysisCard = ({ symbol }) => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`/api/sentiment-analysis`, {
-          params: { 
-            symbol,
-            time_range: timeRange 
-          },
-          timeout: 10000
-        });
-        setData(response.data);
+        setError(null);
+        
+        // Try real API first, fall back to mock data
+        let response;
+        try {
+          response = await axios.get(`/api/sentiment-analysis`, {
+            params: { 
+              symbol,
+              time_range: timeRange 
+            },
+            timeout: 10000
+          });
+          
+          if (!response.data?.sentiment) {
+            throw new Error('Invalid API response structure');
+          }
+          
+          setData(response.data);
+        } catch (apiError) {
+          console.warn("Using mock data due to API error:", apiError);
+          const mockData = await fetchMockSentimentData(symbol, timeRange);
+          setData(mockData);
+        }
       } catch (err) {
-        setError(err.response?.data?.error || 'Failed to fetch sentiment data');
-        console.error('Sentiment analysis error:', err);
+        setError(err.response?.data?.error || err.message || 'Failed to fetch sentiment data');
+        console.error('Error:', err);
       } finally {
         setLoading(false);
       }
@@ -137,10 +152,10 @@ const SentimentAnalysisCard = ({ symbol }) => {
   }
 
   return (
-    <Card className="bg-gray-900 border-gray-800 rounded-lg shadow-lg">
+    <Card className="border border-gray-900 dark:border-gray-700 rounded-lg shadow-sm ">
       <CardHeader>
-        <div className="flex justify-between items-center">
-          <CardTitle className="text-xl font-bold">
+        <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2">
+          <CardTitle className="text-lg sm:text-xl font-semibold">
             Market Sentiment Analysis
           </CardTitle>
           <TimeRangeSelector 
@@ -150,7 +165,7 @@ const SentimentAnalysisCard = ({ symbol }) => {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4 sm:space-y-6">
         <SentimentSummary 
           distribution={sentimentDistribution} 
         />
@@ -176,41 +191,67 @@ const SentimentAnalysisCard = ({ symbol }) => {
 
 // Sub-components
 const LoadingSkeleton = () => (
-  <Card className="bg-gray-900 border-gray-800">
+  <Card className="border border-gray-200 dark:border-gray-700">
     <CardHeader>
-      <Skeleton className="h-8 w-1/2" />
+      <div className="flex justify-between items-center">
+        <Skeleton className="h-6 w-[160px] sm:w-[200px]" />
+        <Skeleton className="h-8 w-[80px]" />
+      </div>
     </CardHeader>
     <CardContent className="space-y-4">
-      <Skeleton className="h-6 w-full" />
-      <Skeleton className="h-32 w-full" />
-      <Skeleton className="h-6 w-3/4" />
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-24 rounded-lg" />
+        ))}
+      </div>
+      <Skeleton className="h-[200px] sm:h-[250px] rounded-lg" />
+      <Skeleton className="h-[200px] sm:h-[250px] rounded-lg" />
+      <div className="grid grid-cols-2 gap-2 sm:gap-4">
+        {[1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className="h-16 rounded-lg" />
+        ))}
+      </div>
     </CardContent>
   </Card>
 );
 
 const ErrorDisplay = ({ error }) => (
-  <Card className="bg-gray-900 border-gray-800">
+  <Card className="border border-red-200 dark:border-red-800/50">
     <CardHeader>
-      <CardTitle className="text-red-500 flex items-center gap-2">
+      <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
         <AlertTriangle className="w-5 h-5" />
-        Error Loading Sentiment
-      </CardTitle>
+        <CardTitle className="text-base sm:text-lg">
+          Error Loading Sentiment
+        </CardTitle>
+      </div>
     </CardHeader>
     <CardContent>
-      <p className="text-gray-400">{error}</p>
+      <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
+        {error}
+      </p>
+      <Button 
+        variant="outline" 
+        size="sm"
+        className="mt-3"
+        onClick={() => window.location.reload()}
+      >
+        Retry
+      </Button>
     </CardContent>
   </Card>
 );
 
 const TimeRangeSelector = ({ timeRange, onChange }) => (
-  <div className="flex gap-2">
+  <div className="flex gap-1 sm:gap-2" role="radiogroup" aria-label="Select Time Range">
     {['7d', '30d'].map((range) => (
       <Button 
         key={range}
         variant={timeRange === range ? 'default' : 'outline'}
         size="sm"
         onClick={() => onChange(range)}
-        className="text-xs"
+        aria-pressed={timeRange === range}
+        aria-label={`Set time range to ${range}`}
+        className="text-xs px-2 sm:px-3 py-1 h-auto"
       >
         {range.toUpperCase()}
       </Button>
@@ -218,8 +259,9 @@ const TimeRangeSelector = ({ timeRange, onChange }) => (
   </div>
 );
 
+
 const SentimentSummary = ({ distribution }) => (
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 sm:gap-4">
     <SentimentMetric 
       icon={<Smile className="w-5 h-5 text-green-500" />}
       label="Positive"
@@ -250,15 +292,15 @@ const SentimentMetric = ({ icon, label, value, trend, variant }) => {
     <TrendingUp className="w-4 h-4" />;
   
   return (
-    <div className="bg-gray-800/50 p-4 rounded-lg">
-      <div className="flex items-center gap-2 text-gray-400">
-        {icon}
-        <span>{label}</span>
+    <div className="bg-gray-50 dark:bg-gray-800/50 p-2 sm:p-3 rounded-lg">
+      <div className="flex items-center gap-1 sm:gap-2 text-gray-600 dark:text-gray-400">
+        {React.cloneElement(icon, { className: "w-4 h-4 sm:w-5 sm:h-5" })}
+        <span className="text-xs sm:text-sm">{label}</span>
       </div>
       <p className={cn(
-        "text-2xl font-bold mt-2",
-        variant === 'positive' ? 'text-green-500' :
-        variant === 'negative' ? 'text-red-500' : 'text-yellow-500'
+        "text-xl sm:text-2xl font-bold mt-1 sm:mt-2",
+        variant === 'positive' ? 'text-green-600 dark:text-green-400' :
+        variant === 'negative' ? 'text-red-600 dark:text-red-400' : 'text-yellow-600 dark:text-yellow-400'
       )}>
         {value}%
       </p>
@@ -273,9 +315,9 @@ const SentimentMetric = ({ icon, label, value, trend, variant }) => {
 };
 
 const SentimentTrendChart = ({ data, isBullish, isBearish }) => (
-  <div className="bg-gray-800/50 p-4 rounded-lg">
-    <h3 className="font-semibold text-lg mb-4">Sentiment Trend</h3>
-    <div className="h-64">
+  <div className="bg-gray-50 dark:bg-gray-800/50 p-3 sm:p-4 rounded-lg">
+    <h3 className="font-medium sm:font-semibold text-base sm:text-lg mb-3 sm:mb-4">Sentiment Trend</h3>
+    <div className="h-[200px] sm:h-[250px]">
       <Line 
         data={data}
         options={{
@@ -347,9 +389,9 @@ const SentimentDistributionChart = ({ data }) => (
 );
 
 const NewsSourceAnalysis = ({ newsCount, sourceStats }) => (
-  <div className="bg-gray-800/50 p-4 rounded-lg">
-    <h3 className="font-semibold text-lg mb-4">News Source Analysis</h3>
-    <div className="grid grid-cols-2 gap-4">
+  <div className="bg-gray-50 dark:bg-gray-800/50 p-3 sm:p-4 rounded-lg">
+    <h3 className="font-medium sm:font-semibold text-base sm:text-lg mb-3 sm:mb-4">News Source Analysis</h3>
+    <div className="grid grid-cols-2 gap-2 sm:gap-4">
       <SourceMetric 
         label="Total Articles"
         value={newsCount}

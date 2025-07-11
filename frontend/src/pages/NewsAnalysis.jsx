@@ -20,6 +20,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { Info, Loader2, ExternalLink, Newspaper } from "lucide-react";
 import { AiFillSmile, AiFillMeh, AiFillFrown } from "react-icons/ai";
 import KeyPhraseChip from "@/components/KeyPhraseChip";
+import { fetchMockNewsAnalysis } from '@/services/mockNewsAnalysis';
 
 // Custom storage hook with TypeScript-like type safety
 const usePersistentState = (storage, key, initialValue) => {
@@ -80,37 +81,43 @@ const NewsAnalysis = ({ symbol = "" }) => {
   }, []);
 
   // Fetch news for selected symbol
-  useEffect(() => {
-    const fetchNews = async () => {
-      if (!selectedSymbol) return;
-      
-      setIsLoading(true);
-      setError("");
-      
-      try {
-        const response = await axios.get(
-          `/api/news/get-news/?symbol=${selectedSymbol}`
-        );
+    useEffect(() => {
+      const fetchNews = async () => {
+        if (!selectedSymbol) return;
         
-        if (response.data?.news) {
-          setNews(response.data.news);
-          setFilteredNews(response.data.news);
-        } else {
+        setIsLoading(true);
+        setError("");
+        
+        try {
+          // Try real API first, fall back to mock data
+          let response;
+          try {
+            response = await axios.get(`/api/news/get-news/?symbol=${selectedSymbol}`);
+            
+            if (!response.data?.news) {
+              throw new Error('Invalid API response structure');
+            }
+            
+            setNews(response.data.news);
+            setFilteredNews(response.data.news);
+          } catch (apiError) {
+            console.warn("Using mock data due to API error:", apiError);
+            const mockData = await fetchMockNewsAnalysis(selectedSymbol);
+            setNews(mockData.news);
+            setFilteredNews(mockData.news);
+          }
+        } catch (err) {
+          console.error("Error fetching news:", err);
+          setError(err.response?.data?.message || "Failed to fetch news. Please try again later.");
           setNews([]);
           setFilteredNews([]);
+        } finally {
+          setIsLoading(false);
         }
-      } catch (err) {
-        console.error("Error fetching news:", err);
-        setError(err.response?.data?.message || "Failed to fetch news. Please try again later.");
-        setNews([]);
-        setFilteredNews([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    fetchNews();
-  }, [selectedSymbol]);
+      };
+      
+      fetchNews();
+    }, [selectedSymbol]);
 
   // Filter news by sentiment
   useEffect(() => {

@@ -37,9 +37,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-
 // Helper Components
-const AnimatedProgressBar = ({ value, color = 'primary' }) => {
+const AnimatedProgressBar = ({ value, color = 'primary', ariaLabel = "Progress bar" }) => {
   const colorClasses = {
     primary: 'bg-blue-500',
     green: 'bg-green-500',
@@ -56,20 +55,21 @@ const AnimatedProgressBar = ({ value, color = 'primary' }) => {
         aria-valuenow={value}
         aria-valuemin="0"
         aria-valuemax="100"
+        aria-label={ariaLabel}
       />
     </div>
   );
 };
 
-const ArrowIndicator = ({ direction }) => {
+const ArrowIndicator = ({ direction, ariaLabel }) => {
   const variants = {
     increase: {
-      icon: <ArrowUp className="w-4 h-4 text-green-600 dark:text-green-400" />,
+      icon: <ArrowUp className="w-4 h-4 text-green-600 dark:text-green-400" aria-hidden="true" />,
       text: 'Up',
       color: 'text-green-600 dark:text-green-400'
     },
     decrease: {
-      icon: <ArrowDown className="w-4 h-4 text-red-600 dark:text-red-400" />,
+      icon: <ArrowDown className="w-4 h-4 text-red-600 dark:text-red-400" aria-hidden="true" />,
       text: 'Down',
       color: 'text-red-600 dark:text-red-400'
     },
@@ -83,35 +83,40 @@ const ArrowIndicator = ({ direction }) => {
   const { icon, text, color } = variants[direction] || variants.neutral;
 
   return (
-    <div className={`flex items-center gap-1 ${color}`}>
+    <div className={`flex items-center gap-1 ${color}`} aria-label={ariaLabel || `${direction} trend`}>
       {icon}
       <span>{text}</span>
     </div>
   );
 };
 
-const MetricCard = ({ title, tooltip, children, className = '' }) => (
-  <Card className={cn(
-    "p-4 shadow-sm border border-gray-200 dark:border-gray-700",
-    "hover:shadow-md transition-shadow",
-    className
-  )}>
-    <CardHeader className="pb-2 border-b border-gray-200 dark:border-gray-700">
+const MetricCard = ({ title, tooltip, children, className = '', ariaLabel }) => (
+  <Card 
+    className={cn(
+      "p-3 sm:p-4 shadow-sm border border-gray-200 dark:border-gray-700",
+      "hover:shadow-md transition-shadow duration-200",
+      "w-full min-w-0 max-w-full", // Prevent overflow
+      "flex flex-col h-full", // Full height and flex column
+      className
+    )}
+    aria-label={ariaLabel || `${title} card`}
+  >
+    <CardHeader className="pb-2 border-b border-gray-200 dark:border-gray-700 px-0 sm:px-2">
       <div className="flex items-center justify-between">
-        <CardTitle className="text-base font-semibold text-gray-900 dark:text-white">
+        <CardTitle className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
           {title}
         </CardTitle>
         <Tooltip>
-          <TooltipTrigger aria-label={`Learn more about ${title}`}>
-            <Info className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+          <TooltipTrigger className="focus:outline-none">
+            <Info className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500 dark:text-gray-400" />
           </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[300px]">
+          <TooltipContent side="top" className="text-xs sm:text-sm max-w-[200px] sm:max-w-[300px]">
             {tooltip}
           </TooltipContent>
         </Tooltip>
       </div>
     </CardHeader>
-    <CardContent className="space-y-3 mt-2">{children}</CardContent>
+    <CardContent className="space-y-2 sm:space-y-3 mt-2 px-0 sm:px-2">{children}</CardContent>
   </Card>
 );
 
@@ -144,7 +149,10 @@ const DashboardCards = ({ symbol }) => {
         timestamp: new Date().toISOString()
       }));
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to fetch stock data');
+      const cachedData = localStorage.getItem(`stockData-${symbol}`);
+      if (!cachedData) {
+        setError(err.response?.data?.error || 'Failed to fetch stock data');
+      }
       console.error('API Error:', err);
     } finally {
       setLoading(false);
@@ -161,6 +169,7 @@ const DashboardCards = ({ symbol }) => {
         setStockData(data);
         setLastUpdated(new Date(timestamp));
         setLoading(false);
+        setError(null);
         return;
       }
     }
@@ -205,8 +214,9 @@ const DashboardCards = ({ symbol }) => {
   if (!stockData || !technical) return null;
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="space-y-4 sm:space-y-6 px-2 sm:px-4 lg:px-6">
+      {/* Top Row - Stack vertically on mobile, 3 columns on larger screens */}
+      <div className="grid grid-cols-1 xs:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
         <RecommendationCard 
           recommendation={parsed_llm.recommendation}
           allocation={parsed_llm.allocation}
@@ -229,7 +239,8 @@ const DashboardCards = ({ symbol }) => {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Middle Row - Stack vertically on mobile, 2 columns on larger screens */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
         <PriceTargetsCard 
           targets={parsed_llm.targets}
           currentPrice={technical.current_price}
@@ -240,6 +251,7 @@ const DashboardCards = ({ symbol }) => {
         />
       </div>
 
+      {/* Bottom Row - Full width rationale card */}
       {parsed_llm.rationale?.length > 0 && (
         <KeyRationaleCard rationale={parsed_llm.rationale} />
       )}
@@ -249,32 +261,43 @@ const DashboardCards = ({ symbol }) => {
 
 // Sub-components
 const LoadingSkeleton = () => (
-  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  <div className="grid grid-cols-1 xs:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 px-2 sm:px-4">
     {[1, 2, 3].map((i) => (
-      <Card key={i} className="p-4 shadow-sm border border-gray-200 dark:border-gray-700">
-        <Skeleton className="h-6 w-1/2 mb-4" />
-        <Skeleton className="h-4 w-full mb-2" />
-        <Skeleton className="h-4 w-3/4 mb-4" />
-        <Skeleton className="h-24 w-full" />
+      <Card key={i} className="p-3 sm:p-4 border border-gray-200 dark:border-gray-700">
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-3 w-3 rounded-full" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+          </div>
+          <Skeleton className="h-[100px] sm:h-[120px] w-full mt-2" />
+        </div>
       </Card>
     ))}
   </div>
 );
 
 const ErrorDisplay = ({ error, onRetry }) => (
-  <Alert variant="destructive" className="mb-8">
-    <AlertTitle>Error</AlertTitle>
-    <AlertDescription>
-      {error}
+  <Alert variant="destructive" className="mb-6 mx-2 sm:mx-4">
+    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+      <div className="flex-1">
+        <AlertTitle className="text-sm sm:text-base">Error</AlertTitle>
+        <AlertDescription className="text-xs sm:text-sm">
+          {error}
+        </AlertDescription>
+      </div>
       <Button 
         variant="outline"
         size="sm"
         onClick={onRetry}
-        className="ml-2"
+        className="mt-2 sm:mt-0 sm:ml-2 w-full sm:w-auto"
       >
         Retry
       </Button>
-    </AlertDescription>
+    </div>
   </Alert>
 );
 
@@ -283,6 +306,7 @@ const RecommendationCard = ({ recommendation, allocation, sentiment, lastUpdated
     title="AI Recommendation"
     tooltip={`${recommendation} recommendation based on technical and sentiment analysis`}
     className="lg:col-span-1"
+    ariaLabel={`AI recommendation: ${recommendation}`}
   >
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
@@ -292,11 +316,12 @@ const RecommendationCard = ({ recommendation, allocation, sentiment, lastUpdated
             recommendation === 'SELL' ? 'negative' : 'neutral'
           }
           className="text-lg py-1 px-3"
+          aria-label={`Recommendation: ${recommendation}`}
         >
           {recommendation}
         </Badge>
         {lastUpdated && (
-          <span className="text-sm text-gray-500 dark:text-gray-400">
+          <span className="text-sm text-gray-500 dark:text-gray-400" aria-label={`Last updated: ${lastUpdated.toLocaleTimeString()}`}>
             {lastUpdated.toLocaleTimeString()}
           </span>
         )}
@@ -305,7 +330,7 @@ const RecommendationCard = ({ recommendation, allocation, sentiment, lastUpdated
       <div className="flex-1 space-y-4">
         <div>
           <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">Allocation</p>
-          <p className="text-2xl font-bold">{allocation}</p>
+          <p className="text-2xl font-bold" aria-label={`Allocation: ${allocation}`}>{allocation}</p>
         </div>
         
         <div>
@@ -316,6 +341,7 @@ const RecommendationCard = ({ recommendation, allocation, sentiment, lastUpdated
               recommendation === 'BUY' ? 'green' : 
               recommendation === 'SELL' ? 'red' : 'yellow'
             }
+            ariaLabel={`Confidence level: ${Math.min(Math.abs(sentiment) * 100, 95)}%`}
           />
           <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 text-right">
             {Math.min(Math.abs(sentiment) * 100, 95).toFixed(0)}%
@@ -331,58 +357,69 @@ const PriceTechnicalsCard = ({ technical, trendDirection, rsiStatus, historicalD
     title="Price & Technicals"
     tooltip="Current price and key technical indicators"
     className="lg:col-span-1"
+    ariaLabel="Price and technical indicators"
   >
-    <div className="space-y-4">
-      <div className="flex justify-between items-end">
+    <div className="space-y-3 sm:space-y-4">
+      <div className="flex flex-col xs:flex-row xs:items-end justify-between gap-2">
         <div>
-          <p className="text-sm text-gray-600 dark:text-gray-300">Current Price</p>
-          <p className="text-3xl font-bold">
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">Current Price</p>
+          <p className="text-xl sm:text-2xl lg:text-3xl font-bold" aria-label={`Current price: $${technical.current_price.toFixed(2)}`}>
             ${technical.current_price.toFixed(2)}
           </p>
         </div>
         <ArrowIndicator direction={trendDirection} />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 sm:gap-3">
         <div>
           <p className="text-sm text-gray-600 dark:text-gray-300">SMA 50/200</p>
-          <p className="text-lg font-bold">
+          <p className="text-lg font-bold" aria-label={`SMA 50: $${technical.sma_50.toFixed(2)}, SMA 200: $${technical.sma_200.toFixed(2)}`}>
             ${technical.sma_50.toFixed(2)} / ${technical.sma_200.toFixed(2)}
           </p>
         </div>
         <div>
           <p className="text-sm text-gray-600 dark:text-gray-300">RSI (14)</p>
           <div className="flex items-center gap-2">
-            <p className={cn(
-              "text-lg font-bold",
-              rsiStatus === 'overbought' ? 'text-red-600 dark:text-red-400' : 
-              rsiStatus === 'oversold' ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'
-            )}>
+            <p 
+              className={cn(
+                "text-lg font-bold",
+                rsiStatus === 'overbought' ? 'text-red-600 dark:text-red-400' : 
+                rsiStatus === 'oversold' ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'
+              )}
+              aria-label={`RSI: ${technical.rsi.toFixed(1)}, status: ${rsiStatus}`}
+            >
               {technical.rsi.toFixed(1)}
             </p>
-            <Badge variant={rsiStatus}>
+            <Badge variant={rsiStatus} aria-label={rsiStatus}>
               {rsiStatus.charAt(0).toUpperCase() + rsiStatus.slice(1)}
             </Badge>
           </div>
         </div>
       </div>
 
-      <div className="h-40">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="h-[120px] sm:h-[140px] md:h-[160px]">
+          <ResponsiveContainer width="100%" height="100%">
           <LineChart data={historicalData}>
-            <XAxis dataKey="date" />
-            <YAxis domain={['auto', 'auto']} />
+            <XAxis 
+              dataKey="date" 
+              tick={{ fontSize: 10 }}
+            />
+            <YAxis 
+              domain={['auto', 'auto']} 
+              tick={{ fontSize: 10 }}
+            />
             <RechartsTooltip 
-              formatter={(value, name) => [
-                name === 'price' ? `$${value.toFixed(2)}` : `${value.toFixed(0)}%`,
-                name === 'price' ? 'Price' : 'Sentiment'
-              ]}
+              formatter={(value) => [`$${value.toFixed(2)}`, 'Price']}
+              contentStyle={{
+                fontSize: '0.75rem',
+                padding: '0.25rem 0.5rem'
+              }}
             />
             <Line 
               type="monotone" 
               dataKey="price" 
               stroke="#3b82f6" 
-              strokeWidth={2} 
+              strokeWidth={1.5}
               dot={false}
             />
           </LineChart>
@@ -397,23 +434,27 @@ const SentimentAnalysisCard = ({ sentimentScore, newsCount, sourceStats, histori
     title="Sentiment Analysis"
     tooltip={`Market sentiment based on ${newsCount} news articles`}
     className="lg:col-span-1"
+    ariaLabel="Sentiment analysis"
   >
-    <div className="space-y-4">
-      <div className="flex justify-between">
+    <div className="space-y-3 sm:space-y-4">
+      <div className="flex flex-col sm:flex-row justify-between gap-2">
         <div>
-          <p className="text-sm text-gray-600 dark:text-gray-300">Sentiment Score</p>
-          <p className={cn(
-            "text-3xl font-bold",
-            sentimentScore >= 60 ? 'text-green-600 dark:text-green-400' : 
-            sentimentScore <= 40 ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'
-          )}>
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">Sentiment Score</p>
+          <p 
+            className={cn(
+              "text-xl sm:text-2xl lg:text-3xl font-bold",
+              sentimentScore >= 60 ? 'text-green-600 dark:text-green-400' : 
+              sentimentScore <= 40 ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'
+            )}
+            aria-label={`Sentiment score: ${sentimentScore.toFixed(0)}%`}
+          >
             {sentimentScore.toFixed(0)}%
           </p>
         </div>
         <div className="text-right">
-          <p className="text-sm text-gray-600 dark:text-gray-300">News Count</p>
-          <p className="text-lg font-bold">{newsCount}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">News Count</p>
+          <p className="text-base sm:text-lg font-bold" aria-label={`News count: ${newsCount}`}>{newsCount}</p>
+          <p className="text-[0.65rem] sm:text-xs text-gray-500 dark:text-gray-400">
             ({sourceStats?.tier1_count || 0} Tier 1 sources)
           </p>
         </div>
@@ -421,9 +462,9 @@ const SentimentAnalysisCard = ({ sentimentScore, newsCount, sourceStats, histori
 
       <div>
         <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">Sentiment Trend</p>
-        <div className="h-32">
+        <div className="h-[100px] sm:h-[120px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={historicalData}>
+            <AreaChart data={historicalData} aria-label="Sentiment trend chart">
               <Area 
                 type="monotone" 
                 dataKey="sentiment" 
@@ -432,29 +473,33 @@ const SentimentAnalysisCard = ({ sentimentScore, newsCount, sourceStats, histori
                 strokeWidth={2}
               />
               <RechartsTooltip 
-                formatter={(value) => [`${value.toFixed(0)}%`, 'Sentiment']}
-              />
+              formatter={(value) => [`${value.toFixed(0)}%`, 'Sentiment']}
+              contentStyle={{
+                fontSize: '0.75rem',
+                padding: '0.25rem 0.5rem'
+              }}
+            />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-1 sm:gap-2">
         <div className="bg-green-50 dark:bg-green-900/30 p-2 rounded text-center">
           <p className="text-sm text-green-800 dark:text-green-200">Positive</p>
-          <p className="font-bold text-green-600 dark:text-green-400">
+          <p className="font-bold text-green-600 dark:text-green-400" aria-label={`Positive sentiment: ${Math.round(sentimentScore)}%`}>
             {Math.round(sentimentScore)}%
           </p>
         </div>
         <div className="bg-yellow-50 dark:bg-yellow-900/30 p-2 rounded text-center">
           <p className="text-sm text-yellow-800 dark:text-yellow-200">Neutral</p>
-          <p className="font-bold text-yellow-600 dark:text-yellow-400">
+          <p className="font-bold text-yellow-600 dark:text-yellow-400" aria-label={`Neutral sentiment: ${Math.round(100 - Math.abs(sentimentScore - 50) * 2)}%`}>
             {Math.round(100 - Math.abs(sentimentScore - 50) * 2)}%
           </p>
         </div>
         <div className="bg-red-50 dark:bg-red-900/30 p-2 rounded text-center">
           <p className="text-sm text-red-800 dark:text-red-200">Negative</p>
-          <p className="font-bold text-red-600 dark:text-red-400">
+          <p className="font-bold text-red-600 dark:text-red-400" aria-label={`Negative sentiment: ${Math.round(100 - sentimentScore)}%`}>
             {Math.round(100 - sentimentScore)}%
           </p>
         </div>
@@ -467,8 +512,9 @@ const PriceTargetsCard = ({ targets, currentPrice }) => (
   <MetricCard
     title="Price Targets"
     tooltip="Projected price targets based on technical analysis"
+    ariaLabel="Price targets"
   >
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <PriceTarget 
         label="Base" 
         value={targets?.Base || currentPrice * 1.1} 
@@ -495,31 +541,32 @@ const SupportResistanceCard = ({ technical }) => (
   <MetricCard
     title="Support & Resistance"
     tooltip="Key price levels for trading decisions"
+    ariaLabel="Support and resistance levels"
   >
     <div className="grid grid-cols-2 gap-4">
       <LevelIndicator 
         label="Support" 
         value={technical.support} 
         current={technical.current_price}
-        icon={<TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />}
+        icon={<TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" aria-hidden="true" />}
       />
       <LevelIndicator 
         label="Resistance" 
         value={technical.resistance} 
         current={technical.current_price}
-        icon={<TrendingDown className="w-5 h-5 text-red-600 dark:text-red-400" />}
+        icon={<TrendingDown className="w-5 h-5 text-red-600 dark:text-red-400" aria-hidden="true" />}
       />
       <LevelIndicator 
         label="Pivot" 
         value={technical.pivot} 
         current={technical.current_price}
-        icon={<Gauge className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
+        icon={<Gauge className="w-5 h-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />}
       />
       <LevelIndicator 
         label="52W High" 
         value={technical.current_price * 1.3} 
         current={technical.current_price}
-        icon={<CandlestickChart className="w-5 h-5 text-purple-600 dark:text-purple-400" />}
+        icon={<CandlestickChart className="w-5 h-5 text-purple-600 dark:text-purple-400" aria-hidden="true" />}
       />
     </div>
   </MetricCard>
@@ -529,6 +576,7 @@ const KeyRationaleCard = ({ rationale }) => (
   <MetricCard
     title="Key Rationale"
     tooltip="AI-generated analysis of the stock's outlook"
+    ariaLabel="Key rationale for recommendation"
   >
     <ul className="list-disc pl-5 space-y-2">
       {rationale.slice(0, 3).map((point, i) => (
@@ -543,12 +591,15 @@ const PriceTarget = ({ label, value, current, variant }) => {
   const isPositive = difference >= 0;
 
   return (
-    <div className={cn(
-      "p-3 rounded-lg border",
-      variant === 'bull' ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' :
-      variant === 'bear' ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800' :
-      'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800'
-    )}>
+    <div 
+      className={cn(
+        "p-3 rounded-lg border",
+        variant === 'bull' ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' :
+        variant === 'bear' ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800' :
+        'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800'
+      )}
+      aria-label={`${label} price target: $${value.toFixed(2)}, ${isPositive ? 'up' : 'down'} ${Math.abs(difference).toFixed(1)}%`}
+    >
       <p className="text-sm text-gray-600 dark:text-gray-300">{label}</p>
       <p className="text-xl font-bold mt-1">${typeof value === 'number' ? value.toFixed(2) : value}</p>
       <p className={cn(
@@ -566,7 +617,10 @@ const LevelIndicator = ({ label, value, current, icon }) => {
   const isAbove = difference > 0;
 
   return (
-    <div className="p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+    <div 
+      className="p-3 rounded-lg border border-gray-200 dark:border-gray-700"
+      aria-label={`${label}: $${value.toFixed(2)}, current price is ${isAbove ? 'above' : 'below'} by ${Math.abs(difference).toFixed(1)}%`}
+    >
       <div className="flex items-center gap-2">
         {icon}
         <span className="text-sm text-gray-600 dark:text-gray-300">{label}</span>
