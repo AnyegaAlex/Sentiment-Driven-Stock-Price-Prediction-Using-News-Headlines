@@ -104,10 +104,7 @@ const NewsItem = React.memo(function NewsItem({ item }) {
         </div>
 
         <div className="flex justify-between items-center">
-          <Badge className={cn(
-            "px-3 py-1 rounded-full text-xs capitalize",
-            config.badgeClass
-          )}>
+          <Badge className={cn("px-3 py-1 rounded-full text-xs capitalize", config.badgeClass)}>
             {config.icon} {sentiment}
           </Badge>
 
@@ -153,20 +150,23 @@ const NewsItem = React.memo(function NewsItem({ item }) {
   );
 });
 
-NewsItem.propTypes = {
-  item: PropTypes.shape({
-    id: PropTypes.string,
-    title: PropTypes.string,
-    summary: PropTypes.string,
-    source: PropTypes.string,
-    date: PropTypes.string,
-    url: PropTypes.string,
-    sentiment: PropTypes.string,
-    confidence: PropTypes.number,
-    keyPhrases: PropTypes.arrayOf(PropTypes.string),
-    image: PropTypes.string,
-    symbol: PropTypes.string
-  }).isRequired
+// 💀 Error display with normalization
+const ErrorDisplay = ({ error, onRetry, children }) => {
+  const safeMessage = typeof error === 'string'
+    ? error
+    : error?.message || 'An unknown error occurred';
+
+  return (
+    <div className="p-4">
+      <div className="text-red-500 dark:text-red-400 p-4 border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20">
+        {safeMessage}
+        <Button variant="outline" size="sm" className="mt-2" onClick={onRetry}>
+          Retry
+        </Button>
+      </div>
+      {children && <div className="mt-4">{children}</div>}
+    </div>
+  );
 };
 
 /**
@@ -188,34 +188,6 @@ const NewsListSkeleton = ({ count = 6 }) => (
     ))}
   </div>
 );
-
-/**
- * Error display component
- */
-const ErrorDisplay = ({ error, onRetry, children }) => (
-  <div className="p-4">
-    <div className="text-red-500 dark:text-red-400 p-4 border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20">
-      {error.message || 'An unknown error occurred'}
-      <Button 
-        variant="outline" 
-        size="sm" 
-        className="mt-2"
-        onClick={onRetry}
-      >
-        Retry
-      </Button>
-    </div>
-    {children && <div className="mt-4">{children}</div>}
-  </div>
-);
-
-ErrorDisplay.propTypes = {
-  error: PropTypes.shape({
-    message: PropTypes.string
-  }).isRequired,
-  onRetry: PropTypes.func.isRequired,
-  children: PropTypes.node
-};
 
 /**
  * Main NewsList component
@@ -249,16 +221,16 @@ const NewsList = ({ symbol = 'IBM' }) => {
         console.log("API request failed, falling back to mock data");
         const mockData = await fetchMockNews(displaySymbol);
         setNews(mockData);
-        setError({
+       setError({
           message: "Live data unavailable - showing mock data",
           code: apiError.response?.status || 500
         });
       }
     } catch (err) {
-      console.error("Failed to load news:", err);
+      console.error("News fetch failed:", err);
       setError({
-        message: "Failed to load news data",
-        code: 500
+        message: err?.message || 'Unexpected error loading news',
+        code: err?.response?.status || 500
       });
       setNews([]);
     } finally {
@@ -335,4 +307,27 @@ NewsListSkeleton.defaultProps = {
   count: 6
 };
 
+ErrorDisplay.propTypes = {
+  error: PropTypes.shape({
+    message: PropTypes.string
+  }).isRequired,
+  onRetry: PropTypes.func.isRequired,
+  children: PropTypes.node
+};
+
+NewsItem.propTypes = {
+  item: PropTypes.shape({
+    id: PropTypes.string,
+    title: PropTypes.string,
+    summary: PropTypes.string,
+    source: PropTypes.string,
+    date: PropTypes.string,
+    url: PropTypes.string,
+    sentiment: PropTypes.string,
+    confidence: PropTypes.number,
+    keyPhrases: PropTypes.arrayOf(PropTypes.string),
+    image: PropTypes.string,
+    symbol: PropTypes.string
+  }).isRequired
+};
 export default React.memo(NewsList);
