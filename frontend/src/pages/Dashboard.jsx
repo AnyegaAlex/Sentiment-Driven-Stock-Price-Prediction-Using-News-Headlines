@@ -34,11 +34,26 @@ const Dashboard = () => {
       const response = await fetch(
         `/api/stock-opinion?symbol=${symbol}&risk=${prefs.risk}&holdTime=${prefs.holdTime}`
       );
+      if (!response.ok) throw new Error("API returned error");
       const data = await response.json();
+      if (!data || typeof data !== "object" || !data.factors) {
+      throw new Error("Unexpected data format");
+     }
       setStockOpinion(data);
       setTechnical(data.factors?.technical || null);
     } catch (error) {
-      console.error("Failed to fetch stock opinion:", error);
+      console.warn("Falling back to mock stock opinion data");
+      const mock = {
+      symbol,
+      factors: {
+        technical: { rsi: 52, trend: "neutral" },
+        aggregated_sentiment: "neutral",
+        news_count: 3
+      },
+      summary: "Mock data: This is a fallback opinion."
+    };
+    setStockOpinion(mock);
+    setTechnical(mock.factors.technical);
     } finally {
       setIsLoading(false);
     }
