@@ -152,15 +152,15 @@ const Dashboard = () => {
           {[
             { value: "opinion", icon: LineChart, label: "Stock Opinion" },
             { value: "news", icon: Newspaper, label: "News Analysis" }
-          ].map((tab) => (
-            <TabsTrigger
-              key={tab.value}
-              value={tab.value}
-              className="data-[state=active]:bg-blue-100 dark:data-[state=active]:bg-blue-900/50"
-            >
-              <tab.icon className="w-4 h-4 mr-2" />
-              {tab.label}
-            </TabsTrigger>
+          ].map(({ value, icon: Icon, label }) => (
+          <TabsTrigger
+            key={value}
+            value={value}
+            className="data-[state=active]:bg-blue-100 dark:data-[state=active]:bg-blue-900/50"
+          >
+            <Icon className="w-4 h-4 mr-2" />
+            {label}
+          </TabsTrigger>
           ))}
         </TabsList>
 

@@ -36,6 +36,7 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { fetchMockStockAnalysis } from '@/services/mockStockAnalysis';
 
 // Helper Components
 const AnimatedProgressBar = ({ value, color = 'primary', ariaLabel = "Progress bar" }) => {
@@ -127,22 +128,22 @@ const DashboardCards = ({ symbol }) => {
   const [stockData, setStockData] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const IS_MOCK = process.env.NODE_ENV === 'production';
-
-const fetchStockData = useCallback(async () => {
+  
+ const fetchStockData = useCallback(async () => {
   try {
     setLoading(true);
     setError(null);
 
     if (IS_MOCK) {
-      const mock = await import('@/services/mockStockAnalysisData');
-      const mockData = mock.getMockData(symbol);
+      const mockData = await fetchMockStockAnalysis(symbol, 'high', 'long-term');
       setStockData(mockData);
       setLastUpdated(new Date());
       return;
     }
 
+    // Actual API call for non-mock mode
     const response = await axios.get(`/api/stock-analysis`, {
-      params: { 
+      params: {
         symbol,
         risk_type: 'high',
         hold_time: 'long-term',
@@ -153,7 +154,10 @@ const fetchStockData = useCallback(async () => {
 
     setStockData(response.data);
     setLastUpdated(new Date());
-
+    localStorage.setItem(`stockData-${symbol}`, JSON.stringify({
+      data: response.data,
+      timestamp: new Date().toISOString()
+    }));
   } catch (err) {
     const cachedData = localStorage.getItem(`stockData-${symbol}`);
     if (!cachedData) {
@@ -164,6 +168,7 @@ const fetchStockData = useCallback(async () => {
     setLoading(false);
   }
 }, [symbol]);
+
 
   useEffect(() => {
     const cachedData = localStorage.getItem(`stockData-${symbol}`);
