@@ -6,6 +6,7 @@ from .views import (
     TechnicalIndicatorsView,
     SymbolsListView,
     SubscribeView,
+    LSTMPredictionView,  
 )
 
 urlpatterns = [
@@ -18,4 +19,7 @@ urlpatterns = [
     path('technical-indicators/', TechnicalIndicatorsView.as_view(), name='technical-indicators'),
     path('stocks/symbols/', SymbolsListView.as_view(), name='symbols-list'),
     path('subscribe/', SubscribeView.as_view(), name='subscribe'),
+    
+    # LSTM Prediction endpoint
+    path('lstm-predict/', LSTMPredictionView.as_view(), name='lstm-predict'),
 ]

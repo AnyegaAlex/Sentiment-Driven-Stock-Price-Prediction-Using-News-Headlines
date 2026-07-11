@@ -1,10 +1,11 @@
 """
-Optimized Institutional Stock Analysis API v5.1
-Production-ready with complete formatting functions and error handling
-- Fixed fallback to avoid current_price=0 (Pydantic validation error)
+Optimized Institutional Stock Analysis API v5.2
+Production-ready with LSTM integration
+- Fixed fallback to avoid current_price=0
 - Added retry mechanism for yfinance downloads
 - Improved caching for market regime SPY data
-- Static price fallback for major symbols when all else fails
+- Static price fallback for major symbols
+- Integrated LSTM predictor for enhanced predictions
 """
 
 import gc
@@ -19,6 +20,9 @@ from pydantic import BaseModel, Field, validator
 import numpy as np
 import pandas as pd
 import yfinance as yf
+
+# INTEGRATION: import LSTM predictor
+from .lstm_predictor import get_lstm_predictor
 
 # Configure module logger
 logger = logging.getLogger(__name__)
@@ -90,7 +94,7 @@ class TechnicalMetrics(BaseModel):
     sma_50: float
     sma_200: float
     rsi: float = Field(..., ge=0, le=100)
-    current_price: float = Field(..., gt=0)  # FIX: now always > 0
+    current_price: float = Field(..., gt=0)
     volatility: float = Field(..., ge=0)
     confidence: float = Field(..., ge=0, le=100)
     market_regime: MarketRegimeResult
@@ -140,12 +144,10 @@ class MarketRegimeDetector:
         self._cache = None
         self._cache_timestamp = None
         self._cache_duration = datetime.timedelta(hours=1)
-        # FIX: separate cache for SPY data to avoid re-download
         self._spy_cache = None
         self._spy_cache_timestamp = None
     
     def _get_spy_data(self) -> pd.DataFrame:
-        """Get SPY data with caching"""
         now = datetime.datetime.now()
         if (self._spy_cache is not None and 
             self._spy_cache_timestamp is not None and
@@ -153,7 +155,6 @@ class MarketRegimeDetector:
             return self._spy_cache
         
         try:
-            # Retry logic for SPY download
             for attempt in range(3):
                 try:
                     spy_data = yf.download("SPY", period="1y", progress=False, auto_adjust=True)
@@ -163,8 +164,7 @@ class MarketRegimeDetector:
                         return spy_data
                 except Exception as e:
                     logger.warning(f"SPY download attempt {attempt+1} failed: {e}")
-                    time.sleep(1 * (attempt + 1))  # exponential backoff
-            # If all attempts fail, return empty
+                    time.sleep(1 * (attempt + 1))
             logger.error("All SPY download attempts failed")
             return pd.DataFrame()
         except Exception as e:
@@ -237,16 +237,12 @@ class TechnicalAnalyzer:
         self._min_data_points = 200
     
     def analyze(self, symbol: str) -> TechnicalMetrics:
-        """
-        Perform technical analysis for a symbol.
-        Always returns a valid TechnicalMetrics object (never raises).
-        """
         try:
             data = self._get_cached_data(symbol)
             
             if data.empty or len(data) < self._min_data_points:
                 logger.warning(f"Insufficient data for {symbol}, using fallback")
-                return self._get_fallback_metrics(symbol)  # FIX: pass symbol
+                return self._get_fallback_metrics(symbol)
             
             closes = data['Close']
             sma_200 = closes.rolling(min(200, len(closes))).mean().iloc[-1]
@@ -261,7 +257,6 @@ class TechnicalAnalyzer:
                 data, sma_50, sma_200, current_price, rsi, volatility
             )
             
-            # FIX: ensure current_price > 0
             if current_price <= 0:
                 current_price = FALLBACK_PRICES.get(symbol, DEFAULT_FALLBACK_PRICE)
                 logger.warning(f"Zero price detected for {symbol}, using fallback {current_price}")
@@ -281,18 +276,15 @@ class TechnicalAnalyzer:
             return self._get_fallback_metrics(symbol)
     
     def _get_cached_data(self, symbol: str) -> pd.DataFrame:
-        # Update access count
         self._cache_access_count[symbol] = self._cache_access_count.get(symbol, 0) + 1
         
         if symbol in self._data_cache:
             logger.debug(f"Cache hit for {symbol}")
             return self._data_cache[symbol]
         
-        # Evict if needed
         if len(self._data_cache) >= self._max_cache_size:
             self._evict_least_used()
         
-        # FIX: Retry logic with backoff
         periods_to_try = [
             ("2y", "2 years (primary)"),
             ("5y", "5 years (fallback)"), 
@@ -301,10 +293,10 @@ class TechnicalAnalyzer:
         
         data = pd.DataFrame()
         for period, description in periods_to_try:
-            for attempt in range(3):  # retry up to 3 times per period
+            for attempt in range(3):
                 try:
                     logger.info(f"Downloading {period} data for {symbol} ({description}) attempt {attempt+1}")
-                    time.sleep(0.5 * (attempt + 1))  # backoff
+                    time.sleep(0.5 * (attempt + 1))
                     data = yf.download(
                         symbol, 
                         period=period, 
@@ -329,9 +321,7 @@ class TechnicalAnalyzer:
             logger.error(f"Could not download any data for {symbol} after all attempts")
             return pd.DataFrame()
         
-        # Ensure no zero/negative prices
         if (data['Close'] <= 0).any():
-            # Replace with fallback (unlikely)
             logger.warning(f"Zero/negative prices in {symbol} data, using fallback")
             return pd.DataFrame()
         
@@ -396,17 +386,14 @@ class TechnicalAnalyzer:
             return 50.0
     
     def _get_fallback_metrics(self, symbol: str) -> TechnicalMetrics:
-        """Return fallback metrics with a realistic price (never 0)."""
-        # FIX: use static price map or default
         price = FALLBACK_PRICES.get(symbol.upper(), DEFAULT_FALLBACK_PRICE)
-        # Adjust based on symbol's risk? Not needed.
         return TechnicalMetrics(
             sma_50=price * 0.98,
             sma_200=price * 0.95,
             rsi=50.0,
             current_price=price,
             volatility=0.2,
-            confidence=30.0,  # low confidence
+            confidence=30.0,
             market_regime=MarketRegimeResult(
                 regime=MarketRegime.NEUTRAL, 
                 confidence=50.0
@@ -433,15 +420,39 @@ class InstitutionalAnalysisEngine:
         if not re.match(r'^[A-Z]{1,5}$', self.symbol):
             raise ValueError(f"Invalid stock symbol format: {self.symbol}")
     
-    def full_analysis(self) -> Dict[str, Any]:
+    def full_analysis(self, news_text: str = "") -> Dict[str, Any]:
         try:
             technicals = self.technical_analyzer.analyze(self.symbol)
-            # FIX: ensure current_price is > 0 (already guaranteed by fallback)
             if technicals.current_price <= 0:
                 logger.warning(f"Fallback price still zero for {self.symbol}, forcing default")
                 technicals = self.technical_analyzer._get_fallback_metrics(self.symbol)
             
-            return self._format_response(technicals)
+            result = self._format_response(technicals)
+            
+            # INTEGRATION: Add LSTM prediction (if available)
+            try:
+                lstm_predictor = get_lstm_predictor()
+                lstm_result = lstm_predictor.predict(self.symbol, news_text)
+                if lstm_result.get('success'):
+                    result['lstm_prediction'] = {
+                        'direction': lstm_result['prediction'],
+                        'confidence': lstm_result['confidence']
+                    }
+                else:
+                    result['lstm_prediction'] = {
+                        'direction': 'UNAVAILABLE',
+                        'confidence': 0.0,
+                        'error': lstm_result.get('error', 'Unknown error')
+                    }
+            except Exception as e:
+                logger.warning(f"LSTM prediction failed for {self.symbol}: {e}")
+                result['lstm_prediction'] = {
+                    'direction': 'UNAVAILABLE',
+                    'confidence': 0.0,
+                    'error': str(e)
+                }
+            
+            return result
         except Exception as e:
             logger.error(f"Analysis failed for {self.symbol}: {str(e)}")
             return self._error_response(str(e))
@@ -527,7 +538,7 @@ class InstitutionalAnalysisEngine:
 # Public API Functions
 # ============================================================================
 
-def generate_stock_opinion(symbol: str, risk_type: str = "medium") -> Dict[str, Any]:
+def generate_stock_opinion(symbol: str, risk_type: str = "medium", news_text: str = "") -> Dict[str, Any]:
     try:
         if not symbol or not isinstance(symbol, str):
             return {
@@ -536,7 +547,7 @@ def generate_stock_opinion(symbol: str, risk_type: str = "medium") -> Dict[str, 
                 "status": "failed"
             }
         engine = InstitutionalAnalysisEngine(symbol, risk_type)
-        result = engine.full_analysis()
+        result = engine.full_analysis(news_text)  # Pass news_text
         logger.info(f"Successfully generated opinion for {symbol}")
         return result
     except ValueError as e:
@@ -557,6 +568,7 @@ def generate_stock_opinion(symbol: str, risk_type: str = "medium") -> Dict[str, 
         }
 
 def format_investment_analysis(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
+    # (unchanged – keep as before)
     try:
         if "error" in analysis_data:
             return {
@@ -583,10 +595,13 @@ def format_investment_analysis(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
             "summary": analysis_data.get("summary", f"{symbol}: {recommendation} with {confidence}% confidence"),
             "timestamp": analysis_data.get("timestamp", datetime.datetime.utcnow().isoformat() + "Z"),
             "metadata": {
-                "version": "5.1",
+                "version": "5.2",
                 "provider": "Institutional Analysis Engine"
             }
         }
+        # Include LSTM prediction if present
+        if "lstm_prediction" in analysis_data:
+            formatted["lstm_prediction"] = analysis_data["lstm_prediction"]
         formatted["analysis"]["investment_thesis"] = _generate_investment_thesis(
             symbol, recommendation, confidence, analysis_data
         )
@@ -603,6 +618,7 @@ def format_investment_analysis(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
 def _generate_investment_thesis(
     symbol: str, recommendation: str, confidence: float, analysis_data: Dict[str, Any]
 ) -> str:
+    # (unchanged – keep as before)
     indicators = analysis_data.get("technical_indicators", {})
     regime = analysis_data.get("market_regime", {})
     rsi = indicators.get("rsi", 50)
@@ -645,4 +661,4 @@ def clear_all_caches():
 # ============================================================================
 
 pd.options.mode.chained_assignment = None
-logger.info("Institutional Analysis Engine v5.1 initialized")
+logger.info("Institutional Analysis Engine v5.2 initialized")

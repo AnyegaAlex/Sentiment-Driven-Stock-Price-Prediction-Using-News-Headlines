@@ -18,6 +18,9 @@ from .serializers import (
 )
 from news.models import ProcessedNews
 
+# NEW: Import LSTM predictor
+from .lstm_predictor import get_lstm_predictor
+
 logger = logging.getLogger(__name__)
 
 # ============================================================
@@ -30,7 +33,6 @@ def get_fallback_analysis(symbol: str, risk_type: str = "medium", hold_time: str
     Uses static data for known symbols, generic for unknown.
     """
     symbol = symbol.upper()
-    # Static data for common stocks (prices as of July 2026)
     static_data = {
         "AAPL": {"company": "Apple Inc.", "price": 116.16, "sma50": 114.84, "sma200": 111.81, "rsi": 70.8, "support": 110.35, "resistance": 121.97, "volume": 12424000, "volatility": 0.15},
         "MSFT": {"company": "Microsoft Corp.", "price": 420.50, "sma50": 418.20, "sma200": 410.00, "rsi": 65.0, "support": 400.0, "resistance": 430.0, "volume": 8000000, "volatility": 0.12},
@@ -89,9 +91,8 @@ def get_fallback_technical(symbol: str) -> dict:
         "IBM": {"current_price": 180.00, "sma_50": 178.00, "sma_200": 175.00, "rsi": 52.0, "support": 170.0, "resistance": 190.0, "volume": 1500000, "volatility": 0.09},
     }
     data = static_data.get(symbol, {"current_price": 100.0, "sma_50": 98.0, "sma_200": 95.0, "rsi": 55.0, "support": 95.0, "resistance": 105.0, "volume": 1000000, "volatility": 0.2})
-    # Add pivot and price_history
     data["pivot"] = data["current_price"]
-    data["price_history"] = [data["current_price"] * (1 + (i-10)*0.005) for i in range(20)]  # synthetic history
+    data["price_history"] = [data["current_price"] * (1 + (i-10)*0.005) for i in range(20)]
     return {"technical": data}
 
 # ============================================================
@@ -207,7 +208,8 @@ class StockAnalysisView(APIView):
 
         # ---------- TRY REAL DATA ----------
         try:
-            opinion = generate_stock_opinion(symbol=symbol, risk_type=risk_type)
+            # Pass empty news text by default; LSTM will still work with just symbol.
+            opinion = generate_stock_opinion(symbol=symbol, risk_type=risk_type, news_text="")
             if "error" in opinion:
                 raise ValueError(opinion["error"])
             
@@ -269,6 +271,10 @@ class StockAnalysisView(APIView):
                 }
             }
             
+            # Add LSTM prediction if present in formatted
+            if "lstm_prediction" in formatted:
+                response_data["lstm_prediction"] = formatted["lstm_prediction"]
+            
             cache.set(cache_key, response_data, timeout=600)
             return Response(response_data, status=status.HTTP_200_OK)
             
@@ -276,7 +282,7 @@ class StockAnalysisView(APIView):
             # ---------- FALLBACK ----------
             logger.warning(f"Real data failed for {symbol}: {e}. Using fallback.")
             response_data = get_fallback_analysis(symbol, risk_type, hold_time)
-            cache.set(cache_key, response_data, timeout=300)  # shorter cache for fallback
+            cache.set(cache_key, response_data, timeout=300)
             return Response(response_data, status=status.HTTP_200_OK)
 
 
@@ -343,7 +349,6 @@ class SymbolsListView(APIView):
             return Response(cached, status=status.HTTP_200_OK)
         
         try:
-            # Static list (can be extended with database query later)
             symbols_data = [
                 {"symbol": "AAPL", "name": "Apple Inc.", "region": "US"},
                 {"symbol": "MSFT", "name": "Microsoft Corp.", "region": "US"},
@@ -404,3 +409,54 @@ class SubscribeView(APIView):
             {"error": serializer.errors},
             status=status.HTTP_400_BAD_REQUEST
         )
+
+
+# ============================================================
+#  NEW: LSTM Prediction Endpoint
+# ============================================================
+
+class LSTMPredictionView(APIView):
+    """
+    GET /api/lstm-predict/?symbol=AAPL&news=Apple%20announces%20new%20iPhone
+    Returns LSTM-based prediction for given symbol and optional news text.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        symbol = request.query_params.get('symbol')
+        if not symbol:
+            return Response(
+                {"error": "Symbol is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        news_text = request.query_params.get('news', '')
+
+        # Check cache (5 minutes)
+        cache_key = f"lstm_{symbol}_{hash(news_text)}"
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached, status=status.HTTP_200_OK)
+
+        try:
+            predictor = get_lstm_predictor()
+            result = predictor.predict(symbol, news_text)
+
+            if not result.get('success'):
+                return Response(
+                    {"error": result.get('error', 'Prediction failed')},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            result['symbol'] = symbol.upper()
+            result['timestamp'] = datetime.utcnow().isoformat() + 'Z'
+
+            cache.set(cache_key, result, timeout=300)
+            return Response(result, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.exception(f"Error in LSTMPredictionView for {symbol}: {e}")
+            return Response(
+                {"error": f"Internal server error: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
