@@ -6,12 +6,11 @@ import time
 from django.conf import settings
 from copy import deepcopy
 from functools import lru_cache
-from typing import Union
+from typing import Union, List, Dict, Any
 
-# Initialize logger
 logger = logging.getLogger(__name__)
 
-# Configuration with defaults
+# Configuration with defaults (merged with Django settings)
 DEFAULT_CONFIG = {
     'model_name': 'ProsusAI/finbert',
     'min_text_length': 20,
@@ -20,68 +19,32 @@ DEFAULT_CONFIG = {
     'load_retries': 3,
     'load_retry_delay': 2,
     'batch_size': 8,
-    'max_memory_mb': 1024  # 1GB memory limit
+    'max_memory_mb': 1024  # 1GB memory limit – only used if CUDA available
 }
 
-# Merge with Django settings
 config = {**DEFAULT_CONFIG, **getattr(settings, 'FINBERT_CONFIG', {})}
 
-# Device setup with memory awareness
+# ---- Device setup with memory awareness ----
 def get_device():
+    """Returns the best available device (CUDA if enough memory, else CPU)."""
     if torch.cuda.is_available():
-        free_mem = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)
-        if free_mem > config['max_memory_mb'] * 1024 * 1024:
-            return torch.device("cuda")
+        try:
+            free_mem = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)
+            if free_mem > config['max_memory_mb'] * 1024 * 1024:
+                return torch.device("cuda")
+        except Exception:
+            pass
     return torch.device("cpu")
 
 device = get_device()
 
-def _sanitize_text(text: str, max_length: int = 100) -> str:
-    """
-    Sanitize text for safe logging by:
-    - Truncating to max_length
-    - Removing newlines
-    - Stripping whitespace
-    
-    Args:
-        text: Input text to sanitize
-        max_length: Maximum length of output string
-        
-    Returns:
-        Sanitized text safe for logging
-    """
-    if not isinstance(text, str):
-        text = str(text)
-    return text[:max_length].replace('\n', ' ').replace('\r', ' ').strip()
-
-def normalize_confidence(confidence: Union[float, int]) -> float:
-    """
-    Normalize confidence score to ensure it's between 0.0 and 1.0.
-    Handles percentages (e.g., 80 -> 0.8) and invalid values.
-    
-    Args:
-        confidence: Input confidence score (may be percentage or decimal)
-        
-    Returns:
-        Normalized confidence score between 0.0 and 1.0
-    """
-    try:
-        confidence = float(confidence)
-        if confidence > 1:  # Assume percentage if > 1
-            confidence /= 100
-        return max(0.0, min(1.0, confidence))  # Clamp to [0,1] range
-    except (TypeError, ValueError) as e:
-        logger.warning(f"Invalid confidence value {confidence}: {str(e)}")
-        return 0.5  # Neutral fallback
-    
+# ---- Model and tokenizer loading with caching ----
 @lru_cache(maxsize=1)
 def load_model():
-    """Load model with memory-efficient settings"""
+    """Load FinBERT model with memory‑efficient options."""
     for attempt in range(config['load_retries']):
         try:
-            logger.info(f"Loading FinBERT (attempt {attempt+1})")
-            
-            # Use low-memory options
+            logger.info(f"Loading FinBERT (attempt {attempt+1}) on {device}")
             model = AutoModelForSequenceClassification.from_pretrained(
                 config['model_name'],
                 torch_dtype=torch.float16 if device.type == 'cuda' else torch.float32,
@@ -89,12 +52,10 @@ def load_model():
             )
             model.to(device)
             model.eval()
-            
-            # Verify label mapping
+            # Ensure label mapping is correct
             if not hasattr(model.config, 'id2label') or all(l.startswith("LABEL") for l in model.config.id2label.values()):
                 model.config.id2label = {0: "negative", 1: "neutral", 2: "positive"}
-            
-            logger.info(f"Model loaded on {device} with labels: {model.config.id2label}")
+            logger.info(f"Model loaded with labels: {model.config.id2label}")
             return model
         except Exception as e:
             logger.warning(f"Attempt {attempt+1} failed: {str(e)}")
@@ -104,13 +65,12 @@ def load_model():
             if 'model' in locals():
                 del model
             torch.cuda.empty_cache()
-    
     logger.error("Model loading failed after retries")
     return None
 
 @lru_cache(maxsize=1)
 def load_tokenizer():
-    """Load tokenizer with caching"""
+    """Load tokenizer with caching."""
     try:
         return AutoTokenizer.from_pretrained(config['model_name'])
     except Exception as e:
@@ -118,28 +78,28 @@ def load_tokenizer():
         return None
 
 def validate_model():
-    """Check if model is ready with automatic reload"""
+    """Check if model is ready; if not, clear cache and retry."""
     global device
-    device = get_device()  # Check for device changes
-    
+    device = get_device()
     if load_tokenizer() is None or load_model() is None:
-        # Clear caches and retry
         load_model.cache_clear()
         load_tokenizer.cache_clear()
         return load_tokenizer() is not None and load_model() is not None
     return True
-    
-def analyze_sentiment(text):
+
+# ---- Main sentiment analysis functions ----
+def analyze_sentiment(text: str) -> Dict[str, Any]:
     """
-    Optimized single-text sentiment analysis with memory limits
+    Single‑text sentiment analysis.
+    Returns {'label': 'positive'|'neutral'|'negative', 'score': float}
     """
     if not validate_model():
         return {'label': 'neutral', 'score': 0.0}
-    
+
     text = str(text).strip()
     if len(text) < config['min_text_length']:
         return {'label': 'neutral', 'score': 0.0}
-    
+
     try:
         inputs = load_tokenizer()(
             text[:config['max_text_length']],
@@ -147,35 +107,36 @@ def analyze_sentiment(text):
             truncation=True,
             max_length=512
         ).to(device)
-        
+
         with torch.inference_mode():
             outputs = load_model()(**inputs)
-        
+
         probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
         score, idx = torch.max(probs, dim=-1)
-        
+
         return {
             'label': load_model().config.id2label[idx.item()].lower(),
             'score': float(score.item())
         }
     except torch.cuda.OutOfMemoryError:
-        logger.error("CUDA out of memory - clearing cache")
+        logger.error("CUDA OOM – clearing cache")
         torch.cuda.empty_cache()
         return {'label': 'neutral', 'score': 0.0}
     except Exception as e:
         logger.error(f"Analysis failed: {str(e)}")
         return {'label': 'neutral', 'score': 0.0}
 
-def analyze_batch(texts):
+def analyze_batch(texts: List[str]) -> List[Dict[str, Any]]:
     """
-    Memory-efficient batch processing with chunking
+    Batch sentiment analysis with chunking to avoid OOM.
     """
     if not validate_model() or not texts:
         return [{'label': 'neutral', 'score': 0.0} for _ in texts]
-    
+
     results = []
-    for i in range(0, len(texts), config['batch_size']):
-        batch = texts[i:i + config['batch_size']]
+    batch_size = config['batch_size']
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
         try:
             inputs = load_tokenizer()(
                 [str(t).strip()[:config['max_text_length']] for t in batch],
@@ -184,30 +145,28 @@ def analyze_batch(texts):
                 max_length=512,
                 return_tensors="pt"
             ).to(device)
-            
+
             with torch.inference_mode():
                 outputs = load_model()(**inputs)
-            
+
             probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
             scores, indices = torch.max(probs, dim=-1)
-            
+
             results.extend([{
                 'label': load_model().config.id2label[idx.item()].lower(),
                 'score': float(score.item())
             } for score, idx in zip(scores, indices)])
-            
-            # Clear memory between batches
+
+            # Clean up memory
             del inputs, outputs, probs, scores, indices
             torch.cuda.empty_cache()
-            
+
         except torch.cuda.OutOfMemoryError:
-            logger.warning("Batch too large - reducing size")
-            config['batch_size'] = max(1, config['batch_size'] // 2)
-            return analyze_batch(texts)  # Retry with smaller batch
-            
+            logger.warning("Batch too large – reducing batch size")
+            config['batch_size'] = max(1, batch_size // 2)
+            return analyze_batch(texts)  # retry with smaller batch
         except Exception as e:
             logger.error(f"Batch processing failed: {str(e)}")
             results.extend([{'label': 'neutral', 'score': 0.0} for _ in batch])
-    
-    return results
 
+    return results

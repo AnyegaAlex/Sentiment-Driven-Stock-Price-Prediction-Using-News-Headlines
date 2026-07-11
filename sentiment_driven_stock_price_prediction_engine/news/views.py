@@ -1,35 +1,20 @@
-# news/tasks.py
-"""
-Production-ready Celery tasks for:
-- Fetching news from Alpha Vantage / Finnhub / Yahoo (RapidAPI)
-- Normalizing + deduping articles
-- Sentiment analysis (FinBERT via news.utils.analyze_sentiment)
-- Lightweight key phrase extraction (no spaCy dependency)
-- Safe DB writes with update_or_create + unique constraint (title_hash, symbol)
-
-Model assumptions (from your code):
-- ProcessedNews.source is constrained to: alpha | finnhub | yahoo | other  (choices)
-- UniqueConstraint(fields=['title_hash','symbol'])
-"""
-
-# news/views.py
 import logging
 import re
 from datetime import timedelta
-
-import requests
 from django.conf import settings
 from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .models import ProcessedNews, SymbolSearchCache
-from .tasks import fetch_and_process_news
+from .tasks import fetch_and_save_news, fetch_and_process_news
+from .serializers import ProcessedNewsSerializer
 
 logger = logging.getLogger(__name__)
 
 CACHE_TTL_SECONDS = 3600  # 1 hour
 MAX_ARTICLES = 50
+SYNC_FETCH_TIMEOUT = 15  # seconds before we give up and return stale cache
 
 _TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,10}$")
 
@@ -39,25 +24,16 @@ def _normalize_symbol(raw: str) -> str:
 
 
 def _serialize_news(qs):
-    return [{
-        "title": n.title,
-        "summary": n.summary,
-        "source": n.source,
-        "url": n.url,
-        "published_at": n.published_at,
-        "sentiment": n.sentiment,
-        "confidence": n.confidence,
-        "key_phrases": n.key_phrases,
-        "source_reliability": n.source_reliability,
-        "banner_image_url": n.banner_image_url or ""
-    } for n in qs]
+    """Use the serializer to ensure correct field mapping (source)."""
+    serializer = ProcessedNewsSerializer(qs, many=True)
+    return serializer.data
 
 
 @api_view(["GET"])
 def get_news(request):
     """
     Returns cached DB rows quickly.
-    If ?refresh=true or cache empty/stale -> enqueue Celery fetch and return immediately.
+    If ?refresh=true or cache empty/stale -> try synchronous fetch; fallback to Celery.
     """
     symbol = _normalize_symbol(request.GET.get("symbol", ""))
     if not symbol or not _TICKER_RE.match(symbol):
@@ -75,11 +51,34 @@ def get_news(request):
 
     refresh_queued = False
     if force_refresh or not news_qs or cache_is_stale:
+        # Try synchronous fetch first (with timeout)
         try:
-            fetch_and_process_news.delay(symbol, fetch_latest_only=True)
-            refresh_queued = True
+            result = fetch_and_save_news(
+                symbol,
+                fetch_latest_only=True,
+                recent_hours=24,
+                timeout_seconds=SYNC_FETCH_TIMEOUT
+            )
+            if result.get("status") == "success" and result.get("new_articles", 0) > 0:
+                # New data fetched, reload queryset
+                news_qs = ProcessedNews.objects.filter(symbol=symbol).order_by("-published_at")[:MAX_ARTICLES]
+                cache_is_stale = False
+                refresh_queued = False
+            else:
+                # Sync fetch failed or found no new articles; fallback to Celery
+                try:
+                    fetch_and_process_news.delay(symbol, fetch_latest_only=True)
+                    refresh_queued = True
+                except Exception as e:
+                    logger.warning("Failed to enqueue Celery task for %s: %s", symbol, e)
         except Exception as e:
-            logger.warning("Failed to enqueue fetch_and_process_news for %s: %s", symbol, e)
+            logger.warning("Synchronous fetch failed for %s: %s", symbol, e)
+            # Attempt Celery as fallback
+            try:
+                fetch_and_process_news.delay(symbol, fetch_latest_only=True)
+                refresh_queued = True
+            except Exception as e2:
+                logger.warning("Celery fallback also failed for %s: %s", symbol, e2)
 
     return Response({
         "symbol": symbol,
@@ -150,40 +149,10 @@ def symbol_search(request):
         logger.error("Symbol search failed for query '%s': %s", query, e)
         return Response({"error": str(e)}, status=500)
 
+
 @api_view(["GET"])
 def get_analyzed_news(request):
     """
-    Analyzed news endpoint:
-      - Returns cached DB rows (same as get_news)
-      - If stale/empty -> enqueue Celery fetch
-      - Ensures response includes sentiment/confidence/key_phrases (already stored in DB)
+    Alias for get_news – kept for backwards compatibility.
     """
-    symbol = _normalize_symbol(request.GET.get("symbol", ""))
-    if not symbol or not _TICKER_RE.match(symbol):
-        return Response({"error": "Valid 'symbol' query parameter is required."}, status=400)
-
-    force_refresh = request.GET.get("refresh", "false").lower() == "true"
-
-    news_qs = ProcessedNews.objects.filter(symbol=symbol).order_by("-published_at")[:MAX_ARTICLES]
-    now = timezone.now()
-
-    cache_is_stale = True
-    if news_qs:
-        newest_created = news_qs[0].created_at
-        cache_is_stale = (now - newest_created).total_seconds() > CACHE_TTL_SECONDS
-
-    refresh_queued = False
-    if force_refresh or not news_qs or cache_is_stale:
-        try:
-            fetch_and_process_news.delay(symbol, fetch_latest_only=True)
-            refresh_queued = True
-        except Exception as e:
-            logger.warning("Failed to enqueue fetch_and_process_news for %s: %s", symbol, e)
-
-    return Response({
-        "symbol": symbol,
-        "refresh_queued": refresh_queued,
-        "cache_stale": cache_is_stale,
-        "count": len(news_qs),
-        "news": _serialize_news(news_qs),
-    })    
+    return get_news(request)

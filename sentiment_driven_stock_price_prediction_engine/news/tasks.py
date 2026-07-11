@@ -1,4 +1,3 @@
-# news/tasks.py
 from __future__ import annotations
 
 import gc
@@ -14,8 +13,7 @@ import requests
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from django.conf import settings
-from django.db import IntegrityError, transaction
-from django.db import close_old_connections
+from django.db import IntegrityError, transaction, close_old_connections
 from django.utils import timezone
 
 from .models import ProcessedNews, StockSymbol
@@ -24,7 +22,6 @@ from .utils import analyze_sentiment
 logger = logging.getLogger(__name__)
 task_logger = get_task_logger(__name__)
 
-# ===== Tunables =====
 API_TIMEOUT = 15
 MAX_ARTICLES = 100
 BATCH_SIZE = 25
@@ -32,30 +29,21 @@ RECENT_HOURS_DEFAULT = 24
 
 LOG_FILE = os.path.join(getattr(settings, "BASE_DIR", "."), "logs", "news_fetch_log.txt")
 
-# Alpha Vantage formats seen (your logs show: 20260225T132238)
-_AV_TIME_FORMATS = (
-    "%Y%m%dT%H%M%S",  # 20260225T132238
-    "%Y%m%dT%H%M",    # 20260225T1322 (rare)
-)
-
+_AV_TIME_FORMATS = ("%Y%m%dT%H%M%S", "%Y%m%dT%H%M")
 _STOPWORDS = {
     "the", "and", "for", "with", "that", "this", "from", "into", "your", "you", "are",
     "was", "were", "will", "has", "have", "had", "its", "their", "they", "them",
 }
-
 USER_AGENT = "sentiment-news-worker/1.0"
 
 
-# ===== Utilities =====
 def _write_log(message: str) -> None:
-    """Non-fatal disk logging (optional)."""
     try:
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(f"{datetime.now(dt_timezone.utc).isoformat()} - {message}\n")
     except Exception:
-        # never fail tasks due to log file issues
-        logger.debug("Log write failed", exc_info=True)
+        pass
 
 
 def normalize_title(title: str) -> str:
@@ -63,9 +51,6 @@ def normalize_title(title: str) -> str:
 
 
 def extract_key_phrases(text: str) -> List[str]:
-    """
-    Cheap heuristic: top repeated 2-grams (no extra deps).
-    """
     if not text:
         return []
     words = re.findall(r"[A-Za-z]{3,}", text.lower())
@@ -82,13 +67,6 @@ def extract_key_phrases(text: str) -> List[str]:
 
 
 def _parse_date(article: Dict[str, Any]) -> Optional[datetime]:
-    """
-    Normalize multiple provider date fields to aware UTC datetime.
-    Handles:
-      - AlphaVantage: time_published = 20260225T132238
-      - Finnhub: datetime (epoch seconds int)
-      - Yahoo: pubDate / date strings
-    """
     value = (
         article.get("time_published")
         or article.get("datetime")
@@ -101,32 +79,24 @@ def _parse_date(article: Dict[str, Any]) -> Optional[datetime]:
         return None
 
     try:
-        # Finnhub: epoch seconds int
         if isinstance(value, int):
             return datetime.fromtimestamp(value, tz=dt_timezone.utc)
-
-        # sometimes numeric strings (sec or ms)
         if isinstance(value, str) and value.isdigit():
             iv = int(value)
-            if iv > 1_000_000_000_000:  # ms
+            if iv > 1_000_000_000_000:
                 return datetime.fromtimestamp(iv / 1000.0, tz=dt_timezone.utc)
             return datetime.fromtimestamp(iv, tz=dt_timezone.utc)
-
         if isinstance(value, str):
-            # AlphaVantage like 20260225T132238
             for fmt in _AV_TIME_FORMATS:
                 try:
                     dt = datetime.strptime(value, fmt)
                     return dt.replace(tzinfo=dt_timezone.utc)
                 except ValueError:
                     continue
-
-            # generic parse
             dt = dateutil.parser.parse(value)
             if timezone.is_naive(dt):
                 return timezone.make_aware(dt, dt_timezone.utc)
             return dt.astimezone(dt_timezone.utc)
-
         return None
     except Exception:
         logger.warning("Date parse failed: %s", value)
@@ -155,11 +125,6 @@ def _safe_float(x: Any, default: float = 0.0) -> float:
 
 
 def _standardize_article(symbol: str, raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """
-    Convert provider-specific shapes into one internal shape that matches ProcessedNews fields.
-    Your model fields include:
-      provider, source_name (NOT source)
-    """
     title = (raw.get("title") or raw.get("headline") or raw.get("description") or "").strip()
     if not title:
         return None
@@ -170,50 +135,44 @@ def _standardize_article(symbol: str, raw: Dict[str, Any]) -> Optional[Dict[str,
 
     summary = (raw.get("summary") or raw.get("content") or raw.get("snippet") or "").strip()
 
-    # provider + source_name mapping (critical fix)
     provider = (raw.get("provider") or raw.get("source") or raw.get("publisher") or "other").strip()
     source_name = (raw.get("source_name") or raw.get("publisher") or raw.get("source") or provider).strip()
 
     url = raw.get("url") or raw.get("link") or raw.get("canonicalUrl") or ""
 
-    # banner image mapping (handles alpha: banner_image, finnhub: image, yahoo: thumbnail)
     banner_image_url = (
         raw.get("banner_image_url")
         or raw.get("banner_image")
         or raw.get("image")
         or ""
     )
-    # yahoo shapes often: thumbnail.resolutions[0].url
     if not banner_image_url and isinstance(raw.get("thumbnail"), dict):
         resolutions = raw.get("thumbnail", {}).get("resolutions") or []
         if resolutions and isinstance(resolutions[0], dict):
             banner_image_url = resolutions[0].get("url") or ""
 
-    # stable hash: normalized title + minute-rounded timestamp
     title_norm = normalize_title(title)
     rounded_ts = int(round(published_at.timestamp() / 60) * 60)
     title_hash = hashlib.sha256(f"{title_norm}_{rounded_ts}".encode("utf-8")).hexdigest()
 
     combined_text = f"{title} {summary}".strip()
-
     sentiment = analyze_sentiment(combined_text) or {}
     label = (sentiment.get("label") or "neutral").lower()
     score = _safe_float(sentiment.get("score"), 0.0)
 
     key_phrases = extract_key_phrases(combined_text)
 
-    # IMPORTANT: return only fields that exist in ProcessedNews (plus symbol/title_hash for lookup)
     return {
         "symbol": symbol,
         "title_hash": title_hash,
         "title": title[:200],
         "summary": summary[:500],
         "url": url,
-        "provider": provider[:50],          # adjust if your model differs
-        "source_name": source_name[:255],   # adjust if your model differs
+        "provider": provider[:50],
+        "source_name": source_name[:255],
         "published_at": published_at,
         "sentiment": label,
-        "confidence": max(0.0, min(1.0, abs(score))),  # 0..1
+        "confidence": max(0.0, min(1.0, abs(score))),
         "sentiment_score": score,
         "key_phrases": ", ".join(key_phrases),
         "source_reliability": get_source_reliability(source_name or provider),
@@ -233,24 +192,17 @@ def _filter_recent(raw_articles: List[Dict[str, Any]], hours: int) -> List[Dict[
 
 
 def _upsert_articles(symbol: str, raw_articles: List[Dict[str, Any]]) -> Tuple[int, int]:
-    """
-    Upsert standardized articles into DB.
-    Returns (new_count, updated_or_duplicate_count)
-    """
     new_count = 0
     dup_or_updated = 0
 
     for i in range(0, len(raw_articles), BATCH_SIZE):
         batch = raw_articles[i : i + BATCH_SIZE]
-
         for raw in batch:
             std = _standardize_article(symbol, raw)
             if not std:
                 continue
-
             lookup = {"symbol": symbol, "title_hash": std["title_hash"]}
             defaults = {k: v for k, v in std.items() if k not in ("symbol", "title_hash")}
-
             try:
                 with transaction.atomic():
                     _, created = ProcessedNews.objects.update_or_create(
@@ -264,16 +216,13 @@ def _upsert_articles(symbol: str, raw_articles: List[Dict[str, Any]]) -> Tuple[i
             except IntegrityError:
                 dup_or_updated += 1
             except Exception as e:
-                # This should now NOT happen unless your model differs
                 task_logger.warning("Upsert failed for %s: %s", symbol, e)
-
         del batch
         gc.collect()
-
     return new_count, dup_or_updated
 
 
-# ===== Fetchers =====
+# ---- Fetchers ----
 def _fetch_alpha_vantage(session: requests.Session, symbol: str) -> List[Dict[str, Any]]:
     params = {
         "function": "NEWS_SENTIMENT",
@@ -285,13 +234,10 @@ def _fetch_alpha_vantage(session: requests.Session, symbol: str) -> List[Dict[st
     r = session.get("https://www.alphavantage.co/query", params=params, timeout=API_TIMEOUT)
     r.raise_for_status()
     data = r.json() or {}
-
-    # Rate-limit / errors come as "Note" or "Information"
     if "Note" in data or "Information" in data:
         raise ValueError(data.get("Note") or data.get("Information"))
     if "feed" not in data:
         raise ValueError(data.get("Error Message", "Invalid Alpha Vantage response"))
-
     feed = data.get("feed") or []
     out: List[Dict[str, Any]] = []
     for a in feed[:MAX_ARTICLES]:
@@ -333,36 +279,26 @@ def _fetch_yahoo_rapidapi(session: requests.Session, symbol: str) -> List[Dict[s
     )
     r.raise_for_status()
     data = r.json() or {}
-
-    # Some responses nest differently; keep it flexible
     articles = data.get("items") or data.get("news") or []
     out: List[Dict[str, Any]] = []
     for a in articles[:MAX_ARTICLES]:
-        # keep raw; banner mapping handled in standardizer
         out.append(a)
     return out
 
 
-# ===== Celery Tasks =====
-@shared_task(
-    bind=True,
-    autoretry_for=(Exception,),
-    retry_backoff=120,
-    max_retries=2,
-    time_limit=300,
-    soft_time_limit=240,
-)
-def fetch_and_process_news(self, symbol: str, fetch_latest_only: bool = True, recent_hours: int = RECENT_HOURS_DEFAULT) -> Dict[str, Any]:
+# ---- Core Public Function (sync) ----
+def fetch_and_save_news(
+    symbol: str,
+    fetch_latest_only: bool = True,
+    recent_hours: int = RECENT_HOURS_DEFAULT,
+    timeout_seconds: int = 30,
+) -> Dict[str, Any]:
     """
-    Fetch and process news for one symbol.
-    - DB fast-exit if we already have news in last `recent_hours`
-    - Fetch AlphaVantage -> Finnhub -> Yahoo RapidAPI (whichever works)
-    - Optionally filter to last `recent_hours`
-    - Upsert into ProcessedNews
+    Fetch news from external APIs and save to DB.
+    This is the core logic used by both Celery and synchronous views.
     """
     close_old_connections()
     symbol = (symbol or "").strip().upper()
-
     if not symbol:
         return {"status": "error", "message": "Symbol required"}
 
@@ -374,6 +310,7 @@ def fetch_and_process_news(self, symbol: str, fetch_latest_only: bool = True, re
 
         with requests.Session() as session:
             session.headers.update({"User-Agent": USER_AGENT})
+            session.timeout = timeout_seconds
 
             fetchers = []
             if getattr(settings, "ALPHA_VANTAGE_KEY", None):
@@ -418,23 +355,32 @@ def fetch_and_process_news(self, symbol: str, fetch_latest_only: bool = True, re
 
     except MemoryError:
         task_logger.critical("Memory exhausted during processing for %s", symbol)
-        raise self.retry(countdown=300)
+        return {"status": "error", "message": "Memory exhausted"}
     except Exception as e:
         task_logger.error("Unexpected error for %s: %s", symbol, e)
-        raise self.retry(exc=e, countdown=300)
+        return {"status": "error", "message": str(e)}
     finally:
         close_old_connections()
         gc.collect()
 
 
+# ---- Celery Task (thin wrapper) ----
+@shared_task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=120,
+    max_retries=2,
+    time_limit=300,
+    soft_time_limit=240,
+)
+def fetch_and_process_news(self, symbol: str, fetch_latest_only: bool = True, recent_hours: int = RECENT_HOURS_DEFAULT) -> Dict[str, Any]:
+    return fetch_and_save_news(symbol, fetch_latest_only, recent_hours)
+
+
 @shared_task(bind=True, time_limit=600, soft_time_limit=540)
 def fetch_news_for_all_symbols(self) -> Dict[str, Any]:
-    """
-    Periodic task: enqueue fetch_and_process_news for all active symbols.
-    """
     close_old_connections()
     symbols = list(StockSymbol.objects.filter(is_active=True).values_list("symbol", flat=True))
-
     enqueued = 0
     for sym in symbols:
         try:
@@ -442,5 +388,4 @@ def fetch_news_for_all_symbols(self) -> Dict[str, Any]:
             enqueued += 1
         except Exception as e:
             task_logger.warning("Failed to enqueue news task for %s: %s", sym, e)
-
     return {"status": "ok", "symbols": len(symbols), "enqueued": enqueued}
