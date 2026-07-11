@@ -89,8 +89,15 @@ DATABASES = {
     'default': dj_database_url.config(
         default='sqlite:///db.sqlite3',
         conn_max_age=600,
+        ssl_require=True,  # Force SSL for PostgreSQL
     )
 }
+
+# Additional SSL options for PostgreSQL (if needed)
+if not DEBUG and DATABASES['default']['ENGINE'] == 'django.db.backends.postgresql':
+    DATABASES['default']['OPTIONS'] = {
+        'sslmode': 'require',
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
