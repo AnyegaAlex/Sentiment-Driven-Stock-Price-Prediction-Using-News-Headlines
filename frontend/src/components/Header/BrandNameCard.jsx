@@ -1,13 +1,13 @@
-import React from "react";
-import PropTypes from "prop-types";
-import { FaChartPie } from "react-icons/fa";
-import { cn } from "@/lib/utils";
+import React from 'react';
+import PropTypes from 'prop-types';
+import { FaChartPie } from 'react-icons/fa';
+import { cn } from '@/lib/utils';
 
-const BrandNameCard = ({ brandName, logoUrl, className }) => {
+const BrandNameCard = ({ brandName = 'StockSage', logoUrl = null, className = '' }) => {
   return (
     <div className={cn(
       "flex flex-col sm:flex-row items-center justify-center",
-      "gap-2 sm:gap-3 md:gap-4", 
+      "gap-2 sm:gap-3 md:gap-4",
       className
     )}>
       {logoUrl ? (
@@ -15,11 +15,11 @@ const BrandNameCard = ({ brandName, logoUrl, className }) => {
           src={logoUrl}
           alt=""
           className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
-          aria-hidden="true" 
+          aria-hidden="true"
         />
       ) : (
-        <FaChartPie 
-          className="w-8 h-8 sm:w-10 sm:h-10 text-blue-600 dark:text-blue-400" 
+        <FaChartPie
+          className="w-8 h-8 sm:w-10 sm:h-10 text-blue-600 dark:text-blue-400"
           aria-hidden="true"
         />
       )}
@@ -35,15 +35,9 @@ const BrandNameCard = ({ brandName, logoUrl, className }) => {
 };
 
 BrandNameCard.propTypes = {
-  brandName: PropTypes.string.isRequired,
+  brandName: PropTypes.string,
   logoUrl: PropTypes.string,
   className: PropTypes.string,
-};
-
-BrandNameCard.defaultProps = {
-  brandName: "StockSage",
-  logoUrl: null,
-  className: "",
 };
 
 export default BrandNameCard;

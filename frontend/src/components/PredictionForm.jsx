@@ -78,7 +78,7 @@ const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predic
   };
 
   return (
-    <div className="p-6 rounded-xl bg-white dark:bg-gray-800 shadow-md max-w-md mx-auto">
+    <div className="p-4 sm:p-6 rounded-xl bg-white dark:bg-gray-800 shadow-md max-w-md sm:max-w-lg mx-auto w-full">
       <h2 className="text-xl font-bold mb-6 text-gray-800 dark:text-gray-100">
         Stock Movement Prediction
       </h2>
@@ -121,7 +121,7 @@ const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predic
         <button
           type="submit"
           disabled={loading || !validateForm()}
-          className="w-full p-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+          className="w-full p-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 min-h-[44px] min-w-[44px]"
           aria-busy={loading}
         >
           {loading ? (
@@ -141,7 +141,7 @@ const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predic
       {prediction && (
         <div
           role="status"
-          className="mt-6 p-4 rounded-lg bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200"
+          className="mt-6 p-4 rounded-lg bg-green-100 dark:bg-green-900 border border-green-200 dark:border-green-800 shadow-sm text-green-700 dark:text-green-200"
         >
           <strong className="font-medium">Prediction:</strong>{" "}
           <span className="capitalize">{prediction.toLowerCase()}</span>
@@ -151,7 +151,7 @@ const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predic
       {error && (
         <div
           role="alert"
-          className="mt-6 p-4 rounded-lg bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200"
+          className="mt-6 p-4 rounded-lg bg-red-100 dark:bg-red-900 border border-red-200 dark:border-red-800 shadow-sm text-red-700 dark:text-red-200"
         >
           <strong className="font-medium">Error:</strong> {error}
         </div>

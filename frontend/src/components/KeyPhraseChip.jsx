@@ -1,9 +1,9 @@
 import React, { memo, useCallback } from "react";
 import PropTypes from "prop-types";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils"; // ✅ Add this import
 
-const KeyPhraseChip = ({ phrase, onClick }) => {
-  // Memoize the trimmed phrase and click handler
+const KeyPhraseChip = ({ phrase = "", onClick = () => {} }) => {
   const trimmedPhrase = phrase?.trim() || "";
   const handleClick = useCallback(() => {
     onClick(trimmedPhrase);
@@ -16,8 +16,12 @@ const KeyPhraseChip = ({ phrase, onClick }) => {
       <TooltipTrigger asChild>
         <button
           onClick={handleClick}
-          className={`rounded-full bg-gray-200 dark:bg-gray-700 px-3 py-1 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors 
-          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 truncate max-w-[180px]`}
+          className={cn(
+            "rounded-full bg-gray-200 dark:bg-gray-700 px-3 py-1 text-sm text-gray-700 dark:text-gray-200",
+            "hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors",
+            "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800",
+            "truncate max-w-[180px]"
+          )}
           aria-label={`Key phrase: ${trimmedPhrase}`}
           disabled={!trimmedPhrase}
         >
@@ -25,7 +29,7 @@ const KeyPhraseChip = ({ phrase, onClick }) => {
         </button>
       </TooltipTrigger>
       {trimmedPhrase && (
-        <TooltipContent 
+        <TooltipContent
           className="max-w-[240px] break-words"
           side="top"
           align="center"
@@ -40,11 +44,6 @@ const KeyPhraseChip = ({ phrase, onClick }) => {
 KeyPhraseChip.propTypes = {
   phrase: PropTypes.string,
   onClick: PropTypes.func,
-};
-
-KeyPhraseChip.defaultProps = {
-  phrase: "",
-  onClick: () => {},
 };
 
 export default memo(KeyPhraseChip);

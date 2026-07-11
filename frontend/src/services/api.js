@@ -1,30 +1,34 @@
 import axios from 'axios';
 
-// Configure base URL with fallbacks
+// ✅ In development, use empty baseURL so Vite proxy handles /api/ requests.
+// In production, use the Render URL (or env var) directly.
 const baseURL = import.meta.env.VITE_API_BASE_URL || 
-  'https://sentiment-driven-stock-price-prediction.onrender.com';
+  (import.meta.env.DEV ? '' : 'https://sentiment-driven-stock-price-prediction.onrender.com');
 
 const api = axios.create({
-  baseURL: baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL, // Remove trailing slash
-  timeout: 15000, // Increased timeout for slower connections
-  withCredentials: true, // For session/cookie auth if needed
+  baseURL: baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL,
+  timeout: 15000,
+  withCredentials: true,
 });
 
-// Request interceptor: attach token and set default Content-Type
+// Request interceptor – unchanged except we now have a proper baseURL
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('accessToken');
+    // If URL is relative and doesn't start with /api, prepend /api
+    if (config.url && config.url.startsWith('/') && !config.url.startsWith('/api')) {
+      config.url = `/api${config.url}`;
+    }
+
+    const token = sessionStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    // Standard headers
     config.headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      ...config.headers, // Preserve existing headers
+      ...config.headers,
     };
 
-    // Add cache-buster for GET requests
     if (config.method?.toLowerCase() === 'get') {
       config.params = {
         ...config.params,
@@ -33,41 +37,28 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-      console.error('Request error:', error);
-      return Promise.reject(error);
-    }
-  );
+  (error) => Promise.reject(error)
+);
 
-// Response interceptor: log 401 errors and handle token expiration if needed
+// Response interceptor (same as before)
 api.interceptors.response.use(
-  (response) => {
-    // Handle successful responses
-    return response.data; // Directly return data instead of full response
-  },
+  (response) => response.data,
   (error) => {
-    // Enhanced error handling
     if (error.response) {
-      // Server responded with error status
       console.error('API Error:', {
         status: error.response.status,
         message: error.response.data?.message || 'Unknown error',
-        url: error.config.url,
+        url: error.config?.url,
       });
-
-      // Specific status code handling
       if (error.response.status === 401) {
-        // Token expired - trigger refresh or logout
+        sessionStorage.removeItem('accessToken');
         window.dispatchEvent(new Event('unauthorized'));
       }
     } else if (error.request) {
-      // Request was made but no response received
       console.error('Network Error:', error.message);
     } else {
-      // Something happened in setting up the request
       console.error('Request Setup Error:', error.message);
     }
-
     return Promise.reject({
       code: error.response?.status || 'NETWORK_ERROR',
       message: error.response?.data?.message || error.message,
@@ -76,7 +67,6 @@ api.interceptors.response.use(
   }
 );
 
-// Add retry logic wrapper
 export const apiWithRetry = async (config, retries = 3) => {
   try {
     return await api(config);

@@ -19,11 +19,13 @@ DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 # Base hosts for security
 BASE_ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split()
 
-ALLOWED_HOSTS = (
-    ["localhost", "127.0.0.1", "[::1]"] + BASE_ALLOWED_HOSTS if DEBUG
-    else [".onrender.com"] + BASE_ALLOWED_HOSTS
-)
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"] + BASE_ALLOWED_HOSTS
 
+# Add any additional hosts from environment variable
+env_hosts = os.getenv("ALLOWED_HOSTS", "")
+if env_hosts:
+    ALLOWED_HOSTS.extend(env_hosts.split(','))
+    
 # --- Paths ---
 LOG_DIR = BASE_DIR / 'logs'
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -36,7 +38,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'sentiment_driven_stock_price_prediction_engine.celery_app',
     
     # Third-party apps
     'django_celery_beat',
@@ -52,6 +53,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -59,7 +62,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 ROOT_URLCONF = 'sentiment_driven_stock_price_prediction_engine.urls'
@@ -90,13 +92,6 @@ DATABASES = {
     )
 }
 
-if os.getenv('DJANGO_DEVELOPMENT') == 'true':
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-
-# For local development (optional)
 if os.getenv('DJANGO_DEVELOPMENT') == 'true':
     DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -229,13 +224,10 @@ CELERY_TASK_ROUTES = {
 }
 
 CELERY_BEAT_SCHEDULE = {
-    'fetch-daily-stock-data': {
-        'task': 'stocks.tasks.fetch_stock_data',
-        'schedule': crontab(hour=16, minute=0),  # 4 PM UTC (after market close)
-    },
     'process-news-every-hour': {
-        'task': 'news.tasks.fetch_and_process_news',
-        'schedule': crontab(minute=0),
+        'task': 'news.tasks.fetch_news_for_all_symbols',
+        'schedule': crontab(minute=0),  # hourly
+        'options': {'queue': 'periodic'},
     },
 }
 
@@ -256,12 +248,6 @@ CACHES = {
         'KEY_PREFIX': 'sentiment_analysis',  # Prefix for all cache keys
     }
 }
-
-
-# --- File Upload & Memory Limits ---
-DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 2
-FILE_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 2
-SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 
 # Logging Configuration
 LOGGING = {
@@ -307,10 +293,9 @@ FINBERT_CONFIG = {
 ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY")
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
+RAPIDAPI_HOST = os.getenv("RAPIDAPI_HOST", "apidojo-yahoo-finance-v1.p.rapidapi.com")
 
 # Rate limiting settings
 RATE_LIMIT_PERIOD = 60  # 60 seconds
 RATE_LIMIT_MAX_REQUESTS = 100  # Max requests per minute
 
-# --- Default PK Field ---
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

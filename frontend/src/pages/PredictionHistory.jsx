@@ -1,80 +1,44 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { 
+import React from 'react';
+import {
   Card,
   CardHeader,
-  CardContent, 
+  CardContent,
   CardFooter,
 } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { 
-  FaArrowUp, 
-  FaArrowDown, 
+import {
+  FaArrowUp,
+  FaArrowDown,
   FaRegCircle,
   FaExternalLinkAlt
 } from 'react-icons/fa';
 import { Bar } from 'react-chartjs-2';
-import { 
-  Chart as ChartJS, 
-  CategoryScale, 
-  LinearScale, 
-  BarElement, 
-  Title, 
-  Tooltip, 
-  Legend 
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
 } from 'chart.js';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertTitle } from '@/components/ui/alert';
+import { usePredictionHistoryQuery } from '@/hooks/queries/usePredictionHistoryQuery';
 
 // Register Chart.js components
 ChartJS.register(
-  CategoryScale, 
-  LinearScale, 
-  BarElement, 
-  Title, 
-  Tooltip, 
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
   Legend
 );
-import { fetchMockPredictions } from '@/services/mockPredictionHistory';
 
 const PredictionHistory = () => {
-  const [predictions, setPredictions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: predictions = [], isLoading, error } = usePredictionHistoryQuery();
 
-  // Fetch prediction data with error handling
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        
-        // Try real API first, fall back to mock data
-        let response;
-        try {
-          response = await axios.get('/api/stocks/history/');
-          
-          if (!response.data || !Array.isArray(response.data)) {
-            throw new Error('Invalid data format received');
-          }
-          
-          setPredictions(response.data);
-        } catch (apiError) {
-          console.warn("Using mock data due to API error:", apiError);
-          const mockData = await fetchMockPredictions();
-          setPredictions(mockData);
-        }
-      } catch (error) {
-        console.error('Error fetching prediction data:', error);
-        setError(error.response?.data?.message || 'Failed to load prediction history');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchData();
-  }, []);
-
-  // Chart data configuration
   const chartData = {
     labels: predictions.map(pred => new Date(pred.date).toLocaleDateString()),
     datasets: [
@@ -95,16 +59,13 @@ const PredictionHistory = () => {
     ],
   };
 
-  // Chart options
   const chartOptions = {
     responsive: true,
     plugins: {
-      title: { 
-        display: true, 
+      title: {
+        display: true,
         text: 'Prediction Metrics Over Time',
-        font: {
-          size: 16
-        }
+        font: { size: 16 }
       },
       tooltip: {
         callbacks: {
@@ -124,8 +85,7 @@ const PredictionHistory = () => {
     }
   };
 
-  // Render loading skeletons
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="p-4 space-y-6">
         <Skeleton className="h-10 w-1/3 mb-6" />
@@ -154,20 +114,18 @@ const PredictionHistory = () => {
     );
   }
 
-  // Render error state
   if (error) {
     return (
       <div className="p-4">
         <Alert variant="destructive">
           <AlertTitle>Error Loading Predictions</AlertTitle>
-          <p>{error}</p>
+          <p>{error.message || 'Failed to load prediction history'}</p>
         </Alert>
       </div>
     );
   }
 
-  // Render empty state
-  if (!loading && predictions.length === 0) {
+  if (predictions.length === 0) {
     return (
       <div className="p-4">
         <Alert>
@@ -182,88 +140,88 @@ const PredictionHistory = () => {
     <div className="p-4 dark:bg-gray-900 min-h-screen">
       <h2 className="text-2xl font-semibold mb-6 dark:text-white">Prediction History</h2>
 
-      {/* Prediction History Chart */}
       <div className="mb-8 p-4 bg-white rounded-lg shadow dark:bg-gray-800">
-        <Bar 
-          data={chartData} 
-          options={chartOptions} 
+        <Bar
+          data={chartData}
+          options={chartOptions}
           height={400}
         />
       </div>
 
-      {/* Prediction Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {predictions.map((prediction, index) => (
-          <Card key={index} className="shadow-lg border rounded-lg dark:border-gray-700 dark:bg-gray-800">
-            <CardHeader className="p-4 border-b dark:border-gray-700">
-              <h3 className="font-semibold dark:text-white">
-                {prediction.headline.length > 50 
-                  ? `${prediction.headline.slice(0, 50)}...` 
-                  : prediction.headline}
-              </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {new Date(prediction.date).toLocaleDateString()} | {prediction.stock_symbol}
-              </p>
-            </CardHeader>
+        {predictions.map((prediction, index) => {
+          const confidence = prediction.confidence || 0;
+          const sentimentScore = prediction.sentiment_score || 0;
 
-            <CardContent className="p-4 space-y-4">
-              {/* Movement Indicator */}
-              <div className="flex items-center space-x-2">
-                <div className="flex items-center">
-                  {prediction.predicted_movement === 'up' ? (
-                    <FaArrowUp className="text-green-500 dark:text-green-400" />
-                  ) : prediction.predicted_movement === 'down' ? (
-                    <FaArrowDown className="text-red-500 dark:text-red-400" />
-                  ) : (
-                    <FaRegCircle className="text-gray-500 dark:text-gray-400" />
-                  )}
-                  <span className="ml-2 font-medium dark:text-white">
-                    {prediction.predicted_movement.toUpperCase()}
-                  </span>
+          return (
+            <Card key={index} className="shadow-lg border rounded-lg dark:border-gray-700 dark:bg-gray-800">
+              <CardHeader className="p-4 border-b dark:border-gray-700">
+                <h3 className="font-semibold dark:text-white">
+                  {prediction.headline.length > 50
+                    ? `${prediction.headline.slice(0, 50)}...`
+                    : prediction.headline}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {new Date(prediction.date).toLocaleDateString()} | {prediction.stock_symbol}
+                </p>
+              </CardHeader>
+
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-center space-x-2">
+                  <div className="flex items-center">
+                    {prediction.predicted_movement === 'up' ? (
+                      <FaArrowUp className="text-green-500 dark:text-green-400" />
+                    ) : prediction.predicted_movement === 'down' ? (
+                      <FaArrowDown className="text-red-500 dark:text-red-400" />
+                    ) : (
+                      <FaRegCircle className="text-gray-500 dark:text-gray-400" />
+                    )}
+                    <span className="ml-2 font-medium dark:text-white">
+                      {prediction.predicted_movement.toUpperCase()}
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-              {/* Sentiment Score */}
-              <div>
-                <div className="flex justify-between text-sm font-medium dark:text-white">
-                  <span>Sentiment Score</span>
-                  <span>{prediction.sentiment_score.toFixed(2)}</span>
+                <div>
+                  <div className="flex justify-between text-sm font-medium dark:text-white">
+                    <span>Sentiment Score</span>
+                    <span>{sentimentScore.toFixed(2)}</span>
+                  </div>
+                  <Progress
+                    value={Math.abs(sentimentScore) * 100}
+                    className="mt-2 h-2"
+                    indicatorClassName={
+                      sentimentScore >= 0
+                        ? 'bg-green-500 dark:bg-green-400'
+                        : 'bg-red-500 dark:bg-red-400'
+                    }
+                  />
                 </div>
-                <Progress 
-                  value={Math.abs(prediction.sentiment_score) * 100} 
-                  className="mt-2 h-2"
-                  indicatorColor={
-                    prediction.sentiment_score >= 0 
-                      ? 'bg-green-500 dark:bg-green-400' 
-                      : 'bg-red-500 dark:bg-red-400'
-                  }
-                />
-              </div>
 
-              {/* Confidence Level */}
-              <div>
-                <div className="flex justify-between text-sm font-medium dark:text-white">
-                  <span>Confidence</span>
-                  <span>{prediction.confidence.toFixed(2)}</span>
+                <div>
+                  <div className="flex justify-between text-sm font-medium dark:text-white">
+                    <span>Confidence</span>
+                    <span>{confidence.toFixed(2)}</span>
+                  </div>
+                  <Progress
+                    value={confidence * 100}
+                    className="mt-2 h-2"
+                    indicatorClassName="bg-blue-500 dark:bg-blue-400"
+                  />
                 </div>
-                <Progress 
-                  value={prediction.confidence * 100} 
-                  className="mt-2 h-2"
-                  indicatorColor="bg-blue-500 dark:bg-blue-400"
-                />
-              </div>
-            </CardContent>
+              </CardContent>
 
-            <CardFooter className="p-4 border-t dark:border-gray-700">
-              <button
-                className="text-blue-500 dark:text-blue-400 font-medium flex items-center hover:underline"
-                onClick={() => alert(`Full prediction details for ${prediction.date}`)}
-              >
-                View Details <FaExternalLinkAlt className="ml-2 w-3 h-3" />
-              </button>
-            </CardFooter>
-          </Card>
-        ))}
+              <CardFooter className="p-4 border-t dark:border-gray-700">
+                <button
+                  className="text-blue-500 dark:text-blue-400 font-medium flex items-center hover:underline"
+                  onClick={() => alert(`Full prediction details for ${prediction.date}`)}
+                >
+                  View Details <FaExternalLinkAlt className="ml-2 w-3 h-3" />
+                </button>
+              </CardFooter>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

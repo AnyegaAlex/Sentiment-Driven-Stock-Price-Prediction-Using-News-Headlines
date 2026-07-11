@@ -1,4 +1,4 @@
-import { createContext, useState } from "react";
+import { createContext, useContext, useState } from "react";
 import PropTypes from "prop-types";
 
 const DashboardContext = createContext();
@@ -12,6 +12,15 @@ export const DashboardProvider = ({ children }) => {
       {children}
     </DashboardContext.Provider>
   );
+};
+
+// ✅ Custom hook for easy context access
+export const useDashboard = () => {
+  const context = useContext(DashboardContext);
+  if (!context) {
+    throw new Error("useDashboard must be used within a DashboardProvider");
+  }
+  return context;
 };
 
 DashboardProvider.propTypes = {

@@ -11,161 +11,82 @@ from django.urls import reverse
 logger = logging.getLogger(__name__)
 
 
-class ProcessedNewsManager(models.Manager):
-    def transform_article(self, article):
-        # Map 'score' to 'confidence' if present and validate the value.
-        if 'score' in article:
-            try:
-                # Convert to float if needed.
-                article['confidence'] = float(article.pop('score'))
-                # Ensure the confidence is between 0 and 1.
-                if not (0.0 <= article['confidence'] <= 1.0):
-                    raise ValidationError("Confidence must be a number between 0 and 1")
-            except (ValueError, TypeError):
-                # If conversion fails, default to a neutral confidence.
-                article['confidence'] = 0.5
-        return article
-
-    def bulk_create_safe(self, articles):
-        """Safe bulk create with conflict handling, transforming incoming articles if needed."""
-        transformed_articles = [self.transform_article(article) for article in articles]
-        return self.bulk_create(
-            [self.model(**article) for article in transformed_articles],
-            update_conflicts=True,
-            update_fields=['summary', 'sentiment', 'confidence', 'updated_at'],
-            unique_fields=['title_hash', 'symbol']
-        )
-
-
 class ProcessedNews(models.Model):
-    SENTIMENT_CHOICES = [
-        ('positive', 'Positive'),
-        ('negative', 'Negative'),
-        ('neutral', 'Neutral')
-    ]
-    SOURCE_CHOICES = [
+    PROVIDER_CHOICES = [
         ('alpha', 'Alpha Vantage'),
         ('yahoo', 'Yahoo Finance'),
         ('finnhub', 'Finnhub'),
-        ('other', 'Other')
+        ('other', 'Other'),
     ]
 
-    url = models.CharField(
-        max_length=2000,
-        validators=[URLValidator()],
-        blank=True,
-        null=True,
-        help_text="Original article URL"
-    )
-    symbol = models.CharField(
-        max_length=10, 
-        db_index=True,
-        help_text="Stock ticker symbol"
-    )
-    title = models.TextField(help_text="Normalized article headline")
-    # Removed unique=True from title_hash to enforce uniqueness only per (title_hash, symbol)
-    title_hash = models.CharField(
-        max_length=64, 
-        editable=False,
-        db_index=True,
-        help_text="SHA-256 hash of normalized title"
-    )
-    summary = models.TextField(
-        blank=True, 
-        null=True,
-        help_text="Processed article summary"
-    )
-    # Increased max_length for source from 20 to 100 to match the processing in tasks.py
-    source = models.CharField(
-        max_length=100, 
-        choices=SOURCE_CHOICES, 
-        default='other'
-    )
-    published_at = models.DateTimeField(
-        db_index=True,
-        help_text="Original publication timestamp"
-    )
-    sentiment = models.CharField(
-        max_length=10, 
-        choices=SENTIMENT_CHOICES, 
-        db_index=True
-    )
-    sentiment_score = models.FloatField(default=0.0)
-    confidence = models.FloatField(
-        default=0.5,  # Default to neutral sentiment
-        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
-        help_text="Sentiment confidence score 0-1"
-    )
-    key_phrases = models.TextField(
-        blank=True,
-        help_text="Extracted key phrases (comma-separated)"
-    )
-    source_reliability = models.IntegerField(
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
-        default=70,
-        help_text="Reliability score (0-100)"
-    )
-    raw_data = models.JSONField(
-        default=dict,
-        help_text="Raw API response data"
-    )
- # Added fields for banner image URL and timestamp for when the article was created
-    banner_image_url = models.URLField(
-        max_length=500, 
-        blank=True, 
-        default='',
-        verbose_name="Banner Image URL"
-    )
+    SENTIMENT_CHOICES = [
+        ('positive', 'Positive'),
+        ('negative', 'Negative'),
+        ('neutral', 'Neutral'),
+    ]
+
+    symbol = models.CharField(max_length=10, db_index=True)
+    title = models.TextField(help_text="Raw article headline")
+    title_hash = models.CharField(max_length=64, editable=False, db_index=True)
+
+    summary = models.TextField(blank=True, null=True)
+    url = models.URLField(max_length=2000, blank=True, null=True)
+
+    provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default='other')
+    source_name = models.CharField(max_length=120, blank=True, default="")  # Reuters, Bloomberg, etc.
+
+    published_at = models.DateTimeField(db_index=True)
+
+    sentiment = models.CharField(max_length=10, choices=SENTIMENT_CHOICES, db_index=True)
+    confidence = models.FloatField(default=0.5, validators=[MinValueValidator(0.0), MaxValueValidator(1.0)])
+    sentiment_score = models.FloatField(default=0.0)  # e.g. -0.93 .. +0.93
+
+    key_phrases = models.TextField(blank=True, default="")
+    source_reliability = models.IntegerField(default=70, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    banner_image_url = models.URLField(max_length=500, blank=True, default="")
+    raw_data = models.JSONField(default=dict)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    objects = ProcessedNewsManager()
-
     class Meta:
-        verbose_name = 'Processed News Article'
-        verbose_name_plural = 'Processed News Articles'
         ordering = ['-published_at']
-        indexes = [
-            models.Index(fields=['symbol', '-published_at', 'sentiment']),
-            models.Index(fields=['source', 'sentiment']),
-            models.Index(fields=['source_reliability', 'published_at']),
-        ]
         constraints = [
-            models.UniqueConstraint(
-                fields=['title_hash', 'symbol'],
-                name='unique_article_per_symbol'
-            ),
-            models.CheckConstraint(
-                check=models.Q(confidence__gte=0.0) & models.Q(confidence__lte=1.0),
-                name="confidence_range"
-            ),
-            models.CheckConstraint(
-                check=models.Q(source_reliability__gte=0) & models.Q(source_reliability__lte=100),
-                name="reliability_range"
-            )
+            models.UniqueConstraint(fields=['title_hash', 'symbol'], name='unique_article_per_symbol'),
         ]
 
-    def __str__(self):
-        return f"{self.symbol} - {self.title[:50]}"
+    @staticmethod
+    def _normalize_title(title: str) -> str:
+        t = (title or "").strip().lower()
+        t = re.sub(r"\s+", " ", t)
+        t = re.sub(r"[^\w\s]", "", t)
+        return t
+
+    def _compute_title_hash(self) -> str:
+        # include published_at (minute resolution) to reduce collisions on repeated headlines
+        ts = int(self.published_at.timestamp() // 60) if self.published_at else 0
+        base = f"{self._normalize_title(self.title)}_{ts}"
+        return hashlib.sha256(base.encode("utf-8")).hexdigest()
 
     def save(self, *args, **kwargs):
-        # Ensure confidence is a valid float within 0 and 1.
-        if not isinstance(self.confidence, (float, int)) or not (0.0 <= self.confidence <= 1.0):
-            raise ValidationError("Confidence must be a number between 0 and 1")
-                
-        # Generate normalized title hash if not present.
-        if not self.title_hash:
-            normalized_title = re.sub(r'\s+', ' ', self.title.strip().lower())
-            normalized_title = re.sub(r'[^\w\s]', '', normalized_title)
-            self.title_hash = hashlib.sha256(normalized_title.encode()).hexdigest()
-
-        # Validate required fields.
         if not self.symbol or not self.title:
-            raise ValidationError("Symbol and title are required fields")
+            raise ValidationError("Symbol and title are required.")
+        if self.published_at and self.published_at > timezone.now():
+            raise ValidationError("Publication date cannot be in the future.")
 
-        logger.debug(f"Saving ProcessedNews: {self.title[:50]}")
+        # always compute hash consistently
+        self.title_hash = self._compute_title_hash()
+
+        # ensure sentiment_score matches confidence + label
+        if self.sentiment == "positive":
+            self.sentiment_score = abs(float(self.confidence))
+        elif self.sentiment == "negative":
+            self.sentiment_score = -abs(float(self.confidence))
+        else:
+            self.sentiment_score = 0.0
+
         super().save(*args, **kwargs)
-
+        
     def clean(self):
         """Business logic validation."""
         if self.confidence < 0.4:  # Match utils.py confidence threshold

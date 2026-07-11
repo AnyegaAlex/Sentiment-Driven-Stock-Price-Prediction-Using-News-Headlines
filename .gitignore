@@ -70,3 +70,5 @@ build/
 stock_price_model.pkl
 
 stock-sentiment-ui/
+
+.venv

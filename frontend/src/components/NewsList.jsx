@@ -13,20 +13,20 @@ import { fetchMockNews } from "@/services/mockNewsData";
 
 // Sentiment configuration (memoized outside component)
 const sentimentConfig = {
-  positive: { 
-    icon: "📈", 
-    badgeClass: "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200",
-    progressClass: "bg-green-500"
+  positive: {
+    badgeClass: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
+    icon: "📈",
+    progressClass: "bg-gradient-to-r from-emerald-400 to-green-500 shadow-[0_0_12px_rgba(34,197,94,0.45)]"
   },
-  neutral: { 
-    icon: "➖", 
-    badgeClass: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
-    progressClass: "bg-gray-500"
+  neutral: {
+    badgeClass: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700",
+    icon: "➖",
+    progressClass: "bg-gradient-to-r from-slate-300 to-slate-400 shadow-[0_0_10px_rgba(148,163,184,0.35)]"
   },
-  negative: { 
-    icon: "📉", 
-    badgeClass: "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200",
-    progressClass: "bg-red-500"
+  negative: {
+    badgeClass: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300 border-rose-200 dark:border-rose-800",
+    icon: "📉",
+    progressClass: "bg-gradient-to-r from-rose-500 to-red-500 shadow-[0_0_12px_rgba(244,63,94,0.45)]"
   }
 };
 
@@ -36,7 +36,7 @@ const sentimentConfig = {
 const NewsItem = React.memo(function NewsItem({ item }) {
   const sentiment = item.sentiment?.toLowerCase() || 'neutral';
   const config = sentimentConfig[sentiment] || sentimentConfig.neutral;
-  
+
   const parseDate = useCallback((dateString) => {
     if (!dateString) return "Date not available";
     try {
@@ -55,9 +55,9 @@ const NewsItem = React.memo(function NewsItem({ item }) {
     return (
       <div className="mt-2 flex flex-wrap gap-1">
         {phrases.slice(0, 3).map((phrase, i) => (
-          <Badge 
-            key={`phrase-${i}`} 
-            variant="outline" 
+          <Badge
+            key={`phrase-${i}`}
+            variant="outline"
             className="text-xs px-2 py-0.5 rounded-full"
           >
             {phrase}
@@ -99,7 +99,7 @@ const NewsItem = React.memo(function NewsItem({ item }) {
         </p>
 
         <div className="text-xs text-muted-foreground mt-auto flex justify-between items-center">
-          <span>{parseDate(item.date)}</span>
+          <span>{parseDate(item.date || item.published_at)}</span>
           <span className="italic truncate max-w-[120px]">{item.source}</span>
         </div>
 
@@ -115,10 +115,7 @@ const NewsItem = React.memo(function NewsItem({ item }) {
                 <span className="text-xs">Confidence: {item.confidence.toFixed(0)}%</span>
               </TooltipTrigger>
               <TooltipContent className="w-40">
-                <Progress 
-                  value={item.confidence} 
-                  className={config.progressClass}
-                />
+                <Progress value={item.confidence} indicatorClassName={config.progressClass} />
                 <div className="text-center text-xs mt-1">Analysis Confidence</div>
               </TooltipContent>
             </Tooltip>
@@ -134,9 +131,9 @@ const NewsItem = React.memo(function NewsItem({ item }) {
             size="sm"
             className="w-full mt-2 text-xs gap-1"
           >
-            <a 
-              href={item.url} 
-              target="_blank" 
+            <a
+              href={item.url}
+              target="_blank"
               rel="noopener noreferrer"
               aria-label={`Read full article: ${item.title}`}
             >
@@ -192,11 +189,23 @@ const NewsListSkeleton = ({ count = 6 }) => (
 /**
  * Main NewsList component
  */
-const NewsList = ({ symbol = 'IBM' }) => {
+const NewsList = ({
+  symbol = "IBM",
+  newsData = null,
+}) => {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const displaySymbol = useMemo(() => symbol?.toUpperCase() || "IBM", [symbol]);
+
+  // If parent supplies newsData, use it and skip fetching
+  useEffect(() => {
+    if (Array.isArray(newsData)) {
+      setNews(newsData);
+      setLoading(false);
+      setError(null);
+    }
+  }, [newsData]);
 
   const fetchNews = useCallback(async () => {
     setLoading(true);
@@ -221,7 +230,7 @@ const NewsList = ({ symbol = 'IBM' }) => {
         console.log("API request failed, falling back to mock data");
         const mockData = await fetchMockNews(displaySymbol);
         setNews(mockData);
-       setError({
+        setError({
           message: "Live data unavailable - showing mock data",
           code: apiError.response?.status || 500
         });
@@ -239,8 +248,9 @@ const NewsList = ({ symbol = 'IBM' }) => {
   }, [displaySymbol]);
 
   useEffect(() => {
+    if (Array.isArray(newsData)) return; // parent-controlled
     fetchNews();
-  }, [fetchNews]);
+  }, [fetchNews, newsData]);
 
   if (loading) {
     return (
@@ -292,27 +302,24 @@ const NewsList = ({ symbol = 'IBM' }) => {
 };
 
 NewsList.propTypes = {
-  symbol: PropTypes.string
+  symbol: PropTypes.string,
+  newsData: PropTypes.array,
 };
 
-NewsList.defaultProps = {
-  symbol: 'IBM'
-};
+// ✅ Removed defaultProps – now using default parameters in function signature
 
 NewsListSkeleton.propTypes = {
-  count: PropTypes.number
+  count: PropTypes.number,
 };
 
-NewsListSkeleton.defaultProps = {
-  count: 6
-};
+// ✅ Removed defaultProps – now using default parameters in function signature
 
 ErrorDisplay.propTypes = {
   error: PropTypes.shape({
-    message: PropTypes.string
+    message: PropTypes.string,
   }).isRequired,
   onRetry: PropTypes.func.isRequired,
-  children: PropTypes.node
+  children: PropTypes.node,
 };
 
 NewsItem.propTypes = {
@@ -327,7 +334,8 @@ NewsItem.propTypes = {
     confidence: PropTypes.number,
     keyPhrases: PropTypes.arrayOf(PropTypes.string),
     image: PropTypes.string,
-    symbol: PropTypes.string
-  }).isRequired
+    symbol: PropTypes.string,
+  }).isRequired,
 };
+
 export default React.memo(NewsList);

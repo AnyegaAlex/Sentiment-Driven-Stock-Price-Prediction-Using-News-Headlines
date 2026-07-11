@@ -12,18 +12,15 @@ const NotFound = () => (
     <div className="mb-8 text-yellow-500 dark:text-yellow-400">
       <AlertTriangle className="w-16 h-16" strokeWidth={1.5} />
     </div>
-    
+
     <h1 className="text-4xl md:text-5xl font-bold text-gray-800 dark:text-gray-100 mb-4">
       404 - Page Not Found
     </h1>
-    
-    <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 max-w-md">
-      <p className="...">
-        The page you&rsquo;re looking for doesn&rsquo;t exist or has been moved.
-      </p>
 
+    <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 max-w-md">
+      The page you&rsquo;re looking for doesn&rsquo;t exist or has been moved.
     </p>
-    
+
     <Link
       to="/dashboard"
       className="px-6 py-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 flex items-center gap-2"

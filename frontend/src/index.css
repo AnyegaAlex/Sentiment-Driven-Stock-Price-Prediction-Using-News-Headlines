@@ -1,37 +1,137 @@
 @import "tailwindcss";
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
-
-/* Scrollbar Styling */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #1f2937;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #4b5563;
-  border-radius: 4px;
-}
-
+/* ---------- Premium Glass Black Theme (shadcn tokens) ---------- */
 :root {
-  --radius: 0.375rem;
-  --background: 210, 50%, 98%;
-  --foreground: 210, 50%, 20%;
-  --primary: 200, 100%, 50%;
-  --primary-foreground: 0, 0%, 100%;
-  /* Define other color variables as well */
+  --background: 220 30% 6%;
+  --foreground: 210 40% 98%;
+  --card: 220 25% 10%;
+  --card-foreground: 210 40% 98%;
+  --popover: 220 25% 10%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 220 20% 16%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 220 15% 18%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 220 18% 14%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 72% 55%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 220 15% 20%;
+  --input: 220 15% 20%;
+  --ring: 217 91% 60%;
+  --radius: 0.9rem;
 }
 
-/* Add to your global CSS */
+/* Base styles using direct CSS instead of @apply */
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  background:
+    radial-gradient(circle at 20% 20%, rgba(59,130,246,0.18), transparent 42%),
+    radial-gradient(circle at 80% 0%, rgba(168,85,247,0.14), transparent 44%),
+    radial-gradient(circle at 60% 85%, rgba(34,197,94,0.10), transparent 45%),
+    hsl(var(--background));
+}
+
+* {
+  border-color: hsl(var(--border));
+  outline-color: hsl(var(--ring) / 0.5);
+}
+
+/* ---------- Utility classes for shadcn tokens ---------- */
+.bg-background { background-color: hsl(var(--background)); }
+.text-foreground { color: hsl(var(--foreground)); }
+.bg-card { background-color: hsl(var(--card)); }
+.text-card-foreground { color: hsl(var(--card-foreground)); }
+.bg-popover { background-color: hsl(var(--popover)); }
+.text-popover-foreground { color: hsl(var(--popover-foreground)); }
+.bg-primary { background-color: hsl(var(--primary)); }
+.text-primary-foreground { color: hsl(var(--primary-foreground)); }
+.bg-secondary { background-color: hsl(var(--secondary)); }
+.text-secondary-foreground { color: hsl(var(--secondary-foreground)); }
+.bg-muted { background-color: hsl(var(--muted)); }
+.text-muted-foreground { color: hsl(var(--muted-foreground)); }
+.bg-accent { background-color: hsl(var(--accent)); }
+.text-accent-foreground { color: hsl(var(--accent-foreground)); }
+.bg-destructive { background-color: hsl(var(--destructive)); }
+.text-destructive-foreground { color: hsl(var(--destructive-foreground)); }
+.border-border { border-color: hsl(var(--border)); }
+.bg-input { background-color: hsl(var(--input)); }
+.ring-ring { --tw-ring-color: hsl(var(--ring)); }
+
+/* ---------- Premium reusable UI utilities ---------- */
+.glass {
+  backdrop-filter: blur(24px);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border-radius: 1rem;
+}
+
+.glass-strong {
+  backdrop-filter: blur(40px);
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border-radius: 1rem;
+}
+
+.glass-hover {
+  transition: all 300ms;
+}
+.glass-hover:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.section-wrap {
+  backdrop-filter: blur(24px);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border-radius: 1rem;
+  padding: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .section-wrap {
+    padding: 1.5rem;
+  }
+}
+
+.sticky-subheader {
+  position: sticky;
+  z-index: 40;
+  backdrop-filter: blur(24px);
+  background-color: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+}
+
+.soft-divider {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ---------- Scrollbar (fits dark theme) ---------- */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.04);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.14);
+  border-radius: 999px;
+}
+
+/* ---------- Image fallback ---------- */
 .img-fallback {
-  background-color: #f3f4f6;
+  background-color: rgba(255,255,255,0.05);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6b7280;
+  color: rgba(255,255,255,0.55);
 }

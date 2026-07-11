@@ -1,86 +1,46 @@
-import React from "react";
-import PropTypes from "prop-types";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { Button } from "@/components/ui/button";
-import { CalendarIcon } from "lucide-react";
-import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import React, { useState } from 'react';
+import { format } from 'date-fns';
+import { CalendarIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 
-const formatDateRange = (range) => {
-  if (!range?.from) return "Select date";
-  return range.to
-    ? `${format(range.from, "MMM dd, yyy")} - ${format(range.to, "MMM dd, yyy")}`
-    : format(range.from, "MMM dd, yyy");
-};
+const DateSelectorCard = ({ setDateRange }) => {
+  const [date, setDate] = useState(new Date());
 
-const DateSelectorCard = ({ dateRange, setDateRange, mode, className }) => {
-  const [isOpen, setIsOpen] = React.useState(false);
+  const handleSelect = (selectedDate) => {
+    setDate(selectedDate);
+    if (setDateRange) {
+      setDateRange(selectedDate);
+    }
+  };
 
   return (
-    <div className={cn("w-full md:w-auto", className)}>
-      <Popover open={isOpen} onOpenChange={setIsOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            className={cn(
-              "flex items-center gap-2 w-full md:w-auto justify-between",
-              "hover:bg-gray-50 dark:hover:bg-gray-800",
-              "transition-colors duration-200"
-            )}
-            aria-label="Select date range"
-          >
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="w-4 h-4" aria-hidden="true" />
-              <span>{formatDateRange(dateRange)}</span>
-            </div>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent 
-          className="w-auto p-0 bg-white dark:bg-gray-800 backdrop-blur-sm"
-          align="end"
-          onInteractOutside={(e) => {
-            // Prevent closing when selecting dates
-            if (e.target.closest('.rdp')) {
-              e.preventDefault();
-            }
-          }}
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className={cn(
+            'w-full sm:w-auto justify-start text-left font-normal',
+            'min-h-[44px] px-3 py-2',
+            !date && 'text-muted-foreground'
+          )}
         >
-          <Calendar
-            mode={mode}
-            selected={dateRange}
-            onSelect={(selected) => {
-              setDateRange(selected);
-              if (mode === "single") setIsOpen(false);
-            }}
-            numberOfMonths={1}
-            className="border-0"
-            classNames={{
-              day_selected: "bg-blue-600 dark:bg-blue-700 text-white",
-              day_today: "border border-blue-500 dark:border-blue-400",
-            }}
-            initialFocus
-          />
-        </PopoverContent>
-      </Popover>
-    </div>
+          <CalendarIcon className="mr-2 h-4 w-4" />
+          {date ? format(date, 'PPP') : <span>Pick a date</span>}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={date}
+          onSelect={handleSelect}
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
   );
-};
-
-DateSelectorCard.propTypes = {
-  dateRange: PropTypes.shape({
-    from: PropTypes.instanceOf(Date),
-    to: PropTypes.instanceOf(Date),
-  }),
-  setDateRange: PropTypes.func.isRequired,
-  mode: PropTypes.oneOf(["single", "range"]),
-  className: PropTypes.string,
-};
-
-DateSelectorCard.defaultProps = {
-  dateRange: { from: new Date(), to: null },
-  mode: "single",
-  className: "",
 };
 
 export default DateSelectorCard;

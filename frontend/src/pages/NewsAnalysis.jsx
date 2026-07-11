@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import PropTypes from "prop-types";
-import axios from "axios";
 import {
   Select,
   SelectContent,
@@ -20,42 +19,40 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { Info, Loader2, ExternalLink, Newspaper } from "lucide-react";
 import { AiFillSmile, AiFillMeh, AiFillFrown } from "react-icons/ai";
 import KeyPhraseChip from "@/components/KeyPhraseChip";
-import { fetchMockNewsAnalysis } from '@/services/mockNewsAnalysis';
+import { useSymbolsQuery } from "@/hooks/queries/useSymbolsQuery";
+import { useNewsQuery } from "@/hooks/queries/useNewsQuery";
+import { useDashboard } from "@/context/DashboardContext";
 
-// Custom storage hook with TypeScript-like type safety
-const usePersistentState = (storage, key, initialValue) => {
-  const [value, setValue] = useState(() => {
-    try {
-      const item = storage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-      console.error(`Error reading ${key} from storage:`, error);
-      return initialValue;
-    }
-  });
+const NewsAnalysis = () => {
+  const { stockSymbol, setStockSymbol } = useDashboard();
 
-  const setValueWrapper = useCallback((newValue) => {
-    try {
-      const valueToStore = newValue instanceof Function ? newValue(value) : newValue;
-      setValue(valueToStore);
-      storage.setItem(key, JSON.stringify(valueToStore));
-    } catch (error) {
-      console.error(`Error saving to ${key}:`, error);
-    }
-  }, [value, key, storage]);
-
-  return [value, setValueWrapper];
-};
-
-const NewsAnalysis = ({ symbol = "" }) => {
-  const [news, setNews] = useState([]);
-  const [filteredNews, setFilteredNews] = useState([]);
+  // Local state: start from global symbol, allow dropdown to change
+  const [selectedSymbol, setSelectedSymbol] = useState(stockSymbol || "");
   const [sentimentFilter, setSentimentFilter] = useState('all');
-  const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedSymbol, setSelectedSymbol] = usePersistentState(localStorage, "newsAnalysisSymbol", symbol);
-  const [expandedPhrases, setExpandedPhrases] = usePersistentState(sessionStorage, "newsAnalysisExpanded", {});
-  const [availableSymbols, setAvailableSymbols] = useState([]);
+  const [expandedPhrases, setExpandedPhrases] = useState({});
+
+  // Sync with global symbol when it changes
+  useEffect(() => {
+    if (stockSymbol) {
+      setSelectedSymbol(stockSymbol);
+    }
+  }, [stockSymbol]);
+
+  // When user changes dropdown, update global context
+  const handleSymbolChange = (symbol) => {
+    setSelectedSymbol(symbol);
+    if (symbol) {
+      setStockSymbol(symbol);
+    }
+  };
+
+  // React Query – symbols and news
+  const { data: availableSymbols = [], isLoading: symbolsLoading } = useSymbolsQuery();
+  const { data: news = [], isLoading: newsLoading, error: newsError } = useNewsQuery(selectedSymbol);
+
+  const filteredNews = sentimentFilter === "all"
+    ? news
+    : news.filter(item => item.sentiment === sentimentFilter);
 
   const sentimentIcons = {
     positive: <AiFillSmile className="w-5 h-5 text-green-600 dark:text-green-400" />,
@@ -63,73 +60,9 @@ const NewsAnalysis = ({ symbol = "" }) => {
     negative: <AiFillFrown className="w-5 h-5 text-red-600 dark:text-red-400" />,
   };
 
-  // Fetch available symbols from API
-  useEffect(() => {
-    const fetchSymbols = async () => {
-      try {
-        const response = await axios.get("/api/stocks/symbols/");
-        if (response.data?.symbols) {
-          setAvailableSymbols(response.data.symbols);
-        }
-      } catch (err) {
-        console.error("Error fetching symbols:", err);
-        // Fallback to default symbols
-        setAvailableSymbols(["IBM", "META", "BABA", "MSFT", "AMZN", "NVDA"]);
-      }
-    };
-    fetchSymbols();
-  }, []);
-
-  // Fetch news for selected symbol
-    useEffect(() => {
-      const fetchNews = async () => {
-        if (!selectedSymbol) return;
-        
-        setIsLoading(true);
-        setError("");
-        
-        try {
-          // Try real API first, fall back to mock data
-          let response;
-          try {
-            response = await axios.get(`/api/news/get-news/?symbol=${selectedSymbol}`);
-            
-            if (!response.data?.news) {
-              throw new Error('Invalid API response structure');
-            }
-            
-            setNews(response.data.news);
-            setFilteredNews(response.data.news);
-          } catch (apiError) {
-            console.warn("Using mock data due to API error:", apiError);
-            const mockData = await fetchMockNewsAnalysis(selectedSymbol);
-            setNews(mockData.news);
-            setFilteredNews(mockData.news);
-          }
-        } catch (err) {
-          console.error("Error fetching news:", err);
-          setError(err.response?.data?.message || "Failed to fetch news. Please try again later.");
-          setNews([]);
-          setFilteredNews([]);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      
-      fetchNews();
-    }, [selectedSymbol]);
-
-  // Filter news by sentiment
-  useEffect(() => {
-    const filtered = sentimentFilter === "all"
-      ? news
-      : news.filter(item => item.sentiment === sentimentFilter);
-    setFilteredNews(filtered);
-  }, [news, sentimentFilter]);
-
   const toggleExpandPhrases = useCallback((index) => {
     setExpandedPhrases(prev => ({ ...prev, [index]: !prev[index] }));
-  }, [setExpandedPhrases]);
+  }, []);
 
   const renderKeyPhrases = useCallback((item, index) => {
     if (!item.key_phrases) return null;
@@ -178,6 +111,9 @@ const NewsAnalysis = ({ symbol = "" }) => {
     return "";
   }, []);
 
+  const isLoading = symbolsLoading || newsLoading;
+  const error = newsError;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-6 text-center dark:text-white">
@@ -188,22 +124,27 @@ const NewsAnalysis = ({ symbol = "" }) => {
       <div className="mb-8 flex flex-col sm:flex-row justify-center gap-4">
         <Select
           value={selectedSymbol}
-          onValueChange={setSelectedSymbol}
+          onValueChange={handleSymbolChange}
           disabled={isLoading || availableSymbols.length === 0}
         >
           <SelectTrigger className="w-full sm:w-[200px] dark:bg-gray-800 dark:border-gray-700">
             <SelectValue placeholder={availableSymbols.length ? "Select Symbol" : "Loading symbols..."} />
           </SelectTrigger>
           <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
-            {availableSymbols.map(sym => (
-              <SelectItem 
-                key={sym} 
-                value={sym}
-                className="dark:hover:bg-gray-700"
-              >
-                {sym}
-              </SelectItem>
-            ))}
+            {availableSymbols.map((sym) => {
+              // sym is an object { symbol, name, region }
+              const symbolValue = sym.symbol;
+              const displayName = sym.name || symbolValue;
+              return (
+                <SelectItem
+                  key={symbolValue}
+                  value={symbolValue}
+                  className="dark:hover:bg-gray-700"
+                >
+                  {symbolValue} – {displayName}
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
 
@@ -232,7 +173,7 @@ const NewsAnalysis = ({ symbol = "" }) => {
       ) : error ? (
         <Alert variant="destructive" className="mb-8">
           <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{error.message || "Failed to fetch news."}</AlertDescription>
         </Alert>
       ) : filteredNews.length === 0 ? (
         <Alert className="mb-8 dark:bg-gray-800 dark:border-gray-700">
@@ -244,8 +185,8 @@ const NewsAnalysis = ({ symbol = "" }) => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredNews.map((item, index) => (
-            <Card 
-              key={`${item.url}-${index}`} 
+            <Card
+              key={`${item.url}-${index}`}
               className="h-full flex flex-col dark:bg-gray-800 dark:border-gray-700"
             >
               {/* Image */}
@@ -363,7 +304,7 @@ const NewsAnalysis = ({ symbol = "" }) => {
 };
 
 NewsAnalysis.propTypes = {
-  symbol: PropTypes.string,
+  // no symbol prop needed – it uses global context
 };
 
 export default NewsAnalysis;

@@ -128,29 +128,6 @@ def validate_model():
         load_tokenizer.cache_clear()
         return load_tokenizer() is not None and load_model() is not None
     return True
-def warmup_model():
-    """Pre-load model and run warmup inference"""
-    if not validate_model():
-        return False
-    
-    try:
-        # Warmup with small batch
-        sample_text = "Market shows positive trends with strong earnings"
-        inputs = load_tokenizer()(
-            sample_text,
-            return_tensors="pt",
-            truncation=True,
-            max_length=512
-        ).to(device)
-        
-        with torch.inference_mode():
-            load_model()(**inputs)
-        
-        logger.info("Model warmup completed")
-        return True
-    except Exception as e:
-        logger.error(f"Warmup failed: {str(e)}")
-        return False
     
 def analyze_sentiment(text):
     """
@@ -234,5 +211,3 @@ def analyze_batch(texts):
     
     return results
 
-# Initial model loading
-warmup_model()
