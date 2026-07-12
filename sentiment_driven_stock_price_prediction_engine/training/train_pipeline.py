@@ -24,7 +24,7 @@ tqdm.pandas()  # Enable progress_apply for pandas
 # Filepaths (adjust as needed)
 # ----------------------------
 STOCK_DATA_PATH = "./data/ibm_cleaned.parquet"    
-MODEL_SAVE_PATH = "./sentiment_driven_stock_price_prediction_engine/models/stock_prediction_model.pth"
+MODEL_SAVE_PATH = "./models/stock_prediction_model.pth"
 
 # ----------------------------
 # 1. Data Preparation Functions

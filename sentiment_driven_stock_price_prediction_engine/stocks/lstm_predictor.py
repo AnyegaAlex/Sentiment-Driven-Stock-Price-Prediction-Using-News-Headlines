@@ -124,15 +124,6 @@ class LSTMPredictor:
             self.model = None
 
     def predict(self, symbol: str, news_text: str = "") -> dict:
-        """
-        Main prediction method.
-        Returns: {
-            'prediction': 'UP' or 'DOWN' or 'HOLD' (fallback),
-            'confidence': float (0-100),
-            'success': bool,
-            'error': str (if failed)
-        }
-        """
         if self.model is None:
             return self._fallback_prediction("Model not loaded")
 
@@ -141,34 +132,42 @@ class LSTMPredictor:
         if tech_features is None:
             return self._fallback_prediction("Insufficient price data")
 
-        # Compute sentiment score using FinBERT (from news.utils)
+        # Ensure all required keys exist and are numeric
+        required_keys = ['MA7', 'MA21', 'STD21', 'RSI14', 'UpperBB', 'LowerBB', 'Close']
+        for key in required_keys:
+            if key not in tech_features or tech_features[key] is None:
+                return self._fallback_prediction(f"Missing feature: {key}")
+
+        # Compute sentiment score
         sentiment_result = analyze_sentiment(news_text) if news_text else {'label': 'neutral', 'score': 0.0}
         label = sentiment_result.get('label', 'neutral')
         score = sentiment_result.get('score', 0.0)
-        if label == 'positive':
-            sentiment_score = score
-        elif label == 'negative':
-            sentiment_score = -score
-        else:
-            sentiment_score = 0.0
+        sentiment_score = score if label == 'positive' else -score if label == 'negative' else 0.0
 
-        # Feature vector in training order: [sentiment, MA7, MA21, STD21, RSI14, UpperBB, LowerBB]
-        features = np.array([
-            sentiment_score,
-            tech_features['MA7'],
-            tech_features['MA21'],
-            tech_features['STD21'],
-            tech_features['RSI14'],
-            tech_features['UpperBB'],
-            tech_features['LowerBB']
-        ], dtype=np.float32)
+        # Build feature vector – ensure all values are floats
+        try:
+            features = np.array([
+                float(sentiment_score),
+                float(tech_features['MA7']),
+                float(tech_features['MA21']),
+                float(tech_features['STD21']),
+                float(tech_features['RSI14']),
+                float(tech_features['UpperBB']),
+                float(tech_features['LowerBB'])
+            ], dtype=np.float32)
+        except (TypeError, ValueError) as e:
+            return self._fallback_prediction(f"Feature conversion error: {e}")
+
+        # Check for NaN or Inf
+        if not np.isfinite(features).all():
+            return self._fallback_prediction("Invalid features (NaN or Inf)")
 
         # Convert to tensor and add sequence dimension (batch, seq_len, features)
         input_tensor = torch.tensor(features, device=self.device).unsqueeze(0).unsqueeze(1)
 
         with torch.no_grad():
             output = self.model(input_tensor)
-            prob = torch.sigmoid(output).item()  # probability of UP
+            prob = torch.sigmoid(output).item()
 
         prediction = 'UP' if prob >= 0.5 else 'DOWN'
         confidence = round((prob if prob >= 0.5 else 1 - prob) * 100, 1)
@@ -178,7 +177,7 @@ class LSTMPredictor:
             'confidence': confidence,
             'success': True,
             'sentiment_score': round(sentiment_score, 3),
-            'close_price': tech_features['Close'],
+            'close_price': float(tech_features['Close']),
         }
 
     def _fallback_prediction(self, reason: str) -> dict:

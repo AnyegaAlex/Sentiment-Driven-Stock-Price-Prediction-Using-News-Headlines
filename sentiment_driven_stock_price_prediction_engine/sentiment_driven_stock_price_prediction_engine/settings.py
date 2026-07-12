@@ -244,5 +244,5 @@ RAPIDAPI_HOST = os.getenv("RAPIDAPI_HOST", "apidojo-yahoo-finance-v1.p.rapidapi.
 RATE_LIMIT_PERIOD = 60  # 60 seconds
 RATE_LIMIT_MAX_REQUESTS = 100  # Max requests per minute
 
-# --- Path to LSTM model (optional) ---
+ENABLE_LSTM = True
 LSTM_MODEL_PATH = os.path.join(BASE_DIR, 'models', 'stock_prediction_model.pth')
