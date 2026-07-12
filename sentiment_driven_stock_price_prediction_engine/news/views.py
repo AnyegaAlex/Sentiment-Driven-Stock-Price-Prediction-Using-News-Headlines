@@ -7,14 +7,14 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .models import ProcessedNews, SymbolSearchCache
-from .tasks import fetch_and_save_news, fetch_and_process_news
+from .tasks import fetch_and_save_news  # Only import sync function
 from .serializers import ProcessedNewsSerializer
 
 logger = logging.getLogger(__name__)
 
-CACHE_TTL_SECONDS = 3600  # 1 hour
+CACHE_TTL_SECONDS = 3600
 MAX_ARTICLES = 50
-SYNC_FETCH_TIMEOUT = 15  # seconds before we give up and return stale cache
+SYNC_FETCH_TIMEOUT = 15
 
 _TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,10}$")
 
@@ -24,17 +24,12 @@ def _normalize_symbol(raw: str) -> str:
 
 
 def _serialize_news(qs):
-    """Use the serializer to ensure correct field mapping (source)."""
     serializer = ProcessedNewsSerializer(qs, many=True)
     return serializer.data
 
 
 @api_view(["GET"])
 def get_news(request):
-    """
-    Returns cached DB rows quickly.
-    If ?refresh=true or cache empty/stale -> try synchronous fetch; fallback to Celery.
-    """
     symbol = _normalize_symbol(request.GET.get("symbol", ""))
     if not symbol or not _TICKER_RE.match(symbol):
         return Response({"error": "Valid 'symbol' query parameter is required."}, status=400)
@@ -51,7 +46,6 @@ def get_news(request):
 
     refresh_queued = False
     if force_refresh or not news_qs or cache_is_stale:
-        # Try synchronous fetch first (with timeout)
         try:
             result = fetch_and_save_news(
                 symbol,
@@ -60,25 +54,11 @@ def get_news(request):
                 timeout_seconds=SYNC_FETCH_TIMEOUT
             )
             if result.get("status") == "success" and result.get("new_articles", 0) > 0:
-                # New data fetched, reload queryset
                 news_qs = ProcessedNews.objects.filter(symbol=symbol).order_by("-published_at")[:MAX_ARTICLES]
                 cache_is_stale = False
                 refresh_queued = False
-            else:
-                # Sync fetch failed or found no new articles; fallback to Celery
-                try:
-                    fetch_and_process_news.delay(symbol, fetch_latest_only=True)
-                    refresh_queued = True
-                except Exception as e:
-                    logger.warning("Failed to enqueue Celery task for %s: %s", symbol, e)
         except Exception as e:
             logger.warning("Synchronous fetch failed for %s: %s", symbol, e)
-            # Attempt Celery as fallback
-            try:
-                fetch_and_process_news.delay(symbol, fetch_latest_only=True)
-                refresh_queued = True
-            except Exception as e2:
-                logger.warning("Celery fallback also failed for %s: %s", symbol, e2)
 
     return Response({
         "symbol": symbol,
@@ -91,12 +71,6 @@ def get_news(request):
 
 @api_view(["GET"])
 def symbol_search(request):
-    """
-    Search for stock symbols:
-      - Cache first
-      - Alpha Vantage primary
-      - Yahoo RapidAPI fallback
-    """
     query = (request.GET.get("q") or "").strip()
     if not query:
         return Response({"error": 'Query parameter "q" is required'}, status=400)
@@ -146,13 +120,10 @@ def symbol_search(request):
         return Response(results)
 
     except requests.RequestException as e:
-        logger.error("Symbol search failed for query '%s': %s", query, e)
+        logger.error(f"Symbol search failed for query '{query}': {e}")
         return Response({"error": str(e)}, status=500)
 
 
 @api_view(["GET"])
 def get_analyzed_news(request):
-    """
-    Alias for get_news – kept for backwards compatibility.
-    """
     return get_news(request)

@@ -10,8 +10,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import dateutil.parser
 import requests
-from celery import shared_task
-from celery.utils.log import get_task_logger
 from django.conf import settings
 from django.db import IntegrityError, transaction, close_old_connections
 from django.utils import timezone
@@ -20,7 +18,7 @@ from .models import ProcessedNews, StockSymbol
 from .utils import analyze_sentiment
 
 logger = logging.getLogger(__name__)
-task_logger = get_task_logger(__name__)
+task_logger = logging.getLogger(__name__)
 
 API_TIMEOUT = 15
 MAX_ARTICLES = 100
@@ -293,10 +291,6 @@ def fetch_and_save_news(
     recent_hours: int = RECENT_HOURS_DEFAULT,
     timeout_seconds: int = 30,
 ) -> Dict[str, Any]:
-    """
-    Fetch news from external APIs and save to DB.
-    This is the core logic used by both Celery and synchronous views.
-    """
     close_old_connections()
     symbol = (symbol or "").strip().upper()
     if not symbol:
@@ -362,30 +356,3 @@ def fetch_and_save_news(
     finally:
         close_old_connections()
         gc.collect()
-
-
-# ---- Celery Task (thin wrapper) ----
-@shared_task(
-    bind=True,
-    autoretry_for=(Exception,),
-    retry_backoff=120,
-    max_retries=2,
-    time_limit=300,
-    soft_time_limit=240,
-)
-def fetch_and_process_news(self, symbol: str, fetch_latest_only: bool = True, recent_hours: int = RECENT_HOURS_DEFAULT) -> Dict[str, Any]:
-    return fetch_and_save_news(symbol, fetch_latest_only, recent_hours)
-
-
-@shared_task(bind=True, time_limit=600, soft_time_limit=540)
-def fetch_news_for_all_symbols(self) -> Dict[str, Any]:
-    close_old_connections()
-    symbols = list(StockSymbol.objects.filter(is_active=True).values_list("symbol", flat=True))
-    enqueued = 0
-    for sym in symbols:
-        try:
-            fetch_and_process_news.delay(sym, fetch_latest_only=True)
-            enqueued += 1
-        except Exception as e:
-            task_logger.warning("Failed to enqueue news task for %s: %s", sym, e)
-    return {"status": "ok", "symbols": len(symbols), "enqueued": enqueued}
