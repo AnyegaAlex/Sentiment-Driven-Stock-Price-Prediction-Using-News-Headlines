@@ -17,9 +17,8 @@ from .serializers import (
     SymbolSerializer,
 )
 from news.models import ProcessedNews
-
-# NEW: Import LSTM predictor
 from .lstm_predictor import get_lstm_predictor
+from .utils import save_prediction  # NEW
 
 logger = logging.getLogger(__name__)
 
@@ -155,22 +154,40 @@ class StockOpinionView(APIView):
 
 class PredictionHistoryView(APIView):
     """
-    API endpoint to retrieve prediction history.
-    Returns a plain array (frontend spec).
+    API endpoint to retrieve prediction history with pagination and caching.
+    Returns a paginated list of predictions.
     """
     def get(self, request):
         try:
             symbol = request.query_params.get('symbol')
-            limit = int(request.query_params.get('limit', 100))
-            
+            limit = int(request.query_params.get('limit', 50))
+            limit = min(limit, 200)  # Cap at 200 to protect performance
+            offset = int(request.query_params.get('offset', 0))
+
+            cache_key = f"pred_history_{symbol}_{limit}_{offset}"
+            cached_response = cache.get(cache_key)
+            if cached_response:
+                return Response(cached_response, status=status.HTTP_200_OK)
+
             queryset = Prediction.objects.all().order_by('-date')
             if symbol:
                 queryset = queryset.filter(stock_symbol=symbol.upper())
-            queryset = queryset[:min(limit, 500)]
-            
-            serializer = PredictionSerializer(queryset, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-            
+
+            total = queryset.count()
+            results = queryset[offset:offset+limit]
+            serializer = PredictionSerializer(results, many=True)
+
+            response_data = {
+                'count': total,
+                'next': offset + limit if offset + limit < total else None,
+                'previous': offset - limit if offset - limit >= 0 else None,
+                'results': serializer.data
+            }
+
+            # Cache for 5 minutes to reduce DB load
+            cache.set(cache_key, response_data, timeout=300)
+            return Response(response_data, status=status.HTTP_200_OK)
+
         except Exception as e:
             logger.exception(f"Error fetching prediction history: {e}")
             return Response(
@@ -208,7 +225,6 @@ class StockAnalysisView(APIView):
 
         # ---------- TRY REAL DATA ----------
         try:
-            # Pass empty news text by default; LSTM will still work with just symbol.
             opinion = generate_stock_opinion(symbol=symbol, risk_type=risk_type, news_text="")
             if "error" in opinion:
                 raise ValueError(opinion["error"])
@@ -273,7 +289,18 @@ class StockAnalysisView(APIView):
             
             # Add LSTM prediction if present in formatted
             if "lstm_prediction" in formatted:
-                response_data["lstm_prediction"] = formatted["lstm_prediction"]
+                lstm = formatted["lstm_prediction"]
+                response_data["lstm_prediction"] = lstm
+                # Save prediction to history if direction is available
+                if lstm.get('direction') and lstm['direction'] != 'UNAVAILABLE':
+                    save_prediction(
+                        symbol=symbol,
+                        movement=lstm['direction'],
+                        confidence=lstm.get('confidence', 50) / 100.0,
+                        sentiment_score=sentiment_score,
+                        headline="",  # No specific news headline
+                        source='lstm'
+                    )
             
             cache.set(cache_key, response_data, timeout=600)
             return Response(response_data, status=status.HTTP_200_OK)
@@ -419,6 +446,7 @@ class LSTMPredictionView(APIView):
     """
     GET /api/lstm-predict/?symbol=AAPL&news=Apple%20announces%20new%20iPhone
     Returns LSTM-based prediction for given symbol and optional news text.
+    Saves each successful prediction to the history table.
     """
     permission_classes = [AllowAny]
 
@@ -448,6 +476,21 @@ class LSTMPredictionView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # Save prediction to history
+            try:
+                save_prediction(
+                    symbol=symbol,
+                    movement=result['prediction'],
+                    confidence=result['confidence'] / 100.0,
+                    sentiment_score=result.get('sentiment_score', 0.0),
+                    headline=news_text,
+                    source='lstm'
+                )
+            except Exception as e:
+                logger.warning(f"Failed to save prediction record for {symbol}: {e}")
+                # Non-critical – do not fail the response
+
+            # Build response
             result['symbol'] = symbol.upper()
             result['timestamp'] = datetime.utcnow().isoformat() + 'Z'
 

@@ -64,10 +64,46 @@ class Prediction(models.Model):
     confidence = models.FloatField()
     actual_movement = models.CharField(max_length=10, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    source = models.CharField(
+        max_length=50,
+        default='lstm',
+        help_text="Source of prediction: lstm, technical, manual, etc."
+    )
+
+    class Meta:
+        ordering = ['-date']
+        indexes = [
+            models.Index(fields=['stock_symbol', '-date']),
+        ]
 
     def __str__(self):
-        return f"{self.date} - {self.predicted_movement}"
-    
+        return f"{self.date} - {self.predicted_movement} ({self.source})"
+
+    @classmethod
+    def prune_old_records(cls, max_per_symbol=500):
+        """
+        Delete the oldest predictions for each symbol, keeping only the most recent `max_per_symbol` records.
+        This prevents unlimited database growth and keeps query performance high.
+        """
+        from django.db.models import Count, OuterRef, Subquery, F
+
+        # Identify symbols that have more than max_per_symbol records
+        symbols = cls.objects.values('stock_symbol').annotate(
+            cnt=Count('id')
+        ).filter(cnt__gt=max_per_symbol)
+
+        for item in symbols:
+            symbol = item['stock_symbol']
+            # Get the IDs of the most recent max_per_symbol records for this symbol
+            keep_ids = list(
+                cls.objects.filter(stock_symbol=symbol)
+                .order_by('-date', '-id')
+                .values_list('id', flat=True)[:max_per_symbol]
+            )
+            if keep_ids:
+                # Delete all other records for this symbol
+                cls.objects.filter(stock_symbol=symbol).exclude(id__in=keep_ids).delete()
+
 
 class Subscription(models.Model):
     email = models.EmailField(unique=True)
@@ -76,4 +112,3 @@ class Subscription(models.Model):
 
     def __str__(self):
         return self.email
-

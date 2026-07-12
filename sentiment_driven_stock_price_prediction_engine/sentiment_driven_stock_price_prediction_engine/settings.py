@@ -44,7 +44,6 @@ INSTALLED_APPS = [
     # Third-party apps
     'rest_framework',
     'corsheaders',
-    'drf_yasg',
     'django_redis',  # for Redis cache
 
     # Local apps
