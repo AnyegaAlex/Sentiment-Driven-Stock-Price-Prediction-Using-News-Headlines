@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration with defaults (merged with Django settings)
 DEFAULT_CONFIG = {
-    'model_name': 'ProsusAI/finbert',
+    'model_name': 'distilbert-base-uncased-finetuned-sst-2-english',
     'min_text_length': 20,
     'max_text_length': 2000,
     'confidence_threshold': 0.4,

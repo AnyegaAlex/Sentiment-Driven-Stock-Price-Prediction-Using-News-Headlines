@@ -1,11 +1,11 @@
 """
 Django settings for sentiment_driven_stock_price_prediction_engine project.
+Production-ready for Render free tier – lightweight, no Celery, minimal memory.
 """
 from pathlib import Path
 import os
 from dotenv import load_dotenv
 import dj_database_url
-from celery.schedules import crontab
 from django.core.exceptions import ImproperlyConfigured
 
 # Load environment variables first
@@ -13,6 +13,10 @@ load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# --- Hugging Face cache directory (persistent across deploys) ---
+os.environ['TRANSFORMERS_CACHE'] = '/opt/render/.cache/huggingface'
+os.environ['HF_HOME'] = '/opt/render/.cache/huggingface'
 
 # --- Security: Secret Key ---
 SECRET_KEY = os.environ.get("SECRET_KEY")
@@ -22,7 +26,6 @@ if not SECRET_KEY:
 # --- Debug & Hosts ---
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 BASE_ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split()
-
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"] + BASE_ALLOWED_HOSTS
 
 # --- Paths ---
@@ -39,11 +42,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     # Third-party apps
-    'django_celery_beat',
-    'django_celery_results',
     'rest_framework',
     'corsheaders',
     'drf_yasg',
+    'django_redis',  # for Redis cache
 
     # Local apps
     'news',
@@ -83,21 +85,13 @@ TEMPLATES = [
 WSGI_APPLICATION = 'sentiment_driven_stock_price_prediction_engine.wsgi.application'
 
 # --- Database ---
-# Always use dj_database_url; it falls back to SQLite only if DATABASE_URL is missing.
-# Removed the conditional override that could inadvertently switch to SQLite in production.
+# Render's internal PostgreSQL does NOT require SSL; using default dj_database_url.
 DATABASES = {
     'default': dj_database_url.config(
         default='sqlite:///db.sqlite3',
         conn_max_age=600,
-        ssl_require=True,  # Force SSL for PostgreSQL
     )
 }
-
-# Additional SSL options for PostgreSQL (if needed)
-if not DEBUG and DATABASES['default']['ENGINE'] == 'django.db.backends.postgresql':
-    DATABASES['default']['OPTIONS'] = {
-        'sslmode': 'require',
-    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -120,7 +114,7 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# Use Whitenoise compression in all environments (safe and beneficial)
+# Whitenoise compression for all environments
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 WHITENOISE_MAX_AGE = 86400
 WHITENOISE_IMMUTABLE_FILES = True
@@ -136,7 +130,6 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = True
 
 # --- REST Framework ---
-# Default: allow read-only for unauthenticated, but we'll set AllowAny on specific views.
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
@@ -152,11 +145,10 @@ REST_FRAMEWORK = {
 }
 
 # --- CORS ---
+# Get frontend URL from environment (default to Vercel URL)
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://sentiment-driven-stock-price-predic.vercel.app')
 CORS_ORIGIN_ALLOW_ALL = False
-CORS_ALLOWED_ORIGINS = [
-    "https://sentiment-driven-stock-price-predic.vercel.app"
-]
-# Allow POST for subscription endpoint
+CORS_ALLOWED_ORIGINS = [FRONTEND_URL]
 CORS_ALLOW_METHODS = [
     'GET',
     'POST',
@@ -174,9 +166,7 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
-CSRF_TRUSTED_ORIGINS = [
-    "https://sentiment-driven-stock-price-predic.vercel.app"
-]
+CSRF_TRUSTED_ORIGINS = [FRONTEND_URL]
 
 # --- Default primary key ---
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -186,44 +176,7 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 2  # 2MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 2  # 2MB
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 
-# --- Celery Configuration ---
-CELERY_IMPORTS = ('news.tasks', 'stocks.tasks')
-CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_TIMEZONE = TIME_ZONE
-CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
-CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
-
-# Celery memory limits
-CELERYD_MAX_MEMORY_PER_CHILD = 256000  # 256MB
-CELERYD_FORCE_EXECV = True
-CELERY_WORKER_MAX_TASKS_PER_CHILD = 100
-CELERY_WORKER_MAX_MEMORY_MB = 512
-CELERY_TASK_SOFT_TIME_LIMIT = 300
-CELERY_TASK_TIME_LIMIT = 600
-
-CELERY_TASK_ANNOTATIONS = {
-    'news.tasks.fetch_and_process_news': {'rate_limit': '5/m'},
-    'stocks.tasks.fetch_stock_data': {'rate_limit': '10/m'},
-}
-CELERY_TASK_ROUTES = {
-    'news.tasks.*': {'queue': 'news'},
-    'stocks.tasks.*': {'queue': 'stocks'},
-    '*.fetch_*': {'queue': 'periodic'},
-    '*.calculate_*': {'queue': 'metrics'},
-}
-
-CELERY_BEAT_SCHEDULE = {
-    'process-news-every-hour': {
-        'task': 'news.tasks.fetch_news_for_all_symbols',
-        'schedule': crontab(minute=0),  # hourly
-        'options': {'queue': 'periodic'},
-    },
-}
-
-# --- Caching Configuration ---
+# --- Caching Configuration (Redis) ---
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
@@ -265,9 +218,9 @@ LOGGING = {
     },
 }
 
-# --- FinBERT Config ---
+# --- Sentiment Model (Lightweight) ---
 FINBERT_CONFIG = {
-    'model_name': 'ProsusAI/finbert',
+    'model_name': 'distilbert-base-uncased-finetuned-sst-2-english',  # memory-safe
     'min_text_length': 25,
     'max_text_length': 1500,
     'confidence_threshold': 0.45,
@@ -288,9 +241,9 @@ RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 RAPIDAPI_HOST = os.getenv("RAPIDAPI_HOST", "apidojo-yahoo-finance-v1.p.rapidapi.com")
 
-# --- Rate Limiting ---
+# --- Rate Limiting (external) ---
 RATE_LIMIT_PERIOD = 60  # 60 seconds
 RATE_LIMIT_MAX_REQUESTS = 100  # Max requests per minute
 
-# Path to LSTM model file
+# --- Path to LSTM model (optional) ---
 LSTM_MODEL_PATH = os.path.join(BASE_DIR, 'models', 'stock_prediction_model.pth')
