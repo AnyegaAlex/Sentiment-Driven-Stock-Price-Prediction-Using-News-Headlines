@@ -5,7 +5,7 @@ import { fetchMockStockAnalysis } from '@/services/mockStockAnalysis';
 
 const fetchStockOpinion = async ({ symbol, riskType, holdTime }) => {
   try {
-    const response = await api.get('/stock-analysis', {
+    const response = await api.get('/stock-analysis/', {
       params: { symbol, risk_type: riskType, hold_time: holdTime },
     });
     // API interceptor returns response.data directly, so `response` is the data

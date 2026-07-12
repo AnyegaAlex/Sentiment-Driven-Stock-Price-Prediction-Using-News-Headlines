@@ -5,7 +5,7 @@ import { fetchMockTechnicalData } from '@/services/mockTechnicalData';
 
 const fetchTechnicalIndicators = async ({ symbol, timeframe }) => {
   try {
-    const response = await api.get('/technical-indicators', {
+    const response = await api.get('/technical-indicators/', {
       params: { symbol, timeframe },
     });
     return response;

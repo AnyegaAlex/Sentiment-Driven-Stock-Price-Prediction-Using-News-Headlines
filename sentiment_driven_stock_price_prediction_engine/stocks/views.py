@@ -45,12 +45,18 @@ def get_fallback_analysis(symbol: str, risk_type: str = "medium", hold_time: str
     }
     data = static_data.get(symbol, {"company": f"{symbol} Inc.", "price": 100.0, "sma50": 98.0, "sma200": 95.0, "rsi": 55.0, "support": 95.0, "resistance": 105.0, "volume": 1000000, "volatility": 0.2})
     price = data["price"]
+    # Fallback sentiment object (neutral with 0.5 score, 0 recent articles)
+    fallback_sentiment = {
+        "overall": "Neutral",
+        "score": 0.5,
+        "recent_articles": 0
+    }
     return {
         "company": data["company"],
         "symbol": symbol,
         "recommendation": "HOLD",
         "confidence": 0.5,
-        "sentiment": 0.0,
+        "sentiment": fallback_sentiment,   # now an object
         "lastUpdated": datetime.utcnow().isoformat() + "Z",
         "technicalIndicators": {
             "currentPrice": price,
@@ -231,19 +237,37 @@ class StockAnalysisView(APIView):
             
             formatted = format_investment_analysis(opinion)
             
-            # Get sentiment from news (if available)
-            sentiment_score = 0.0
+            # ---------- BUILD SENTIMENT SUMMARY ----------
+            sentiment_summary = {
+                'overall': 'Neutral',
+                'score': 0.0,
+                'recent_articles': 0
+            }
             try:
-                news_items = ProcessedNews.objects.filter(symbol=symbol).order_by('-published_at')[:50]
+                # Get last 10 news articles for this symbol
+                news_items = ProcessedNews.objects.filter(symbol=symbol).order_by('-published_at')[:10]
                 if news_items.exists():
-                    sentiments = [n.sentiment_score for n in news_items if n.sentiment_score is not None]
-                    if sentiments:
-                        sentiment_score = sum(sentiments) / len(sentiments)
+                    scores = [n.sentiment_score for n in news_items if n.sentiment_score is not None]
+                    if scores:
+                        avg_score = sum(scores) / len(scores)
+                        sentiment_summary['score'] = round(avg_score, 4)
+                        if avg_score > 0.2:
+                            sentiment_summary['overall'] = 'Bullish'
+                        elif avg_score < -0.2:
+                            sentiment_summary['overall'] = 'Bearish'
+                        else:
+                            sentiment_summary['overall'] = 'Neutral'
+                        sentiment_summary['recent_articles'] = len(scores)
+                    else:
+                        # No valid scores – fallback
+                        sentiment_summary['score'] = 0.5
+                        sentiment_summary['overall'] = 'Neutral'
                 else:
-                    sentiment_score = 0.5
+                    # No news at all
+                    sentiment_summary['score'] = 0.5
             except Exception as e:
                 logger.warning(f"Could not fetch sentiment for {symbol}: {e}")
-                sentiment_score = 0.5
+                sentiment_summary['score'] = 0.5
 
             # Build technical indicators
             tech_indicators = formatted.get('analysis', {}).get('technical_indicators', {})
@@ -279,7 +303,7 @@ class StockAnalysisView(APIView):
                 "symbol": symbol.upper(),
                 "recommendation": formatted.get('analysis', {}).get('recommendation', 'HOLD'),
                 "confidence": formatted.get('analysis', {}).get('confidence', 0.5) / 100.0,
-                "sentiment": round(sentiment_score, 2),
+                "sentiment": sentiment_summary,   # now an object
                 "lastUpdated": datetime.utcnow().isoformat() + 'Z',
                 "technicalIndicators": technical,
                 "priceTargets": price_targets,
@@ -300,7 +324,7 @@ class StockAnalysisView(APIView):
                         symbol=symbol,
                         movement=lstm['direction'],
                         confidence=lstm.get('confidence', 50) / 100.0,
-                        sentiment_score=sentiment_score,
+                        sentiment_score=sentiment_summary['score'],
                         headline="",  # No specific news headline
                         source='lstm'
                     )
