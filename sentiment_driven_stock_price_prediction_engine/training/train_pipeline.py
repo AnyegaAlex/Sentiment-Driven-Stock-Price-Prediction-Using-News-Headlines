@@ -23,7 +23,7 @@ tqdm.pandas()  # Enable progress_apply for pandas
 # ----------------------------
 # Filepaths (adjust as needed)
 # ----------------------------
-STOCK_DATA_PATH = r'C:\Users\HP\OneDrive\Desktop\Sentiment Driven Stock Price Prediction Using News Headlines\.venv\sentiment_driven_stock_price_prediction_engine\data\cleaned_data\ibm_cleaned.csv'  # Historical stock CSV
+STOCK_DATA_PATH = "./data/ibm_cleaned.parquet"    
 MODEL_SAVE_PATH = "./sentiment_driven_stock_price_prediction_engine/models/stock_prediction_model.pth"
 
 # ----------------------------
@@ -32,7 +32,8 @@ MODEL_SAVE_PATH = "./sentiment_driven_stock_price_prediction_engine/models/stock
 
 def load_stock_data(filepath: str) -> pd.DataFrame:
     """Load and sort historical stock data by date."""
-    df = pd.read_csv(filepath, parse_dates=["Date"])
+    df = pd.read_parquet(filepath) if filepath.endswith('.parquet') else pd.read_csv(filepath, parse_dates=["Date"])
+    df['Date'] = pd.to_datetime(df['Date'])   # Force datetime
     df.sort_values(by="Date", inplace=True)
     return df
 
@@ -43,8 +44,23 @@ def add_sentiment_scores(df: pd.DataFrame) -> pd.DataFrame:
     Positive sentiments yield a positive score; negatives yield a negative score.
     A progress bar is shown to monitor processing over large datasets.
     """
+    # Use MPS if available
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+        print("Using Apple MPS for sentiment analysis")
+    else:
+        device = torch.device("cpu")
+        print("Using CPU for sentiment analysis")
+
+    sentiment_model = pipeline(
+        "text-classification",
+        model="ProsusAI/finbert",          # or "distilbert-base-uncased-finetuned-sst-2-english"
+        device=device,
+        batch_size=16                      # Increase if memory allows (e.g., 32)
+    )
+
     # Initialize FinBERT pipeline (using CPU: device=-1)
-    sentiment_model = pipeline("text-classification", model="ProsusAI/finbert", device=-1)
+    sentiment_model = pipeline("text-classification", model="ProsusAI/finbert", device=-1, framework='pt')
 
     def get_sentiment(text: str) -> float:
         # Return neutral (0.0) if missing text.
@@ -129,6 +145,10 @@ def train_model(X_train: pd.DataFrame, y_train: pd.Series, input_size: int, epoc
 
 def main():
     df = load_stock_data(STOCK_DATA_PATH)
+    print("Loaded stock data:", df.shape)
+
+    # For testing, use a sample of 10,000 rows (remove this line for full training)
+    df = df.sample(10000, random_state=42)
     print("Loaded stock data:", df.shape)
     
     df = add_sentiment_scores(df)

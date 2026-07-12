@@ -246,14 +246,17 @@ class StockAnalysisView(APIView):
                 sentiment_score = 0.5
 
             # Build technical indicators
+            tech_indicators = formatted.get('analysis', {}).get('technical_indicators', {})
+            current_price = formatted.get('analysis', {}).get('current_price', 0)
+
             technical = {
-                "currentPrice": formatted.get('analysis', {}).get('current_price', 0),
-                "sma50": formatted.get('analysis', {}).get('sma_50', 0),
-                "sma200": formatted.get('analysis', {}).get('sma_200', 0),
-                "rsi": formatted.get('analysis', {}).get('rsi', 0),
-                "support": formatted.get('analysis', {}).get('support', 0),
-                "resistance": formatted.get('analysis', {}).get('resistance', 0),
-                "volume": formatted.get('analysis', {}).get('volume', 0),
+                "currentPrice": current_price,
+                "sma50": tech_indicators.get('sma_50', 0),
+                "sma200": tech_indicators.get('sma_200', 0),
+                "rsi": tech_indicators.get('rsi', 0),
+                "support": tech_indicators.get('support', 0),
+                "resistance": tech_indicators.get('resistance', 0),
+                "volume": tech_indicators.get('volume', 0),
             }
             base_price = technical["currentPrice"]
             price_targets = {
