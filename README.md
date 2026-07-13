@@ -1,58 +1,65 @@
+# Sentiment-Driven Stock Price Prediction Using News Headlines 
 
-# Sentiment-Driven Stock Price Prediction Using News Headlines 📈
+[![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
+[![Django](https://img.shields.io/badge/Django-4.2-brightgreen)](https://www.djangoproject.com/)
+[![React](https://img.shields.io/badge/React-18-61DAFB)](https://reactjs.org/)
+[![Celery](https://img.shields.io/badge/Celery-5.3-lightgrey)](https://docs.celeryq.dev/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14-blue)](https://www.postgresql.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
-![Django](https://img.shields.io/badge/Django-4.2-brightgreen)
-![Celery](https://img.shields.io/badge/Celery-5.3-lightgrey)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14-blue)
-
-## **Live Demo** 🚀
+## **Live Demo** 
 - **Frontend**: Hosted on Vercel → [https://sentiment-driven-stock-price-predic.vercel.app/](https://sentiment-driven-stock-price-predic.vercel.app/)
 - **Backend**: Hosted on Render → [https://sentiment-driven-stock-price-prediction.onrender.com](https://sentiment-driven-stock-price-prediction.onrender.com)
-
-## **Overview** 🔍
-This project delivers a real-time stock sentiment analysis platform that leverages cutting-edge NLP and machine learning to predict stock price movements based on financial news headlines. It features automated, multi-source data pipelines that aggregate and deduplicate news from sources like Alpha Vantage, Yahoo Finance, and Finnhub. The system employs advanced sentiment analysis using FinBERT and spaCy to extract key insights, which are then integrated into an interactive dashboard for market monitoring. Designed to empower investors, the platform provides actionable, data-driven insights by correlating news sentiment with stock price trends—enabling smarter, more informed decision-making.
+- **Gradio (LSTM)**: Hosted on Hugging Face Spaces → [https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics](https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics)
 
 ---
 
+## **Overview** 
 
-## **Key Features** 🚀
+This project delivers a **real‑time stock sentiment analysis platform** that leverages cutting‑edge NLP and machine learning to predict stock price movements based on financial news headlines. It features automated, multi‑source data pipelines that aggregate and deduplicate news from sources like Alpha Vantage, Yahoo Finance, and Finnhub. The system employs advanced sentiment analysis using **FinBERT** and **spaCy** to extract key insights, which are then integrated into an interactive dashboard for market monitoring. Designed to empower investors, the platform provides actionable, data‑driven insights by correlating news sentiment with stock price trends—enabling smarter, more informed decision‑making.
 
-### **1. Automated News Aggregation & Processing**
-- **Multi-Source Integration**: Seamlessly aggregates news from Alpha Vantage, Yahoo Finance, and Finnhub to ensure comprehensive market coverage.
-- **Duplicate Detection**: Employs SHA-256 hashing for robust duplicate prevention, ensuring only unique articles are processed and stored.
+---
+
+## **Key Features** 
+
+### 1. Automated News Aggregation & Processing
+- **Multi‑Source Integration**: Seamlessly aggregates news from Alpha Vantage, Yahoo Finance, and Finnhub to ensure comprehensive market coverage.
+- **Duplicate Detection**: Employs SHA‑256 hashing for robust duplicate prevention, ensuring only unique articles are processed and stored.
 - **Dynamic Filtering**: Enables filtering of news by publication date, sentiment, and source reliability to provide the most relevant insights.
 
-### **2. Advanced Sentiment & Contextual Analysis**
-- **FinBERT-Powered Sentiment Analysis**: Leverages FinBERT for accurate, context-aware sentiment classification, capturing the nuances of market sentiment.
-- **Real-Time Confidence Scoring**: Provides a confidence score (ranging from 0 to 1) with every sentiment prediction, empowering users to gauge prediction reliability.
+### 2. Advanced Sentiment & Contextual Analysis
+- **FinBERT‑Powered Sentiment Analysis**: Leverages FinBERT for accurate, context‑aware sentiment classification, capturing the nuances of market sentiment.
+- **Real‑Time Confidence Scoring**: Provides a confidence score (ranging from 0 to 1) with every sentiment prediction, empowering users to gauge prediction reliability.
 - **Key Phrase Extraction**: Uses spaCy to extract critical key phrases from news content, aiding quick content digestion and context understanding.
 - **Historical Trend Visualization**: Visualizes sentiment trends over time to help track market mood shifts and forecast potential movements.
 
-### **3. Interactive Predictive Dashboard**
+### 3. Interactive Predictive Dashboard
 - **Unified Dashboard Interface**: Combines market metrics, news analysis, and prediction history in one interactive view.
-- **Dynamic Data Visualizations**: Features interactive charts (including dual-axis graphs) with sentiment overlays and trend analyses.
-- **Custom Filtering & Real-Time Refresh**: Allows users to apply custom filters on news and refresh data dynamically to get the latest market insights.
-- **Confidence & Reliability Indicators**: Highlights prediction confidence levels and news source reliability, ensuring informed decision-making.
+- **Dynamic Data Visualizations**: Features interactive charts (including dual‑axis graphs) with sentiment overlays and trend analyses.
+- **Custom Filtering & Real‑Time Refresh**: Allows users to apply custom filters on news and refresh data dynamically to get the latest market insights.
+- **Confidence & Reliability Indicators**: Highlights prediction confidence levels and news source reliability, ensuring informed decision‑making.
 
-### **4. Robust Enterprise-Grade Infrastructure**
+### 4. Robust Enterprise‑Grade Infrastructure
 - **Asynchronous Task Management**: Powered by Django and Celery for efficient, reliable background processing of news data and machine learning tasks.
-- **Redis-Backed Task Queue & Bulk Database Operations**: Optimized for high-throughput operations, handling API rate limits, and ensuring performance via server-side caching.
+- **Redis‑Backed Task Queue & Bulk Database Operations**: Optimized for high‑throughput operations, handling API rate limits, and ensuring performance via server‑side caching.
 - **Dockerized Deployment**: Facilitates easy setup, scaling, and consistent deployment across environments.
 
-### **5. Training & Prediction Pipeline**
-- **Efficient Data Ingestion & Preprocessing**: Utilizes Dask for memory-efficient data ingestion from Parquet files, ensuring scalable processing of historical news data.
-- **Automated Model Training**: Trains a scikit-learn pipeline (featuring TF-IDF vectorization and Logistic Regression) to predict stock movements, complete with detailed performance evaluations (accuracy, precision, F1 score).
-- **Model Persistence & Interactive Predictions**: Persists the trained model using Joblib and offers an interactive Gradio interface for real-time stock movement predictions.
+### 5. Training & Prediction Pipeline
+- **Efficient Data Ingestion & Preprocessing**: Utilizes Dask for memory‑efficient data ingestion from Parquet files, ensuring scalable processing of historical news data.
+- **Automated Model Training**: Trains a scikit‑learn pipeline (featuring TF‑IDF vectorization and Logistic Regression) to predict stock movements, complete with detailed performance evaluations (accuracy, precision, F1 score).
+- **Model Persistence & Interactive Predictions**: Persists the trained model using Joblib and offers an interactive Gradio interface for real‑time stock movement predictions.
 
-### **6. Future Enhancements: AI-Driven Market Overviews**
-- **Upcoming AI Overviews**: Planned integration of AI-generated summaries to provide market overviews and actionable insights, further enhancing the decision-making process by summarizing complex news narratives.
+### 6. Future Enhancements: AI‑Driven Market Overviews
+- **Upcoming AI Overviews**: Planned integration of AI‑generated summaries to provide market overviews and actionable insights, further enhancing the decision‑making process by summarizing complex news narratives.
 
 ---
-## **System Architecture** 🏗️
-## Frontend Architecture
+
+## **System Architecture** 
+
+### Frontend Architecture
 This section covers the user interface components built with React. The frontend is designed with a dashboard that displays market metrics (DashboardCards), a news analysis module (NewsAnalysis) that filters and presents news articles with key phrases and sentiment badges, and a prediction history component that visualizes past predictions. Routing and error handling are managed using React Router, React Query, and custom UI components.
-### **Data Flow Diagram**
+
+#### Data Flow Diagram
 ```mermaid
 sequenceDiagram
     participant U as User
@@ -110,8 +117,10 @@ sequenceDiagram
     U->>D: Click refresh button
     D->>API: Force new fetch of news data (async)
 ```
-## Backend Architecture
+
+### Backend Architecture
 The backend is powered by Django and Celery for asynchronous tasks. It fetches news data from external APIs (Alpha Vantage, Finnhub, Yahoo Finance), processes the articles (normalization, deduplication, sentiment analysis, key phrase extraction, and source reliability assessment), and stores the results in a server‑side cache (Django DB). Robust error handling and retry mechanisms ensure the system’s resilience.
+
 ```mermaid
 flowchart TD
     A["Start: fetch_and_process_news Task"]
@@ -188,8 +197,9 @@ flowchart TD
     AE --- F
 ```
 
-## Training & Prediction Pipeline
+### Training & Prediction Pipeline
 This section details the machine learning pipeline that processes historical news data for training. It uses Dask for efficient data ingestion from Parquet files, performs batch sentiment analysis with FinBERT, and trains a scikit‑learn pipeline (utilizing TF‑IDF for feature extraction and Logistic Regression for classification) to predict stock movements. The trained model is persisted using Joblib and can be accessed via a Gradio interface for interactive predictions.
+
 ```mermaid
 flowchart TD
     A["Start: Training Pipeline"]
@@ -213,8 +223,10 @@ flowchart TD
     H --> I
     I --> J
 ```
-## Sequence Diagrams
+
+### End‑to‑End Sequence Diagram
 This combined sequence diagram illustrates the end‑to‑end flow of the application. It details how the frontend components (Dashboard with DashboardCards and NewsList, News Analysis page, Prediction History page) interact with the backend API for news processing, and how the training pipeline feeds into the prediction endpoint. This overview helps visualize the complete system architecture and data flow.
+
 ```mermaid
 sequenceDiagram
     participant U as User
@@ -253,23 +265,24 @@ sequenceDiagram
     API-->>EH: Forward errors (e.g., rate limiting)
     EH-->>API: Error handled & retried
 ```
-## API Endpoints 🌐
+
+---
+
+## **API Endpoints** 
 
 ### 1. Symbol Search
 Search for stock symbols using Alpha Vantage or Yahoo Finance as fallback.
 
-#### Endpoint:
-``` http
-GET /api/news/symbol-search/?q=Apple
-```
-#### Parameters:
-- *q (required): The search query (e.g., "Apple")*
-#### Response:
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/news/symbol-search/?q=Apple` | Returns a list of matching symbols and their metadata. |
+
+**Parameters**:
+- `q` (required) – the search query (e.g., "Apple")
+
+**Response**:
 ```json
 HTTP 200 OK
-Allow: OPTIONS, GET
-Content-Type: application/json
-Vary: Accept
 [
     {
         "1. symbol": "APLE",
@@ -282,30 +295,24 @@ Vary: Accept
         "8. currency": "USD",
         "9. matchScore": "0.8889"
     },
+    ...
+]
 ```
-### 2. Get Analyzed News
-Retrieve analyzed news for a stock symbol. Steps:
 
-    1. Check the database cache.
-    2. Attempt to fetch from Alpha Vantage.
-    3. Fallback to Finnhub, then Yahoo Finance if needed.
-    4. Standardize and analyze each article, save it, and return the data.
+### 2. Get News
+Retrieve processed news for a given stock symbol. Checks the database cache first, then fetches from external APIs if needed.
 
-#### Endpoint:
-```http
-GET /api/news/analyzed/
-```
-#### Parameters:
-- ```symbol``` (required): The stock symbol (e.g., "AAPL").
-- ```refresh``` (optional): Force a refresh of the data (default: ```false```).
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/news/get-news/?symbol=IBM` | Returns a list of analyzed news articles. |
 
-#### Response:
+**Parameters**:
+- `symbol` (required) – the stock symbol (e.g., "AAPL")
+- `refresh` (optional) – force a refresh (`true` or `false`, default `false`)
+
+**Response**:
 ```json
 HTTP 200 OK
-Allow: OPTIONS, GET
-Content-Type: application/json
-Vary: Accept
-
 {
     "symbol": "IBM",
     "news": [
@@ -315,108 +322,209 @@ Vary: Accept
             "source": "Zacks Commentary",
             "published_at": "2025-02-14T14:56:00Z",
             "sentiment": "neutral",
-            "confidence": 0.904671311378479
-        },
+            "confidence": 0.9047,
+            "key_phrases": ["deals", "acquisition", "share price"],
+            "source_reliability": 80
+        }
+    ]
+}
 ```
-### 3. Get News
-Retrieve processed news for a given stock symbol. If a refresh is requested or no processed news exists, trigger an asynchronous task.
 
-#### Endpoint:
+### 3. Unified Stock Analysis
+Get a comprehensive analysis including recommendation, technical indicators, sentiment summary, and LSTM prediction.
 
-```http
-GET /api/news/get-news/
-```
-#### Parameters:
-- ```symbol``` (required): The stock symbol (e.g., "AAPL").
-- ```refresh``` (optional): Force a refresh of the data (default: ```false```).
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/stock-analysis/?symbol=IBM` | Returns a complete dashboard data object. |
 
-#### Response:
+**Parameters**:
+- `symbol` (required)
+- `risk_type` – `low`, `medium`, `high` (default `medium`)
+- `hold_time` – `short-term`, `medium-term`, `long-term` (default `medium-term`)
+
+**Response**:
 ```json
 HTTP 200 OK
-Allow: OPTIONS, GET
-Content-Type: application/json
-Vary: Accept
-
 {
     "symbol": "IBM",
-    "news": [
-        {
-            "title": "Seagate Inks Deal to Acquire Intevac in $119 Million All-Cash Deal",
-            "summary": "STX will buy Intevac for $4.00 per share in an all-cash transaction. The buyout is expected to close by late March or early April 2025.",
-            "source": "Zacks Commentary",
-            "published_at": "2025-02-14T14:56:00Z",
-            "sentiment": "neutral",
-            "confidence": 0.904671311378479
-        },
+    "recommendation": "Hold",
+    "confidence": 0.65,
+    "sentiment": {
+        "overall": "Neutral",
+        "score": 0.12,
+        "recent_articles": 10
+    },
+    "technicalIndicators": {
+        "currentPrice": 180.00,
+        "sma50": 178.00,
+        "rsi": 52.0,
+        "support": 170.0,
+        "resistance": 190.0
+    },
+    "priceTargets": {
+        "bearish": 162.00,
+        "base": 180.00,
+        "bullish": 205.20
+    },
+    "keyFactors": [...],
+    "riskAssessment": {...}
+}
 ```
-## Installation (Manual Setup) ⚙️
-### Backend:
+
+### 4. Prediction History
+Retrieve historical predictions for a symbol with pagination.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/prediction-history/?symbol=IBM` | Returns paginated prediction records. |
+
+---
+
+## **Installation** 
+
+### Prerequisites
+- Python 3.12+
+- Node.js 20+
+- PostgreSQL 14+
+- Redis (for Celery)
+
+### Backend Setup
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/AnyegaAlex/sentiment-driven-stock-price-prediction.git
+   cd sentiment-driven-stock-price-prediction
+   ```
+
+2. Create and activate a virtual environment:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate   # On Windows: .venv\Scripts\activate
+   ```
+
+3. Install Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. Set up environment variables (create a `.env` file in the backend root):
+   ```env
+   SECRET_KEY=your-django-secret-key
+   DEBUG=True
+   DATABASE_URL=postgresql://user:password@localhost:5432/stock_analysis
+   ALPHA_VANTAGE_KEY=your_alpha_vantage_key
+   FINNHUB_API_KEY=your_finnhub_key
+   RAPIDAPI_KEY=your_rapidapi_key
+   RAPIDAPI_HOST=apidojo-yahoo-finance-v1.p.rapidapi.com
+   CELERY_BROKER_URL=redis://localhost:6379/0
+   REDIS_URL=redis://localhost:6379/1
+   ENABLE_LSTM=False   # set to True if you have the model
+   ```
+
+5. Run migrations:
+   ```bash
+   python manage.py migrate
+   ```
+
+6. Start the backend server:
+   ```bash
+   python manage.py runserver
+   ```
+
+7. In a separate terminal, start Celery:
+   ```bash
+   celery -A sentiment_driven_stock_price_prediction_engine worker --pool=solo --loglevel=info
+   ```
+
+### Frontend Setup
+1. Navigate to the frontend directory:
+   ```bash
+   cd frontend
+   ```
+
+2. Install Node dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Create a `.env` file in the frontend root:
+   ```env
+   VITE_API_BASE_URL=http://localhost:8000
+   ```
+
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+### Docker (Optional)
+For production or consistent local development, a `Dockerfile` and `docker-compose.yml` are provided. Use:
 ```bash
-python -m venv .venv
-source .venv/Scripts/activate
-pip install -r requirements.txt
-
-cd sentiment_driven_stock_price_prediction_engine
-python manage.py runserver
+docker-compose up --build
 ```
 
-### Frontend:
-```bash
-cd .venv
-Scripts/activate
+---
 
-cd frontend
-npm install
-npm run dev
-```
+## **Deployment Status** 
 
-### Start Services:
-```bash
-redis-server
-celery -A sentiment_driven_stock_price_prediction_engine worker --pool=solo --loglevel=info
-python manage.py runserver
-npm run dev
-```
+| Component | URL | Status |
+|-----------|-----|--------|
+| Frontend (Vercel) | [https://sentiment-driven-stock-price-predic.vercel.app/](https://sentiment-driven-stock-price-predic.vercel.app/) | ✅ Live |
+| Backend (Render) | [https://sentiment-driven-stock-price-prediction.onrender.com](https://sentiment-driven-stock-price-prediction.onrender.com) | ✅ Live |
+| Gradio Space (Hugging Face) | [https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics](https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics) | ✅ Live |
 
-### Environment Variables (.env)
-```
-//Backend (.env)//
+### Known Issues & Workarounds
+- **LSTM Model**: The model is not loaded on Render by default. Set `ENABLE_LSTM=False` in environment variables if you don't have the `.pth` file.
+- **News API Rate Limits**: Free tier APIs have call limits. The system handles rate limits gracefully by falling back to cached data.
+- **Trailing Slashes**: All API calls now include trailing slashes to avoid 301 redirects.
 
-NEWS_API_KEY=
-ALPHA_VANTAGE_KEY=
-FINNHUB_API_KEY=
-RAPIDAPI_KEY=
-RAPIDAPI_HOST=
-DB_NAME=stock_analysis
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_HOST=localhost
-CELERY_BROKER_URL=
+---
 
-//Frontend (.env)//
+## **Tech Stack** 🛠️
 
-VITE_ALPHA_VANTAGE_KEY=
-VITE_RAPIDAPI_KEY=
-VITE_RAPIDAPI_HOST=
-REACT_APP_API_BASE_URL=
+**Backend**
+- Django 4.2, Django REST Framework
+- Celery 5.3, Redis
+- PostgreSQL 14
+- FinBERT (Hugging Face Transformers)
+- spaCy for NLP
+- Joblib for model persistence
 
-```
+**Frontend**
+- React 18, React Router 6
+- React Query, Axios
+- Chart.js, Recharts
+- Tailwind CSS
 
-## Contributing
+**ML Pipeline**
+- Scikit‑learn (Logistic Regression, TF‑IDF)
+- Dask for large data processing
+- Gradio for interactive predictions
 
-We welcome contributions to improve this project! Follow these steps to get started:
+**Deployment**
+- Vercel, Render, Hugging Face Spaces
+- Docker, Git LFS
 
-1. **Fork the Repository:** Create your own copy of the project.
-2. **Create a Feature Branch:** Branch off from the latest version of `main`.
-3. **Implement Your Changes:** 
-   - Add new features or bug fixes.
-   - Include comprehensive test coverage.
-   - Update the documentation as needed.
-   - Ensure proper type annotations are added.
-4. **Submit a Pull Request (PR):** Clearly describe your changes and the issues they address.
+---
 
-By contributing, you agree to adhere to our Code of Conduct to ensure a respectful and collaborative environment for everyone.
+## **Contributing** 
 
-## License 📄
+We welcome contributions! Please follow these steps:
 
-MIT License - See [LICENSE](https://choosealicense.com/licenses/mit/)for details.
+1. **Fork** the repository.
+2. **Create a feature branch** (`git checkout -b feature/your-feature`).
+3. **Make your changes** and add tests.
+4. **Commit** with a clear message (`git commit -m "Add awesome feature"`).
+5. **Push** to your branch (`git push origin feature/your-feature`).
+6. **Open a Pull Request** against `main`.
+
+Please ensure your code adheres to the existing style and includes appropriate tests. For major changes, open an issue first to discuss what you'd like to change.
+
+---
+
+## **License** 
+
+This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
+
+---
+
+**Built with ❤️ by AnyegaAlex** – let’s make investing smarter with AI.
