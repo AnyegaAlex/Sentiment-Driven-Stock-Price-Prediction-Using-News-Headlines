@@ -5,6 +5,20 @@ const apiClient = axios.create({
   timeout: 5000
 });
 
+// Request interceptor to add API key to every request
+apiClient.interceptors.request.use(
+  (config) => {
+    const apiKey = import.meta.env.VITE_API_KEY;
+    if (apiKey) {
+      config.headers['X-API-Key'] = apiKey;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 // Response interceptor to properly handle errors
 apiClient.interceptors.response.use(
   response => response.data,

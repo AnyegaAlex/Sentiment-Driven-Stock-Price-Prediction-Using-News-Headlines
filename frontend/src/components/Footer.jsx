@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { FaTwitter, FaLinkedin, FaGithub, FaPaperPlane } from "react-icons/fa";
 import { useMutation } from "@tanstack/react-query";
 import api from "@/services/api";
 import { cn } from "@/lib/utils";
@@ -33,26 +32,52 @@ const Footer = () => {
   };
 
   return (
-    <footer className="bg-gradient-to-r from-blue-600 to-indigo-700 dark:from-blue-800 dark:to-indigo-900 py-8 shadow-lg mt-12">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <footer className="border-t border-gray-200 dark:border-gray-800 py-8 px-4 mt-auto bg-white dark:bg-gray-900">
+      <div className="max-w-6xl mx-auto">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-          {/* Copyright */}
-          <div className="text-center md:text-left order-1 md:order-none">
-            <p className="text-indigo-200 dark:text-indigo-300 text-sm">
+          
+          {/* Copyright and Links */}
+          <div className="text-center md:text-left">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               &copy; {new Date().getFullYear()} Sentiment-Driven Stock Prediction
             </p>
-            <div className="mt-2 flex flex-wrap justify-center md:justify-start gap-x-4 gap-y-1">
-              {["Terms of Service", "Privacy Policy", "About Us"].map((item) => (
-                <a key={item} href="#" className="text-indigo-300 dark:text-indigo-400 hover:text-white text-xs transition-colors">
-                  {item}
-                </a>
-              ))}
+            <div className="mt-2 flex flex-wrap justify-center md:justify-start gap-x-4 gap-y-1 text-sm">
+              <a 
+                href="https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition"
+              >
+                GitHub
+              </a>
+              <a 
+                href="https://linkedin.com/in/anyega-alex-kamau" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition"
+              >
+                LinkedIn
+              </a>
+              <a 
+                href="mailto:anyega.alex.kamau@gmail.com"
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition"
+              >
+                Contact
+              </a>
+              <a 
+                href="/api/docs/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition"
+              >
+                API Docs
+              </a>
             </div>
           </div>
 
-          {/* Newsletter */}
-          <div className="w-full max-w-md order-3 md:order-none">
-            <form onSubmit={handleSubscribe} className="flex flex-col items-center sm:flex-row gap-2">
+          {/* Newsletter Subscription */}
+          <div className="w-full max-w-md">
+            <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-2">
               <div className="relative w-full">
                 <label htmlFor="footer-email" className="sr-only">Email address</label>
                 <input
@@ -60,23 +85,24 @@ const Footer = () => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Your email address"
+                  placeholder="Subscribe for updates"
                   required
                   className={cn(
-                    "w-full px-4 py-2 rounded-full border",
+                    "w-full px-4 py-2 rounded-md border",
                     "border-gray-300 dark:border-gray-600 focus:outline-none",
-                    "focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-500",
-                    "bg-white/90 dark:bg-gray-800/90 text-gray-800 dark:text-gray-200"
+                    "focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400",
+                    "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200",
+                    "text-sm"
                   )}
                   disabled={mutation.isPending}
                   aria-describedby="subscription-status"
                 />
                 <div id="subscription-status" aria-live="polite" className="absolute -bottom-5 left-0 right-0 text-center text-xs">
                   {subscriptionStatus === "success" && (
-                    <span className="text-green-300">Subscribed successfully!</span>
+                    <span className="text-green-600 dark:text-green-400">Subscribed successfully!</span>
                   )}
                   {subscriptionStatus === "error" && (
-                    <span className="text-red-300">{errorMessage}</span>
+                    <span className="text-red-600 dark:text-red-400">{errorMessage}</span>
                   )}
                 </div>
               </div>
@@ -84,37 +110,48 @@ const Footer = () => {
                 type="submit"
                 disabled={mutation.isPending}
                 className={cn(
-                  "flex items-center justify-center gap-2",
-                  "px-4 py-2 rounded-full font-medium text-sm",
-                  "bg-white text-indigo-700 hover:bg-indigo-50",
-                  "dark:bg-indigo-600 dark:text-white dark:hover:bg-indigo-700",
-                  "transition-colors min-w-[120px]",
+                  "px-4 py-2 rounded-md font-medium text-sm",
+                  "bg-blue-600 text-white hover:bg-blue-700",
+                  "dark:bg-blue-500 dark:hover:bg-blue-600",
+                  "transition-colors whitespace-nowrap",
                   "disabled:opacity-70 disabled:cursor-not-allowed"
                 )}
               >
-                {mutation.isPending ? "Subscribing..." : <><FaPaperPlane size={14} /> Subscribe</>}
+                {mutation.isPending ? "Subscribing..." : "Subscribe"}
               </button>
             </form>
           </div>
+        </div>
 
-          {/* Social Links */}
-          <div className="flex gap-4 order-2 md:order-none">
-            {[
-              { icon: <FaTwitter size={20} />, label: "Twitter", url: "https://twitter.com" },
-              { icon: <FaLinkedin size={20} />, label: "LinkedIn", url: "https://linkedin.com" },
-              { icon: <FaGithub size={20} />, label: "GitHub", url: "https://github.com" },
-            ].map((social) => (
-              <a
-                key={social.label}
-                href={social.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={social.label}
-                className="text-indigo-200 hover:text-white transition-colors"
-              >
-                {social.icon}
-              </a>
-            ))}
+        {/* Bottom Bar */}
+        <div className="border-t border-gray-200 dark:border-gray-800 mt-6 pt-4 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <span>MIT License</span>
+          <div className="flex gap-4">
+            <span>Live Demo:</span>
+            <a 
+              href="https://sentiment-driven-stock-price-predic.vercel.app/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="hover:text-gray-900 dark:hover:text-gray-100 transition"
+            >
+              Frontend
+            </a>
+            <a 
+              href="https://sentiment-driven-stock-price-prediction.onrender.com" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="hover:text-gray-900 dark:hover:text-gray-100 transition"
+            >
+              Backend
+            </a>
+            <a 
+              href="https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="hover:text-gray-900 dark:hover:text-gray-100 transition"
+            >
+              LSTM Model
+            </a>
           </div>
         </div>
       </div>

@@ -1,11 +1,24 @@
+"""
+Stock analysis views – unified dashboard, technical indicators, LSTM predictions,
+subscription, and history. All endpoints are documented via OpenAPI (Swagger).
+"""
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, serializers
 from rest_framework.permissions import AllowAny
 from django.core.cache import cache
 from django.db import transaction
 import logging
 from datetime import datetime
+from authentication.utils import error_response, success_response
+
+# drf-spectacular for OpenAPI
+from drf_spectacular.utils import (
+    extend_schema, OpenApiParameter, OpenApiResponse, OpenApiTypes
+)
+
+# Project imports
 from .opinion_generator import generate_stock_opinion, format_investment_analysis
 from .models import Prediction, Subscription
 from .serializers import (
@@ -18,19 +31,15 @@ from .serializers import (
 )
 from news.models import ProcessedNews
 from .lstm_predictor import get_lstm_predictor
-from .utils import save_prediction  # NEW
+from .utils import save_prediction
 
 logger = logging.getLogger(__name__)
 
 # ============================================================
-#  FALLBACK HELPERS – used when external APIs fail
+#  FALLBACK HELPERS (unchanged – kept for resilience)
 # ============================================================
-
 def get_fallback_analysis(symbol: str, risk_type: str = "medium", hold_time: str = "medium-term") -> dict:
-    """
-    Generate a realistic fallback analysis when external APIs fail.
-    Uses static data for known symbols, generic for unknown.
-    """
+    """Generate realistic fallback when external APIs fail."""
     symbol = symbol.upper()
     static_data = {
         "AAPL": {"company": "Apple Inc.", "price": 116.16, "sma50": 114.84, "sma200": 111.81, "rsi": 70.8, "support": 110.35, "resistance": 121.97, "volume": 12424000, "volatility": 0.15},
@@ -45,18 +54,13 @@ def get_fallback_analysis(symbol: str, risk_type: str = "medium", hold_time: str
     }
     data = static_data.get(symbol, {"company": f"{symbol} Inc.", "price": 100.0, "sma50": 98.0, "sma200": 95.0, "rsi": 55.0, "support": 95.0, "resistance": 105.0, "volume": 1000000, "volatility": 0.2})
     price = data["price"]
-    # Fallback sentiment object (neutral with 0.5 score, 0 recent articles)
-    fallback_sentiment = {
-        "overall": "Neutral",
-        "score": 0.5,
-        "recent_articles": 0
-    }
+    fallback_sentiment = {"overall": "Neutral", "score": 0.5, "recent_articles": 0}
     return {
         "company": data["company"],
         "symbol": symbol,
         "recommendation": "HOLD",
         "confidence": 0.5,
-        "sentiment": fallback_sentiment,   # now an object
+        "sentiment": fallback_sentiment,
         "lastUpdated": datetime.utcnow().isoformat() + "Z",
         "technicalIndicators": {
             "currentPrice": price,
@@ -75,10 +79,7 @@ def get_fallback_analysis(symbol: str, risk_type: str = "medium", hold_time: str
         "keyFactors": [
             {"title": "Market Sentiment", "description": "Based on recent news", "impact": "neutral"}
         ],
-        "riskAssessment": {
-            "level": risk_type,
-            "horizon": hold_time
-        }
+        "riskAssessment": {"level": risk_type, "horizon": hold_time}
     }
 
 def get_fallback_technical(symbol: str) -> dict:
@@ -96,24 +97,140 @@ def get_fallback_technical(symbol: str) -> dict:
         "IBM": {"current_price": 180.00, "sma_50": 178.00, "sma_200": 175.00, "rsi": 52.0, "support": 170.0, "resistance": 190.0, "volume": 1500000, "volatility": 0.09},
     }
     data = static_data.get(symbol, {"current_price": 100.0, "sma_50": 98.0, "sma_200": 95.0, "rsi": 55.0, "support": 95.0, "resistance": 105.0, "volume": 1000000, "volatility": 0.2})
-    data["pivot"] = data["current_price"]
-    data["price_history"] = [data["current_price"] * (1 + (i-10)*0.005) for i in range(20)]
-    return {"technical": data}
+    
+    # Generate price history (30 data points with slight variation)
+    price_history = []
+    base_price = data["current_price"]
+    for i in range(30):
+        # Create realistic price movement with some randomness
+        variation = 1 + ((i - 15) * 0.005) + (0.02 * (i % 5 - 2) / 2)
+        price_history.append(round(base_price * variation, 2))
+    
+    # Return data in the format expected by the view
+    return {
+        "technical": {
+            "current_price": data["current_price"],
+            "sma_50": data["sma_50"],
+            "sma_200": data["sma_200"],
+            "rsi": data["rsi"],
+            "support": data["support"],
+            "resistance": data["resistance"],
+            "pivot": data["current_price"],  # Use current price as pivot
+            "volume": data["volume"],
+            "volatility": data["volatility"],
+            "price_history": price_history,
+        }
+    }
 
 # ============================================================
-#  EXISTING VIEWS (kept as-is)
+#  INLINE SERIALIZERS FOR SWAGGER RESPONSE SHAPES
+# ============================================================
+class SentimentSummarySerializer(serializers.Serializer):
+    overall = serializers.CharField()
+    score = serializers.FloatField()
+    recent_articles = serializers.IntegerField()
+
+class TechnicalIndicatorsResponseSerializer(serializers.Serializer):
+    currentPrice = serializers.FloatField()
+    sma50 = serializers.FloatField()
+    sma200 = serializers.FloatField()
+    rsi = serializers.FloatField()
+    support = serializers.FloatField()
+    resistance = serializers.FloatField()
+    volume = serializers.IntegerField()
+
+class PriceTargetsSerializer(serializers.Serializer):
+    bearish = serializers.FloatField()
+    base = serializers.FloatField()
+    bullish = serializers.FloatField()
+
+class KeyFactorSerializer(serializers.Serializer):
+    title = serializers.CharField()
+    description = serializers.CharField()
+    impact = serializers.CharField()
+
+class RiskAssessmentSerializer(serializers.Serializer):
+    level = serializers.CharField()
+    horizon = serializers.CharField()
+
+class StockAnalysisResponseSerializer(serializers.Serializer):
+    company = serializers.CharField()
+    symbol = serializers.CharField()
+    recommendation = serializers.CharField()
+    confidence = serializers.FloatField()
+    sentiment = SentimentSummarySerializer()
+    lastUpdated = serializers.CharField()
+    technicalIndicators = TechnicalIndicatorsResponseSerializer()
+    priceTargets = PriceTargetsSerializer()
+    keyFactors = KeyFactorSerializer(many=True)
+    riskAssessment = RiskAssessmentSerializer()
+    lstm_prediction = serializers.DictField(required=False)
+
+class LSTMPredictionResponseSerializer(serializers.Serializer):
+    symbol = serializers.CharField()
+    prediction = serializers.CharField()
+    confidence = serializers.FloatField()
+    sentiment_score = serializers.FloatField()
+    timestamp = serializers.CharField()
+    success = serializers.BooleanField()
+
+# ============================================================
+#  VIEWS
 # ============================================================
 
 class StockOpinionView(APIView):
     """
-    API endpoint to generate an AI stock opinion.
-    (Legacy endpoint – kept for backward compatibility)
+    Legacy endpoint – kept for backward compatibility.
+    Generates a detailed investment analysis.
     """
+    @extend_schema(
+        summary="Generate AI stock opinion (legacy)",
+        description="Returns a full investment thesis including recommendation, key points, and risk assessment.",
+        parameters=[
+            OpenApiParameter(
+                name='symbol',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Stock ticker (e.g., AAPL)',
+                required=True
+            ),
+            OpenApiParameter(
+                name='risk_type',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Risk tolerance: low, medium, high',
+                required=False,
+                default='medium'
+            ),
+            OpenApiParameter(
+                name='hold_time',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Investment horizon: short-term, medium-term, long-term',
+                required=False,
+                default='medium-term'
+            ),
+            OpenApiParameter(
+                name='detail_level',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='summary or full',
+                required=False,
+                default='summary'
+            ),
+        ],
+        responses={
+            200: StockOpinionSerializer,
+            400: OpenApiResponse(description="Missing symbol or invalid parameters"),
+            500: OpenApiResponse(description="Internal server error"),
+        },
+        tags=["Legacy"]
+    )
     def get(self, request, *args, **kwargs):
         symbol = request.query_params.get("symbol")
         if not symbol:
             return Response(
-                {"error": "Stock symbol is required."},
+                error_response("Stock symbol is required.", code=2001),
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -139,7 +256,7 @@ class StockOpinionView(APIView):
         except Exception as e:
             logger.exception(f"Error generating stock opinion for {symbol}: {str(e)}")
             return Response(
-                {"error": f"Internal server error: {str(e)}"},
+                error_response(f"Internal server error: {str(e)}", code=9001),
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
@@ -160,14 +277,68 @@ class StockOpinionView(APIView):
 
 class PredictionHistoryView(APIView):
     """
-    API endpoint to retrieve prediction history with pagination and caching.
-    Returns a paginated list of predictions.
+    Paginated prediction history with Redis caching.
     """
+    @extend_schema(
+        summary="Get prediction history",
+        description="Returns a paginated list of past predictions. Filter by symbol and control pagination.",
+        parameters=[
+            OpenApiParameter(
+                name='symbol',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Filter by stock ticker',
+                required=False
+            ),
+            OpenApiParameter(
+                name='limit',
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                description='Number of results per page (max 200)',
+                required=False,
+                default=50
+            ),
+            OpenApiParameter(
+                name='offset',
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                description='Pagination offset',
+                required=False,
+                default=0
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(
+                response=serializers.Serializer,
+                description='Paginated list of predictions',
+                examples=[
+                    {
+                        "application/json": {
+                            "count": 125,
+                            "next": 100,
+                            "previous": 0,
+                            "results": [
+                                {
+                                    "id": 1,
+                                    "stock_symbol": "AAPL",
+                                    "predicted_movement": "UP",
+                                    "confidence": 0.82,
+                                    "date": "2026-07-12T10:00:00Z"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            ),
+            500: OpenApiResponse(description="Internal server error"),
+        },
+        tags=["Prediction History"]
+    )
     def get(self, request):
         try:
             symbol = request.query_params.get('symbol')
             limit = int(request.query_params.get('limit', 50))
-            limit = min(limit, 200)  # Cap at 200 to protect performance
+            limit = min(limit, 200)
             offset = int(request.query_params.get('offset', 0))
 
             cache_key = f"pred_history_{symbol}_{limit}_{offset}"
@@ -190,34 +361,64 @@ class PredictionHistoryView(APIView):
                 'results': serializer.data
             }
 
-            # Cache for 5 minutes to reduce DB load
             cache.set(cache_key, response_data, timeout=300)
             return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.exception(f"Error fetching prediction history: {e}")
             return Response(
-                {"error": "Internal server error", "details": str(e)},
+                error_response("Internal server error", code=9001, errors={"details": str(e)}),
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 
-# ============================================================
-#  NEW VIEWS – with fallback for resilience
-# ============================================================
-
 class StockAnalysisView(APIView):
     """
     Unified endpoint for the dashboard.
-    GET /api/stock-analysis/?symbol=AAPL&risk_type=medium&hold_time=medium-term
+    Combines sentiment, technicals, price targets, and (optionally) LSTM.
     """
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary="Unified stock analysis",
+        description="Comprehensive analysis: recommendation, sentiment summary, technical indicators, price targets, key factors, risk assessment, and LSTM prediction if available.",
+        parameters=[
+            OpenApiParameter(
+                name='symbol',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Stock ticker (e.g., AAPL)',
+                required=True
+            ),
+            OpenApiParameter(
+                name='risk_type',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Risk tolerance: low, medium, high',
+                required=False,
+                default='medium'
+            ),
+            OpenApiParameter(
+                name='hold_time',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Investment horizon: short-term, medium-term, long-term',
+                required=False,
+                default='medium-term'
+            ),
+        ],
+        responses={
+            200: StockAnalysisResponseSerializer,
+            400: OpenApiResponse(description="Missing symbol"),
+            500: OpenApiResponse(description="Internal server error (fallback used)"),
+        },
+        tags=["Stock Analysis"]
+    )
     def get(self, request):
         symbol = request.query_params.get("symbol")
         if not symbol:
             return Response(
-                {"error": "Stock symbol is required."},
+                error_response("Stock symbol is required.", code=2001),
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -244,7 +445,6 @@ class StockAnalysisView(APIView):
                 'recent_articles': 0
             }
             try:
-                # Get last 10 news articles for this symbol
                 news_items = ProcessedNews.objects.filter(symbol=symbol).order_by('-published_at')[:10]
                 if news_items.exists():
                     scores = [n.sentiment_score for n in news_items if n.sentiment_score is not None]
@@ -259,11 +459,8 @@ class StockAnalysisView(APIView):
                             sentiment_summary['overall'] = 'Neutral'
                         sentiment_summary['recent_articles'] = len(scores)
                     else:
-                        # No valid scores – fallback
                         sentiment_summary['score'] = 0.5
-                        sentiment_summary['overall'] = 'Neutral'
                 else:
-                    # No news at all
                     sentiment_summary['score'] = 0.5
             except Exception as e:
                 logger.warning(f"Could not fetch sentiment for {symbol}: {e}")
@@ -288,7 +485,7 @@ class StockAnalysisView(APIView):
                 "base": round(base_price, 2),
                 "bullish": round(base_price * 1.14, 2),
             }
-            # Key factors
+
             key_factors = []
             if 'key_points' in formatted.get('analysis', {}):
                 key_factors = [
@@ -303,7 +500,7 @@ class StockAnalysisView(APIView):
                 "symbol": symbol.upper(),
                 "recommendation": formatted.get('analysis', {}).get('recommendation', 'HOLD'),
                 "confidence": formatted.get('analysis', {}).get('confidence', 0.5) / 100.0,
-                "sentiment": sentiment_summary,   # now an object
+                "sentiment": sentiment_summary,
                 "lastUpdated": datetime.utcnow().isoformat() + 'Z',
                 "technicalIndicators": technical,
                 "priceTargets": price_targets,
@@ -314,51 +511,76 @@ class StockAnalysisView(APIView):
                 }
             }
             
-            # Add LSTM prediction if present in formatted
+            # Add LSTM prediction if present
             if "lstm_prediction" in formatted:
                 lstm = formatted["lstm_prediction"]
                 response_data["lstm_prediction"] = lstm
-                # Save prediction to history if direction is available
                 if lstm.get('direction') and lstm['direction'] != 'UNAVAILABLE':
                     save_prediction(
                         symbol=symbol,
                         movement=lstm['direction'],
                         confidence=lstm.get('confidence', 50) / 100.0,
                         sentiment_score=sentiment_summary['score'],
-                        headline="",  # No specific news headline
+                        headline="",
                         source='lstm'
                     )
             
             cache.set(cache_key, response_data, timeout=600)
-            return Response(response_data, status=status.HTTP_200_OK)
+            return Response(
+                success_response(data=response_data),
+                status=status.HTTP_200_OK
+            )
             
         except Exception as e:
-            # ---------- FALLBACK ----------
             logger.warning(f"Real data failed for {symbol}: {e}. Using fallback.")
             response_data = get_fallback_analysis(symbol, risk_type, hold_time)
             cache.set(cache_key, response_data, timeout=300)
-            return Response(response_data, status=status.HTTP_200_OK)
-
+            return Response(
+                success_response(data=response_data),
+                status=status.HTTP_200_OK
+            )
 
 class TechnicalIndicatorsView(APIView):
     """
-    GET /api/technical-indicators/?symbol=AAPL&timeframe=1d
-    Returns technical indicators.
+    Returns pure technical indicators (SMA, RSI, support, resistance, etc.).
     """
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary="Get technical indicators",
+        description="Returns technical metrics: SMA50, SMA200, RSI, support, resistance, pivot, volume, volatility, and price history.",
+        parameters=[
+            OpenApiParameter(
+                name='symbol',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Stock ticker',
+                required=True
+            ),
+        ],
+        responses={
+            200: TechnicalIndicatorsResponseSerializer,
+            400: OpenApiResponse(description="Missing symbol"),
+            500: OpenApiResponse(description="Internal server error (fallback used)"),
+        },
+        tags=["Technical Indicators"]
+    )
     def get(self, request):
         symbol = request.query_params.get("symbol")
         if not symbol:
             return Response(
-                {"error": "Symbol is required."},
+                error_response("Symbol is required.", code=2001),
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         cache_key = f"technical_{symbol}"
         cached = cache.get(cache_key)
         if cached:
-            return Response(cached, status=status.HTTP_200_OK)
+            return Response(
+                success_response(data=cached),
+                status=status.HTTP_200_OK
+            )
+
         
         try:
             opinion = generate_stock_opinion(symbol=symbol, risk_type="medium")
@@ -380,22 +602,35 @@ class TechnicalIndicatorsView(APIView):
             }
             response_data = {"technical": technical}
             cache.set(cache_key, response_data, timeout=300)
-            return Response(response_data, status=status.HTTP_200_OK)
+            return Response(
+                success_response(data=response_data),
+                status=status.HTTP_200_OK
+            )
             
         except Exception as e:
             logger.warning(f"Technical data failed for {symbol}: {e}. Using fallback.")
             response_data = get_fallback_technical(symbol)
             cache.set(cache_key, response_data, timeout=300)
-            return Response(response_data, status=status.HTTP_200_OK)
-
+            return Response(
+                success_response(data=response_data),
+                status=status.HTTP_200_OK
+            )
 
 class SymbolsListView(APIView):
     """
-    GET /api/stocks/symbols/
-    Returns a list of available symbols with names and regions.
+    List available stock symbols with company names and regions.
     """
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary="List available symbols",
+        description="Returns a list of supported stock symbols with company names and regions.",
+        responses={
+            200: SymbolSerializer(many=True),
+            500: OpenApiResponse(description="Internal server error"),
+        },
+        tags=["Symbols"]
+    )
     def get(self, request):
         cache_key = "symbols_list"
         cached = cache.get(cache_key)
@@ -422,18 +657,28 @@ class SymbolsListView(APIView):
         except Exception as e:
             logger.exception(f"Error fetching symbols list: {e}")
             return Response(
-                {"error": f"Internal server error: {str(e)}"},
+                error_response(f"Internal server error: {str(e)}", code=9001),
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 
 class SubscribeView(APIView):
     """
-    POST /api/subscribe/
-    Accepts { "email": "user@example.com" }
+    Email subscription for alerts.
     """
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary="Subscribe email",
+        description="Add an email address to the subscription list. Returns 201 if new, 200 if reactivated, 400 if already active.",
+        request=SubscriptionSerializer,
+        responses={
+            201: OpenApiResponse(description="Subscribed successfully."),
+            200: OpenApiResponse(description="Subscription reactivated."),
+            400: OpenApiResponse(description="Invalid email or already subscribed (active)."),
+        },
+        tags=["Subscription"]
+    )
     def post(self, request):
         serializer = SubscriptionSerializer(data=request.data)
         if serializer.is_valid():
@@ -444,7 +689,7 @@ class SubscribeView(APIView):
             )
             if created:
                 return Response(
-                    {"success": True, "message": "Subscribed successfully."},
+                    success_response(message="Subscribed successfully."),
                     status=status.HTTP_201_CREATED
                 )
             else:
@@ -452,42 +697,63 @@ class SubscribeView(APIView):
                     obj.is_active = True
                     obj.save()
                     return Response(
-                        {"success": True, "message": "Subscription reactivated."},
-                        status=status.HTTP_200_OK
-                    )
+                    success_response(message="Subscription reactivated."),
+                    status=status.HTTP_200_OK
+                )
                 return Response(
-                    {"success": False, "message": "Email already subscribed."},
+                    error_response("Email already subscribed.", code=4002),
                     status=status.HTTP_400_BAD_REQUEST
                 )
         return Response(
-            {"error": serializer.errors},
+            error_response("Validation failed", code=2001, errors=serializer.errors),
             status=status.HTTP_400_BAD_REQUEST
         )
 
 
-# ============================================================
-#  NEW: LSTM Prediction Endpoint
-# ============================================================
-
 class LSTMPredictionView(APIView):
     """
-    GET /api/lstm-predict/?symbol=AAPL&news=Apple%20announces%20new%20iPhone
-    Returns LSTM-based prediction for given symbol and optional news text.
-    Saves each successful prediction to the history table.
+    LSTM‑based prediction endpoint.
+    Accepts symbol and optional news text, returns directional prediction with confidence.
     """
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary="LSTM prediction",
+        description="Returns a directional prediction (UP/DOWN) using the LSTM model. Optionally incorporates news text.",
+        parameters=[
+            OpenApiParameter(
+                name='symbol',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Stock ticker',
+                required=True
+            ),
+            OpenApiParameter(
+                name='news',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='News headline or text for context',
+                required=False,
+                default=''
+            ),
+        ],
+        responses={
+            200: LSTMPredictionResponseSerializer,
+            400: OpenApiResponse(description="Missing symbol or prediction failed"),
+            500: OpenApiResponse(description="Internal server error"),
+        },
+        tags=["LSTM"]
+    )
     def get(self, request):
         symbol = request.query_params.get('symbol')
         if not symbol:
             return Response(
-                {"error": "Symbol is required."},
+                error_response("Symbol is required.", code=2001),
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         news_text = request.query_params.get('news', '')
 
-        # Check cache (5 minutes)
         cache_key = f"lstm_{symbol}_{hash(news_text)}"
         cached = cache.get(cache_key)
         if cached:
@@ -499,7 +765,7 @@ class LSTMPredictionView(APIView):
 
             if not result.get('success'):
                 return Response(
-                    {"error": result.get('error', 'Prediction failed')},
+                    error_response(result.get('error', 'Prediction failed'), code=5001),
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
@@ -515,18 +781,19 @@ class LSTMPredictionView(APIView):
                 )
             except Exception as e:
                 logger.warning(f"Failed to save prediction record for {symbol}: {e}")
-                # Non-critical – do not fail the response
 
-            # Build response
             result['symbol'] = symbol.upper()
             result['timestamp'] = datetime.utcnow().isoformat() + 'Z'
 
             cache.set(cache_key, result, timeout=300)
-            return Response(result, status=status.HTTP_200_OK)
+            return Response(
+                success_response(data=result),
+                status=status.HTTP_200_OK
+            )
 
         except Exception as e:
             logger.exception(f"Error in LSTMPredictionView for {symbol}: {e}")
             return Response(
-                {"error": f"Internal server error: {str(e)}"},
+                error_response(f"Internal server error: {str(e)}", code=9001),
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

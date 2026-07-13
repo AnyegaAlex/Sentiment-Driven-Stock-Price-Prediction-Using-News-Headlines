@@ -40,13 +40,16 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    
 
     # Third-party apps
     'rest_framework',
     'corsheaders',
     'django_redis',  # for Redis cache
+    'drf_spectacular',
 
     # Local apps
+    'authentication',
     'news',
     'stocks',
 ]
@@ -61,6 +64,11 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+
+    # Custom: Security & Authentication (Order matters: Deprecation can be before or after auth)
+    'authentication.middleware.APIKeyMiddleware',      # Auth
+    'authentication.middleware.RateLimitHeadersMiddleware', # Headers after auth
+    'authentication.middleware.DeprecationMiddleware', # Headers
 ]
 
 ROOT_URLCONF = 'sentiment_driven_stock_price_prediction_engine.urls'
@@ -84,13 +92,25 @@ TEMPLATES = [
 WSGI_APPLICATION = 'sentiment_driven_stock_price_prediction_engine.wsgi.application'
 
 # --- Database ---
-# Render's internal PostgreSQL does NOT require SSL; using default dj_database_url.
-DATABASES = {
-    'default': dj_database_url.config(
-        default='sqlite:///db.sqlite3',
-        conn_max_age=600,
-    )
-}
+# Render's PostgreSQL requires SSL - enforce it for production
+database_url = os.environ.get('DATABASE_URL')
+
+if database_url:
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=database_url,
+            conn_max_age=600,
+            ssl_require=True  # Force SSL connection for Render PostgreSQL
+        )
+    }
+else:
+    # Fallback to SQLite for local development
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -135,12 +155,23 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle'
+        'rest_framework.throttling.UserRateThrottle',
+        'authentication.throttles.APIKeyRateThrottle'
     ],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/hour',
-        'user': '1000/hour'
-    }
+        'user': '1000/hour',
+        'apikey': '200/minute'  # Per API key
+    },
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Sentiment-Driven Stock Prediction API',
+    'DESCRIPTION': 'Real-time stock analysis, sentiment, and LSTM forecasts.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
 }
 
 # --- CORS ---
@@ -175,23 +206,34 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 2  # 2MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024 * 2  # 2MB
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 
-# --- Caching Configuration (Redis) ---
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': os.getenv('REDIS_URL', 'redis://localhost:6379/1'),
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            'SOCKET_CONNECT_TIMEOUT': 10,
-            'SOCKET_TIMEOUT': 5,
-            'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
-            'IGNORE_EXCEPTIONS': True,
-            'MAX_ENTRIES': 1000,
-            'CULL_FREQUENCY': 3,
-        },
-        'KEY_PREFIX': 'sentiment_analysis',
+# --- Caching Configuration (Redis with Fallback) ---
+REDIS_URL = os.getenv('REDIS_URL')
+
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'SOCKET_CONNECT_TIMEOUT': 10,
+                'SOCKET_TIMEOUT': 5,
+                'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+                'IGNORE_EXCEPTIONS': True,  # Fail silently if Redis is down
+                'MAX_ENTRIES': 1000,
+                'CULL_FREQUENCY': 3,
+            },
+            'KEY_PREFIX': 'sentiment_analysis',
+        }
     }
-}
+else:
+    # Fallback to local memory cache
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'unique-snowflake',
+        }
+    }
 
 # --- Logging ---
 LOGGING = {
@@ -246,3 +288,9 @@ RATE_LIMIT_MAX_REQUESTS = 100  # Max requests per minute
 
 ENABLE_LSTM = True
 LSTM_MODEL_PATH = os.path.join(BASE_DIR, 'models', 'stock_prediction_model.pth')
+
+# Security Headers
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SECURE_HSTS_SECONDS = 31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True

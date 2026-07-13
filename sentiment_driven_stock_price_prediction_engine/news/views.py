@@ -1,3 +1,8 @@
+"""
+News views – fetch, sentiment analysis, and symbol search.
+All endpoints are documented via OpenAPI (Swagger).
+"""
+
 import gc
 import hashlib
 import logging
@@ -13,16 +18,23 @@ from django.db import IntegrityError, transaction, close_old_connections
 from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from rest_framework import status, serializers
+
+from authentication.utils import error_response, success_response
+# drf-spectacular for OpenAPI
+from drf_spectacular.utils import (
+    extend_schema, OpenApiParameter, OpenApiResponse, OpenApiTypes
+)
 
 from .models import ProcessedNews, SymbolSearchCache
 from .serializers import ProcessedNewsSerializer
-from .utils import analyze_sentiment  # ensure this exists
+from .utils import analyze_sentiment
 
 logger = logging.getLogger(__name__)
 task_logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------
-# Constants & helpers for the news fetcher
+# Constants & helpers (unchanged)
 # ------------------------------------------------------------
 CACHE_TTL_SECONDS = 3600
 MAX_ARTICLES = 50
@@ -39,9 +51,10 @@ _STOPWORDS = {
 _AV_TIME_FORMATS = ("%Y%m%dT%H%M%S", "%Y%m%dT%H%M")
 
 # ------------------------------------------------------------
-# Helper functions for news processing
+# Helper functions (unchanged)
 # ------------------------------------------------------------
 def _write_log(message: str) -> None:
+    """Write a log entry to a file (for debugging)."""
     log_file = os.path.join(getattr(settings, "BASE_DIR", "."), "logs", "news_fetch_log.txt")
     try:
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
@@ -51,9 +64,11 @@ def _write_log(message: str) -> None:
         pass
 
 def normalize_title(title: str) -> str:
+    """Normalize a title for deduplication."""
     return re.sub(r"[^\w\s]", "", (title or "").strip().lower())
 
 def extract_key_phrases(text: str) -> List[str]:
+    """Extract important bigrams from text."""
     if not text:
         return []
     words = re.findall(r"[A-Za-z]{3,}", text.lower())
@@ -69,6 +84,7 @@ def extract_key_phrases(text: str) -> List[str]:
     return [k for k, _ in sorted(freq.items(), key=lambda kv: kv[1], reverse=True)[:5]]
 
 def _parse_date(article: Dict[str, Any]) -> Optional[datetime]:
+    """Parse various date formats into a timezone-aware datetime."""
     value = (
         article.get("time_published")
         or article.get("datetime")
@@ -104,6 +120,7 @@ def _parse_date(article: Dict[str, Any]) -> Optional[datetime]:
         return None
 
 def get_source_reliability(name: str) -> int:
+    """Return a reliability score for a news source."""
     trusted = {
         "financial times": 90, "bloomberg": 95, "reuters": 85,
         "yahoo finance": 80, "wsj": 90, "wall street journal": 90,
@@ -117,6 +134,7 @@ def _safe_float(x: Any, default: float = 0.0) -> float:
         return default
 
 def _standardize_article(symbol: str, raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Convert raw article data into a standardised dict ready for DB."""
     title = (raw.get("title") or raw.get("headline") or raw.get("description") or "").strip()
     if not title:
         return None
@@ -160,6 +178,7 @@ def _standardize_article(symbol: str, raw: Dict[str, Any]) -> Optional[Dict[str,
     }
 
 def _filter_recent(raw_articles: List[Dict[str, Any]], hours: int) -> List[Dict[str, Any]]:
+    """Keep only articles newer than `hours`."""
     cutoff = timezone.now() - timedelta(hours=hours)
     kept: List[Dict[str, Any]] = []
     for a in raw_articles:
@@ -169,6 +188,7 @@ def _filter_recent(raw_articles: List[Dict[str, Any]], hours: int) -> List[Dict[
     return kept
 
 def _upsert_articles(symbol: str, raw_articles: List[Dict[str, Any]]) -> Tuple[int, int]:
+    """Insert/update articles in DB. Returns (new_count, duplicate_count)."""
     new_count = 0
     dup_or_updated = 0
     for i in range(0, len(raw_articles), BATCH_SIZE):
@@ -198,7 +218,7 @@ def _upsert_articles(symbol: str, raw_articles: List[Dict[str, Any]]) -> Tuple[i
     return new_count, dup_or_updated
 
 # ------------------------------------------------------------
-# API Fetchers (Alpha Vantage, Finnhub, Yahoo)
+# API Fetchers (unchanged)
 # ------------------------------------------------------------
 def _fetch_alpha_vantage(session: requests.Session, symbol: str) -> List[Dict[str, Any]]:
     params = {
@@ -261,7 +281,7 @@ def _fetch_yahoo_rapidapi(session: requests.Session, symbol: str) -> List[Dict[s
     return out
 
 # ------------------------------------------------------------
-# Core synchronous fetch function
+# Core synchronous fetch function (unchanged)
 # ------------------------------------------------------------
 def fetch_and_save_news(
     symbol: str,
@@ -269,6 +289,7 @@ def fetch_and_save_news(
     recent_hours: int = RECENT_HOURS_DEFAULT,
     timeout_seconds: int = 30,
 ) -> Dict[str, Any]:
+    """Fetch news from external APIs and store in DB."""
     close_old_connections()
     symbol = (symbol or "").strip().upper()
     if not symbol:
@@ -336,7 +357,7 @@ def fetch_and_save_news(
         gc.collect()
 
 # ------------------------------------------------------------
-# View functions
+# Helper functions for views
 # ------------------------------------------------------------
 def _normalize_symbol(raw: str) -> str:
     return (raw or "").strip().upper()
@@ -345,11 +366,81 @@ def _serialize_news(qs):
     serializer = ProcessedNewsSerializer(qs, many=True)
     return serializer.data
 
+# ============================================================
+#  INLINE SERIALIZERS FOR SWAGGER RESPONSE SHAPES
+# ============================================================
+class NewsArticleSerializer(serializers.Serializer):
+    """Serializer for a single news article (matches ProcessedNews fields)."""
+    id = serializers.IntegerField(required=False)
+    symbol = serializers.CharField()
+    title = serializers.CharField()
+    summary = serializers.CharField()
+    url = serializers.CharField()
+    provider = serializers.CharField()
+    source_name = serializers.CharField()
+    published_at = serializers.DateTimeField()
+    sentiment = serializers.CharField()
+    confidence = serializers.FloatField()
+    sentiment_score = serializers.FloatField()
+    key_phrases = serializers.CharField()
+    source_reliability = serializers.IntegerField()
+    banner_image_url = serializers.CharField()
+    created_at = serializers.DateTimeField(required=False)
+    updated_at = serializers.DateTimeField(required=False)
+
+class GetNewsResponseSerializer(serializers.Serializer):
+    """Response for GET /api/news/get-news/."""
+    symbol = serializers.CharField()
+    refresh_queued = serializers.BooleanField()
+    cache_stale = serializers.BooleanField()
+    count = serializers.IntegerField()
+    news = NewsArticleSerializer(many=True)
+
+class SymbolSearchResponseSerializer(serializers.Serializer):
+    """Response for symbol search (returns list of matches)."""
+    # The structure can be variable; we'll document it as a list of objects
+    # but we can define a generic serializer.
+    pass  # We'll use OpenApiResponse with examples instead.
+
+# ============================================================
+#  VIEWS WITH DECORATORS
+# ============================================================
+
+@extend_schema(
+    summary="Get news articles with sentiment",
+    description="Fetches news for a given stock symbol with AI sentiment analysis. Uses cached data unless `refresh=true`.",
+    parameters=[
+        OpenApiParameter(
+            name='symbol',
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.QUERY,
+            description='Stock ticker (e.g., AAPL)',
+            required=True
+        ),
+        OpenApiParameter(
+            name='refresh',
+            type=OpenApiTypes.BOOL,
+            location=OpenApiParameter.QUERY,
+            description='Force refresh from external APIs',
+            required=False,
+            default=False
+        ),
+    ],
+    responses={
+        200: GetNewsResponseSerializer,
+        400: OpenApiResponse(description="Missing or invalid symbol"),
+        500: OpenApiResponse(description="Internal server error"),
+    },
+    tags=["News"]
+)
 @api_view(["GET"])
 def get_news(request):
     symbol = _normalize_symbol(request.GET.get("symbol", ""))
     if not symbol or not _TICKER_RE.match(symbol):
-        return Response({"error": "Valid 'symbol' query parameter is required."}, status=400)
+        return Response(
+            error_response("Valid 'symbol' query parameter is required.", code=2001),
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     force_refresh = request.GET.get("refresh", "false").lower() == "true"
     news_qs = ProcessedNews.objects.filter(symbol=symbol).order_by("-published_at")[:MAX_ARTICLES]
@@ -376,23 +467,62 @@ def get_news(request):
         except Exception as e:
             logger.warning("Synchronous fetch failed for %s: %s", symbol, e)
 
-    return Response({
-        "symbol": symbol,
-        "refresh_queued": refresh_queued,
-        "cache_stale": cache_is_stale,
-        "count": len(news_qs),
-        "news": _serialize_news(news_qs),
-    })
+    return Response(
+        success_response(data={
+            "symbol": symbol,
+            "refresh_queued": refresh_queued,
+            "cache_stale": cache_is_stale,
+            "count": len(news_qs),
+            "news": _serialize_news(news_qs),
+        }),
+        status=status.HTTP_200_OK
+    )
 
+
+@extend_schema(
+    summary="Search stock symbols",
+    description="Auto‑complete endpoint that searches for ticker symbols and company names using Alpha Vantage, with a fallback to Yahoo Finance.",
+    parameters=[
+        OpenApiParameter(
+            name='q',
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.QUERY,
+            description='Partial symbol or company name (min 2 characters)',
+            required=True
+        ),
+    ],
+    responses={
+        200: OpenApiResponse(
+            description='List of matching symbols. Format depends on the source.',
+            examples=[
+                {
+                    "application/json": [
+                        {"1. symbol": "AAPL", "2. name": "Apple Inc.", "3. region": "United States"},
+                        {"1. symbol": "AAPL34", "2. name": "Apple Inc.", "3. region": "Brazil"}
+                    ]
+                }
+            ]
+        ),
+        400: OpenApiResponse(description="Missing query parameter"),
+        500: OpenApiResponse(description="Internal server error"),
+    },
+    tags=["News"]
+)
 @api_view(["GET"])
 def symbol_search(request):
     query = (request.GET.get("q") or "").strip()
     if not query:
-        return Response({"error": 'Query parameter "q" is required'}, status=400)
+        return Response(
+            error_response('Query parameter "q" is required', code=2001),
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     cache_instance = SymbolSearchCache.objects.filter(query=query).first()
     if cache_instance and cache_instance.is_valid:
-        return Response(cache_instance.results)
+        return Response(
+            success_response(data=cache_instance.results),
+            status=status.HTTP_200_OK
+        )
 
     results = []
     try:
@@ -432,12 +562,37 @@ def symbol_search(request):
             },
         )
 
-        return Response(results)
+        return Response(
+            success_response(data=results),
+            status=status.HTTP_200_OK
+        )
 
     except requests.RequestException as e:
         logger.error(f"Symbol search failed for query '{query}': {e}")
-        return Response({"error": str(e)}, status=500)
+        return Response(
+            error_response(f"Symbol search failed: {str(e)}", code=5001),
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
+
+@extend_schema(
+    summary="Get analyzed news (alias)",
+    description="Alias for `/api/news/get-news/` – maintained for backward compatibility.",
+    parameters=[
+        OpenApiParameter(
+            name='symbol',
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.QUERY,
+            description='Stock ticker (e.g., AAPL)',
+            required=True
+        ),
+    ],
+    responses={
+        200: GetNewsResponseSerializer,
+        400: OpenApiResponse(description="Missing symbol"),
+    },
+    tags=["News"]
+)
 @api_view(["GET"])
 def get_analyzed_news(request):
     return get_news(request)
