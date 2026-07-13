@@ -26,6 +26,11 @@ if not SECRET_KEY:
 # --- Debug & Hosts ---
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
+# --- Database Connection Settings ---
+# Prevent connection issues on Render free tier
+CONN_MAX_AGE = 0  # Close connections after each request
+CONN_HEALTH_CHECKS = True  # Check connection health before using
+
 # ALLOWED_HOSTS - combine environment variable with required defaults
 env_hosts = os.getenv("ALLOWED_HOSTS", "").split(",")
 env_hosts = [h.strip() for h in env_hosts if h.strip()]
@@ -106,19 +111,41 @@ TEMPLATES = [
 WSGI_APPLICATION = 'sentiment_driven_stock_price_prediction_engine.wsgi.application'
 
 # --- Database ---
-# Render's PostgreSQL requires SSL - enforce it for production
+import urllib.parse
+
 database_url = os.environ.get('DATABASE_URL')
 
 if database_url:
+    # Parse the URL
+    parsed = urllib.parse.urlparse(database_url)
+    
+    # Convert postgres:// to postgresql://
+    if parsed.scheme == 'postgres':
+        database_url = database_url.replace('postgres://', 'postgresql://')
+    
+    # Add sslmode=require
+    if '?' in database_url:
+        if 'sslmode' not in database_url:
+            database_url += '&sslmode=require'
+    else:
+        database_url += '?sslmode=require'
+    
     DATABASES = {
-        'default': dj_database_url.config(
-            default=database_url,
-            conn_max_age=600,
-            ssl_require=True  # Force SSL connection for Render PostgreSQL
-        )
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': parsed.path[1:],
+            'USER': parsed.username,
+            'PASSWORD': parsed.password,
+            'HOST': parsed.hostname,
+            'PORT': parsed.port or 5432,
+            'CONN_MAX_AGE': 0,  # Close connections after each request
+            'OPTIONS': {
+                'sslmode': 'require',
+                'connect_timeout': 10,
+            },
+        }
     }
 else:
-    # Fallback to SQLite for local development
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
