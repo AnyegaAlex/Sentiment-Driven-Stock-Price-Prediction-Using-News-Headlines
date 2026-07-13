@@ -25,8 +25,22 @@ if not SECRET_KEY:
 
 # --- Debug & Hosts ---
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-BASE_ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split()
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"] + BASE_ALLOWED_HOSTS
+
+# ALLOWED_HOSTS - combine environment variable with required defaults
+env_hosts = os.getenv("ALLOWED_HOSTS", "").split(",")
+env_hosts = [h.strip() for h in env_hosts if h.strip()]
+
+# Always allow these hosts (Render requires these)
+required_hosts = [
+    "localhost",
+    "127.0.0.1", 
+    "0.0.0.0",
+    "sentiment-driven-stock-price-prediction.onrender.com",
+    ".onrender.com",  # Allows any Render subdomain
+]
+
+# Combine and remove duplicates
+ALLOWED_HOSTS = list(set(required_hosts + env_hosts))
 
 # --- Paths ---
 LOG_DIR = BASE_DIR / 'logs'
