@@ -1,6 +1,24 @@
+/**
+ * NewsList Component
+ * 
+ * Displays a grid of news articles with sentiment analysis for a given stock symbol.
+ * Features:
+ * - Sentiment badges (positive, neutral, negative) with icons
+ * - Confidence score display with progress bars
+ * - Key phrases extraction and display
+ * - Responsive grid layout (1, 2, or 3 columns based on screen size)
+ * - Loading skeleton states
+ * - Error handling with retry functionality
+ * - Image fallback handling
+ * 
+ * Data Flow:
+ * 1. Parent component provides newsData via props (preferred)
+ * 2. If no newsData, component fetches from API using apiClient
+ * 3. Sample data used as fallback when API fails
+ */
+
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
-import axios from "axios";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -9,10 +27,16 @@ import { Button } from "@/components/ui/button";
 import { Info, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { fetchMockNews } from "@/services/mockNewsData";
+import apiClient from "@/services/client";
 
-// Sentiment configuration (memoized outside component)
-const sentimentConfig = {
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Sentiment configuration for styling different sentiment types
+ */
+const SENTIMENT_CONFIG = {
   positive: {
     badgeClass: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
     icon: "📈",
@@ -31,53 +55,107 @@ const sentimentConfig = {
 };
 
 /**
+ * Sample fallback news data used when API returns empty or fails
+ */
+const SAMPLE_NEWS = [
+  {
+    id: 'sample-1',
+    title: 'Apple Reports Strong Quarterly Earnings',
+    summary: 'Apple Inc. reported better-than-expected earnings driven by strong iPhone sales.',
+    source: 'Reuters',
+    published_at: new Date().toISOString(),
+    sentiment: 'positive',
+    confidence: 0.92,
+    banner_image_url: 'https://via.placeholder.com/400x200?text=Apple+News',
+    url: 'https://www.reuters.com/technology/apple-q4-earnings-2026',
+    key_phrases: ['iPhone sales', 'earnings beat', 'services growth'],
+    source_reliability: 85,
+  },
+  {
+    id: 'sample-2',
+    title: "Apple's AI Push Sparks Investor Optimism",
+    summary: "Investors are optimistic about Apple's artificial intelligence initiatives.",
+    source: 'Bloomberg',
+    published_at: new Date().toISOString(),
+    sentiment: 'positive',
+    confidence: 0.78,
+    banner_image_url: 'https://via.placeholder.com/400x200?text=Apple+AI',
+    url: 'https://www.bloomberg.com/apple-ai',
+    key_phrases: ['AI', 'investor optimism', 'innovation'],
+    source_reliability: 72,
+  },
+];
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Normalize key phrases to always be an array
+ * @param {string|Array} phrases - Comma-separated string or array of phrases
+ * @returns {Array} Array of phrase strings
+ */
+const normalizeKeyPhrases = (phrases) => {
+  if (!phrases) return [];
+  
+  // Already an array
+  if (Array.isArray(phrases)) {
+    return phrases.filter(p => p && p.trim());
+  }
+  
+  // Comma-separated string
+  if (typeof phrases === 'string') {
+    return phrases.split(',').map(p => p.trim()).filter(Boolean);
+  }
+  
+  return [];
+};
+
+/**
+ * Parse date string to formatted date
+ * @param {string} dateString - ISO date string
+ * @returns {string} Formatted date string
+ */
+const parseDate = (dateString) => {
+  if (!dateString) return "Date not available";
+  try {
+    return new Date(dateString).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return dateString;
+  }
+};
+
+// ============================================================================
+// Sub-Components
+// ============================================================================
+
+/**
  * Individual news item component (memoized for performance)
  */
 const NewsItem = React.memo(function NewsItem({ item }) {
   const sentiment = item.sentiment?.toLowerCase() || 'neutral';
-  const config = sentimentConfig[sentiment] || sentimentConfig.neutral;
-
-  const parseDate = useCallback((dateString) => {
-    if (!dateString) return "Date not available";
-    try {
-      return new Date(dateString).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
-    } catch {
-      return dateString;
-    }
-  }, []);
-
-  const renderKeyPhrases = useCallback((phrases) => {
-    if (!phrases?.length) return null;
-    return (
-      <div className="mt-2 flex flex-wrap gap-1">
-        {phrases.slice(0, 3).map((phrase, i) => (
-          <Badge
-            key={`phrase-${i}`}
-            variant="outline"
-            className="text-xs px-2 py-0.5 rounded-full"
-          >
-            {phrase}
-          </Badge>
-        ))}
-      </div>
-    );
-  }, []);
+  const config = SENTIMENT_CONFIG[sentiment] || SENTIMENT_CONFIG.neutral;
+  
+  // Normalize key phrases
+  const keyPhrases = normalizeKeyPhrases(item.key_phrases || item.keyPhrases);
 
   return (
     <Card className="flex flex-col h-full hover:shadow-md transition-shadow">
       <CardContent className="flex flex-col space-y-3 p-4 h-full">
+        {/* Title */}
         <h3 className="font-semibold text-base line-clamp-2">
           {item.title || "No title available"}
         </h3>
 
-        {item.image ? (
+        {/* Image */}
+        {item.banner_image_url || item.image ? (
           <div className="relative pt-[50%]">
             <img
-              src={item.image}
+              src={item.banner_image_url || item.image}
               alt={item.title || "News image"}
               className="absolute top-0 left-0 w-full h-full object-cover rounded-md mb-3"
               loading="lazy"
@@ -94,36 +172,56 @@ const NewsItem = React.memo(function NewsItem({ item }) {
           </div>
         )}
 
+        {/* Summary */}
         <p className="text-sm text-muted-foreground line-clamp-3">
           {item.summary || "No summary available."}
         </p>
 
+        {/* Metadata */}
         <div className="text-xs text-muted-foreground mt-auto flex justify-between items-center">
-          <span>{parseDate(item.date || item.published_at)}</span>
-          <span className="italic truncate max-w-[120px]">{item.source}</span>
+          <span>{parseDate(item.published_at || item.date)}</span>
+          <span className="italic truncate max-w-[120px]">{item.source || item.source_name}</span>
         </div>
 
+        {/* Sentiment Badge + Confidence */}
         <div className="flex justify-between items-center">
           <Badge className={cn("px-3 py-1 rounded-full text-xs capitalize", config.badgeClass)}>
             {config.icon} {sentiment}
           </Badge>
 
-          {item.confidence && (
+          {item.confidence !== undefined && item.confidence !== null && (
             <Tooltip>
               <TooltipTrigger className="flex items-center gap-1">
                 <Info className="h-3 w-3 text-muted-foreground" />
-                <span className="text-xs">Confidence: {item.confidence.toFixed(0)}%</span>
+                <span className="text-xs">Confidence: {(item.confidence * 100).toFixed(0)}%</span>
               </TooltipTrigger>
               <TooltipContent className="w-40">
-                <Progress value={item.confidence} indicatorClassName={config.progressClass} />
+                <Progress 
+                  value={item.confidence * 100} 
+                  indicatorClassName={config.progressClass} 
+                />
                 <div className="text-center text-xs mt-1">Analysis Confidence</div>
               </TooltipContent>
             </Tooltip>
           )}
         </div>
 
-        {renderKeyPhrases(item.keyPhrases)}
+        {/* Key Phrases - NOW HANDLES BOTH STRING AND ARRAY */}
+        {keyPhrases.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {keyPhrases.slice(0, 3).map((phrase, index) => (
+              <Badge
+                key={`phrase-${index}`}
+                variant="outline"
+                className="text-xs px-2 py-0.5 rounded-full"
+              >
+                {phrase}
+              </Badge>
+            ))}
+          </div>
+        )}
 
+        {/* Read More Link */}
         {item.url && (
           <Button
             asChild
@@ -147,7 +245,35 @@ const NewsItem = React.memo(function NewsItem({ item }) {
   );
 });
 
-// 💀 Error display with normalization
+NewsItem.propTypes = {
+  item: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), // ✅ Allow both types
+    title: PropTypes.string,
+    summary: PropTypes.string,
+    source: PropTypes.string,
+    source_name: PropTypes.string,
+    date: PropTypes.string,
+    published_at: PropTypes.string,
+    url: PropTypes.string,
+    sentiment: PropTypes.string,
+    confidence: PropTypes.number,
+    keyPhrases: PropTypes.oneOfType([
+      PropTypes.arrayOf(PropTypes.string),
+      PropTypes.string
+    ]),
+    key_phrases: PropTypes.oneOfType([
+      PropTypes.arrayOf(PropTypes.string),
+      PropTypes.string
+    ]),
+    image: PropTypes.string,
+    banner_image_url: PropTypes.string,
+    symbol: PropTypes.string,
+  }).isRequired,
+};
+
+/**
+ * Error display component
+ */
 const ErrorDisplay = ({ error, onRetry, children }) => {
   const safeMessage = typeof error === 'string'
     ? error
@@ -164,6 +290,14 @@ const ErrorDisplay = ({ error, onRetry, children }) => {
       {children && <div className="mt-4">{children}</div>}
     </div>
   );
+};
+
+ErrorDisplay.propTypes = {
+  error: PropTypes.shape({
+    message: PropTypes.string,
+  }).isRequired,
+  onRetry: PropTypes.func.isRequired,
+  children: PropTypes.node,
 };
 
 /**
@@ -186,19 +320,36 @@ const NewsListSkeleton = ({ count = 6 }) => (
   </div>
 );
 
+NewsListSkeleton.propTypes = {
+  count: PropTypes.number,
+};
+
+// ============================================================================
+// Main Component
+// ============================================================================
+
 /**
- * Main NewsList component
+ * NewsList Component
+ * 
+ * @param {Object} props
+ * @param {string} props.symbol - Stock symbol to fetch news for (default: "IBM")
+ * @param {Array} props.newsData - Optional pre-fetched news data from parent
+ * @param {boolean} props.loading - Optional loading state from parent
+ * @returns {JSX.Element}
  */
 const NewsList = ({
   symbol = "IBM",
   newsData = null,
+  loading: parentLoading = false,
 }) => {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const displaySymbol = useMemo(() => symbol?.toUpperCase() || "IBM", [symbol]);
 
-  // If parent supplies newsData, use it and skip fetching
+  /**
+   * If parent supplies newsData, use it and skip fetching
+   */
   useEffect(() => {
     if (Array.isArray(newsData)) {
       setNews(newsData);
@@ -207,52 +358,70 @@ const NewsList = ({
     }
   }, [newsData]);
 
+  /**
+   * Fetches news from the API or uses sample data as fallback
+   */
   const fetchNews = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // Always use mock data in production or when explicitly set
-      if (import.meta.env.PROD || import.meta.env.VITE_USE_MOCK_DATA === "true") {
-        const mockData = await fetchMockNews(displaySymbol);
-        setNews(mockData);
-        return;
-      }
-
-      // Try real API only in development and when not using mock data
-      try {
-        const response = await axios.get(`/api/news/analyzed`, {
-          params: { symbol: displaySymbol },
-          timeout: 3000
-        });
-        setNews(response.data);
-      } catch (apiError) {
-        console.log("API request failed, falling back to mock data");
-        const mockData = await fetchMockNews(displaySymbol);
-        setNews(mockData);
-        setError({
-          message: "Live data unavailable - showing mock data",
-          code: apiError.response?.status || 500
-        });
-      }
-    } catch (err) {
-      console.error("News fetch failed:", err);
-      setError({
-        message: err?.message || 'Unexpected error loading news',
-        code: err?.response?.status || 500
+      // Try real API
+      const response = await apiClient.get('/news/get-news/', {
+        params: { symbol: displaySymbol },
+        timeout: 10000
       });
-      setNews([]);
+      
+      // apiClient returns response.data directly
+      const responseData = response.data || response;
+      const newsArray = responseData?.news || responseData || [];
+      const normalizedNews = Array.isArray(newsArray) ? newsArray : [];
+      
+      if (normalizedNews.length > 0) {
+        setNews(normalizedNews);
+        setError(null);
+      } else {
+        // API returned empty array, use sample data
+        console.warn(`API returned empty news for ${displaySymbol}, using sample data.`);
+        setNews(SAMPLE_NEWS);
+        setError({
+          message: "No news available - showing sample data",
+          code: 404
+        });
+      }
+    } catch (apiError) {
+      // API failed, use sample data as fallback
+      console.warn(`API failed for ${displaySymbol}:`, apiError.message);
+      setNews(SAMPLE_NEWS);
+      setError({
+        message: "Live data unavailable - showing sample data",
+        code: apiError.code || 500
+      });
     } finally {
       setLoading(false);
     }
   }, [displaySymbol]);
 
+  /**
+   * Fetch news when symbol changes or when parent data is not provided
+   */
   useEffect(() => {
-    if (Array.isArray(newsData)) return; // parent-controlled
+    if (Array.isArray(newsData)) {
+      return; // Parent-controlled
+    }
     fetchNews();
   }, [fetchNews, newsData]);
 
-  if (loading) {
+  /**
+   * Determine loading state from parent or local
+   */
+  const isLoading = parentLoading || loading;
+
+  // ============================================================================
+  // Render States
+  // ============================================================================
+
+  if (isLoading) {
     return (
       <div className="p-4">
         <h2 className="text-xl font-semibold mb-4">Latest News for {displaySymbol}</h2>
@@ -304,38 +473,7 @@ const NewsList = ({
 NewsList.propTypes = {
   symbol: PropTypes.string,
   newsData: PropTypes.array,
-};
-
-// ✅ Removed defaultProps – now using default parameters in function signature
-
-NewsListSkeleton.propTypes = {
-  count: PropTypes.number,
-};
-
-// ✅ Removed defaultProps – now using default parameters in function signature
-
-ErrorDisplay.propTypes = {
-  error: PropTypes.shape({
-    message: PropTypes.string,
-  }).isRequired,
-  onRetry: PropTypes.func.isRequired,
-  children: PropTypes.node,
-};
-
-NewsItem.propTypes = {
-  item: PropTypes.shape({
-    id: PropTypes.string,
-    title: PropTypes.string,
-    summary: PropTypes.string,
-    source: PropTypes.string,
-    date: PropTypes.string,
-    url: PropTypes.string,
-    sentiment: PropTypes.string,
-    confidence: PropTypes.number,
-    keyPhrases: PropTypes.arrayOf(PropTypes.string),
-    image: PropTypes.string,
-    symbol: PropTypes.string,
-  }).isRequired,
+  loading: PropTypes.bool,
 };
 
 export default React.memo(NewsList);

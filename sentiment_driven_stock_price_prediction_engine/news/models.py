@@ -33,7 +33,7 @@ class ProcessedNews(models.Model):
     url = models.URLField(max_length=2000, blank=True, null=True)
 
     provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default='other')
-    source_name = models.CharField(max_length=120, blank=True, default="")  # Reuters, Bloomberg, etc.
+    source_name = models.CharField(max_length=225, blank=True, default="")  # Reuters, Bloomberg, etc.
 
     published_at = models.DateTimeField(db_index=True)
 

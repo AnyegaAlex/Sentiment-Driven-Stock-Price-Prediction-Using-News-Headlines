@@ -1,19 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import api from '@/services/api';
+import apiClient from '@/services/client';
 import { queryKeys } from '@/lib/queryKeys';
-import { fetchMockTechnicalData } from '@/services/mockTechnicalData';
+import { transformTechnicalIndicators } from '@/utils/apiTransformer';
 
 const fetchTechnicalIndicators = async ({ symbol, timeframe }) => {
-  try {
-    const response = await api.get('/technical-indicators/', {
-      params: { symbol, timeframe },
-    });
-    return response;
-  } catch (error) {
-    console.warn(`API failed for ${symbol}, using mock technical data.`);
-    const mockData = await fetchMockTechnicalData(symbol, timeframe);
-    return mockData;
-  }
+  const response = await apiClient.get('/technical-indicators/', {
+    params: { symbol, timeframe },
+  });
+  return transformTechnicalIndicators(response);
 };
 
 export const useTechnicalIndicatorsQuery = (symbol, timeframe = '1d') => {

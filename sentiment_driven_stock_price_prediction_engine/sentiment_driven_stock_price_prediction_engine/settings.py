@@ -15,8 +15,8 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # --- Hugging Face cache directory (persistent across deploys) ---
-os.environ['TRANSFORMERS_CACHE'] = '/opt/render/.cache/huggingface'
-os.environ['HF_HOME'] = '/opt/render/.cache/huggingface'
+os.environ['TRANSFORMERS_CACHE'] = str(BASE_DIR / '.cache' / 'huggingface')
+os.environ['HF_HOME'] = str(BASE_DIR / '.cache' / 'huggingface')
 
 # --- Security: Secret Key ---
 SECRET_KEY = os.environ.get("SECRET_KEY")
@@ -218,14 +218,30 @@ SPECTACULAR_SETTINGS = {
 # --- CORS ---
 # Get frontend URL from environment (default to Vercel URL)
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://sentiment-driven-stock-price-predic.vercel.app')
-CORS_ORIGIN_ALLOW_ALL = False
-CORS_ALLOWED_ORIGINS = [FRONTEND_URL]
+
+# localhost for development
+CORS_ALLOWED_ORIGINS = [
+    FRONTEND_URL,
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+]
+
+# Allow all origins in development (optional, simpler)
+# Uncomment this if you want to allow all origins during development
+CORS_ALLOW_ALL_ORIGINS = True
+
 CORS_ALLOW_METHODS = [
     'GET',
     'POST',
+    'PUT',
+    'DELETE',
     'OPTIONS',
     'HEAD',
 ]
+
+# Add 'x-api-key' to allowed headers
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -236,8 +252,14 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
+    'x-api-key',  
 ]
-CSRF_TRUSTED_ORIGINS = [FRONTEND_URL]
+
+CSRF_TRUSTED_ORIGINS = [
+    FRONTEND_URL,
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]
 
 # --- Default primary key ---
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

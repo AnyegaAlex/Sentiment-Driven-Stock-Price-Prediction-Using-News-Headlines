@@ -319,17 +319,20 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
   }, []);
 
   const validateSentimentData = useCallback((rawData) => {
-    const sentiment = rawData?.sentiment || {};
-    const newsCount = Number(rawData?.news_count) || 0;
+    const apiData = rawData?.data || rawData || {};
+    const sentiment = apiData?.sentiment || {};
+    const newsCount = Number(apiData?.news_count) || 0;
+    
     return {
       sentiment: Math.max(-1, Math.min(1, Number(sentiment?.score) || 0)),
+      sentimentLabel: sentiment?.label || 'Neutral',
       news_count: newsCount,
-      source_stats: rawData?.source_stats || {
+      source_stats: apiData?.source_stats || {
         tier1_count: 0,
         reliability_sum: 0,
         tier1_sources: []
       },
-      history: Array.isArray(rawData?.history) ? rawData.history : generateMockHistory()
+      history: Array.isArray(apiData?.history) ? apiData.history : generateMockHistory()
     };
   }, [generateMockHistory]);
 

@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import api from '@/services/api';
+import apiClient from '@/services/client';
 import { queryKeys } from '@/lib/queryKeys';
+import { transformSymbols } from '@/utils/apiTransformer';
 
-// Static fallback list of popular stocks (same as search)
+// Static fallback list of popular stocks
 const FALLBACK_SYMBOLS = [
   { symbol: 'AAPL', name: 'Apple Inc.', region: 'US' },
   { symbol: 'MSFT', name: 'Microsoft Corp.', region: 'US' },
@@ -18,12 +19,8 @@ const FALLBACK_SYMBOLS = [
 
 const fetchSymbols = async () => {
   try {
-    const response = await api.get('/stocks/symbols/');
-    // Our interceptor returns response.data directly, so `response` is the data.
-    // The API might return an array or an object with a `symbols` property.
-    const symbols = Array.isArray(response) 
-      ? response 
-      : (response?.symbols ? response.symbols : []);
+    const response = await apiClient.get('/symbols/');
+    const symbols = transformSymbols(response);
     return symbols.length > 0 ? symbols : FALLBACK_SYMBOLS;
   } catch (error) {
     console.warn('API failed for symbols, using fallback list.');
@@ -35,8 +32,8 @@ export const useSymbolsQuery = () => {
   return useQuery({
     queryKey: queryKeys.symbols(),
     queryFn: fetchSymbols,
-    staleTime: 60 * 60 * 1000, // 1 hour
+    staleTime: 60 * 60 * 1000,
     retry: 1,
-    placeholderData: FALLBACK_SYMBOLS, // Show immediately while fetching
+    placeholderData: FALLBACK_SYMBOLS,
   });
 };

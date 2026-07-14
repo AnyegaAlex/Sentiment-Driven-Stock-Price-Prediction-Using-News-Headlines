@@ -77,3 +77,15 @@ stock_price_model.pkl
 stock-sentiment-ui/
 
 .venv
+
+# Hugging Face cache
+.cache/
+sentiment_driven_stock_price_prediction_engine/cache/
+*.sentiment
+version.txt
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production

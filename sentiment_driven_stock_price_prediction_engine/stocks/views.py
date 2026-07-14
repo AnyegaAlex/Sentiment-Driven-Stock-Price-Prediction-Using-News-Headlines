@@ -12,6 +12,7 @@ from django.db import transaction
 import logging
 from datetime import datetime
 from authentication.utils import error_response, success_response
+from datetime import datetime, timedelta  
 
 # drf-spectacular for OpenAPI
 from drf_spectacular.utils import (
@@ -796,4 +797,198 @@ class LSTMPredictionView(APIView):
             return Response(
                 error_response(f"Internal server error: {str(e)}", code=9001),
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+
+class SentimentAnalysisView(APIView):
+    """
+    Dedicated sentiment analysis endpoint.
+    Returns sentiment metrics for a given symbol based on recent news.
+    """
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        summary="Get sentiment analysis",
+        description="Returns sentiment score, distribution, history, and news source statistics for a given symbol.",
+        parameters=[
+            OpenApiParameter(
+                name='symbol',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Stock ticker (e.g., AAPL)',
+                required=True
+            ),
+            OpenApiParameter(
+                name='time_range',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description='Time range: 7d, 30d',
+                required=False,
+                default='7d'
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(
+                description='Sentiment analysis results',
+                examples=[
+                    {
+                        "application/json": {
+                            "success": True,
+                            "data": {
+                                "sentiment": {
+                                    "score": 0.65,
+                                    "label": "Bullish"
+                                },
+                                "news_count": 142,
+                                "source_stats": {
+                                    "tier1_count": 12,
+                                    "reliability_sum": 9.6,
+                                    "tier1_sources": ["Reuters", "Bloomberg"]
+                                },
+                                "history": [
+                                    {"date": "2026-07-05T00:00:00Z", "score": 0.55},
+                                    {"date": "2026-07-06T00:00:00Z", "score": 0.60}
+                                ]
+                            },
+                            "code": 200,
+                            "timestamp": "2026-07-14T10:00:00Z"
+                        }
+                    }
+                ]
+            ),
+            400: OpenApiResponse(description="Missing symbol"),
+            500: OpenApiResponse(description="Internal server error"),
+        },
+        tags=["Sentiment Analysis"]
+    )
+    def get(self, request):
+        symbol = request.query_params.get("symbol")
+        if not symbol:
+            return Response(
+                error_response("Symbol is required.", code=2001),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        time_range = request.query_params.get("time_range", "7d")
+        
+        # Parse time range
+        days = 7 if time_range == '7d' else 30
+        
+        cache_key = f"sentiment_{symbol}_{time_range}"
+        cached_response = cache.get(cache_key)
+        if cached_response:
+            return Response(
+                success_response(data=cached_response),
+                status=status.HTTP_200_OK
+            )
+        
+        try:
+            # Fetch recent news for sentiment analysis
+            cutoff = datetime.now() - timedelta(days=days)
+            news_items = ProcessedNews.objects.filter(
+                symbol=symbol.upper(),
+                published_at__gte=cutoff
+            ).order_by('-published_at')[:100]
+            
+            if not news_items.exists():
+                # Return neutral sentiment with no news
+                response_data = {
+                    "sentiment": {
+                        "score": 0.0,
+                        "label": "Neutral"
+                    },
+                    "news_count": 0,
+                    "source_stats": {
+                        "tier1_count": 0,
+                        "reliability_sum": 0,
+                        "tier1_sources": []
+                    },
+                    "history": []
+                }
+                cache.set(cache_key, response_data, timeout=300)
+                return Response(
+                    success_response(data=response_data),
+                    status=status.HTTP_200_OK
+                )
+            
+            # Calculate sentiment scores
+            scores = [n.sentiment_score for n in news_items if n.sentiment_score is not None]
+            valid_scores = [s for s in scores if s is not None]
+            
+            if valid_scores:
+                avg_score = sum(valid_scores) / len(valid_scores)
+                if avg_score > 0.2:
+                    label = "Bullish"
+                elif avg_score < -0.2:
+                    label = "Bearish"
+                else:
+                    label = "Neutral"
+            else:
+                avg_score = 0.0
+                label = "Neutral"
+            
+            # Build source statistics
+            reliable_sources = ['Reuters', 'Bloomberg', 'CNBC', 'Wall Street Journal', 'Financial Times']
+            tier1_sources = []
+            reliability_sum = 0
+            tier1_count = 0
+            
+            for item in news_items[:50]:
+                source = item.source_name or item.provider or ''
+                if source in reliable_sources:
+                    tier1_sources.append(source)
+                    tier1_count += 1
+                    reliability_sum += item.source_reliability or 70
+            
+            # Build history data (last 7 or 30 days)
+            history = []
+            for item in news_items[:min(days, len(news_items))]:
+                if item.sentiment_score is not None:
+                    history.append({
+                        "date": item.published_at.isoformat(),
+                        "score": round(item.sentiment_score, 4)
+                    })
+            
+            # Sort history by date
+            history.sort(key=lambda x: x['date'])
+            
+            response_data = {
+                "sentiment": {
+                    "score": round(avg_score, 4),
+                    "label": label
+                },
+                "news_count": len(news_items),
+                "source_stats": {
+                    "tier1_count": tier1_count,
+                    "reliability_sum": round(reliability_sum, 1) if reliability_sum > 0 else 0,
+                    "tier1_sources": list(set(tier1_sources))[:5]
+                },
+                "history": history[-30:]  # Last 30 days
+            }
+            
+            cache.set(cache_key, response_data, timeout=600)
+            return Response(
+                success_response(data=response_data),
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.exception(f"Error in SentimentAnalysisView for {symbol}: {e}")
+            # Return fallback sentiment data
+            fallback_data = {
+                "sentiment": {
+                    "score": 0.0,
+                    "label": "Neutral"
+                },
+                "news_count": 0,
+                "source_stats": {
+                    "tier1_count": 0,
+                    "reliability_sum": 0,
+                    "tier1_sources": []
+                },
+                "history": []
+            }
+            return Response(
+                success_response(data=fallback_data),
+                status=status.HTTP_200_OK
             )
