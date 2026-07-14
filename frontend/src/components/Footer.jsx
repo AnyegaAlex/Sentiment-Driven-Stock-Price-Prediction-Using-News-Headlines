@@ -52,7 +52,7 @@ const FOOTER_LINKS = [
   },
   {
     label: "API Docs",
-    url: "/api/docs/",
+    url: "https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/",
     external: true,
   },
 ];
