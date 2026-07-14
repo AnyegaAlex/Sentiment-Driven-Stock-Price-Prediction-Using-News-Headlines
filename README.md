@@ -1,3 +1,4 @@
+```markdown
 # Sentiment-Driven Stock Price Prediction Using News Headlines
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
@@ -5,6 +6,7 @@
 [![React](https://img.shields.io/badge/React-18-61DAFB)](https://reactjs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue)](https://www.postgresql.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
 ---
 
@@ -14,8 +16,8 @@
 |-----------|-----|--------|
 | Frontend (Vercel) | [https://sentiment-driven-stock-price-predic.vercel.app/](https://sentiment-driven-stock-price-predic.vercel.app/) | Live |
 | Backend API (Render) | [https://sentiment-driven-stock-price-prediction.onrender.com](https://sentiment-driven-stock-price-prediction.onrender.com/health/) | Live |
-| API Documentation | [https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/](https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/) | Live |
-| LSTM Model (Hugging Face) | [https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics](https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics) | Live |
+| API Documentation (Swagger) | [https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/](https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/) | Live |
+| LSTM Model (Gradio) | [https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics](https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics) | Live |
 
 ---
 
@@ -23,14 +25,47 @@
 
 This project delivers a real-time stock sentiment analysis platform that leverages NLP and machine learning to predict stock price movements based on financial news headlines. The system aggregates news from multiple sources, performs sentiment analysis using FinBERT, and provides an interactive dashboard for market monitoring.
 
+**Key Differentiators:**
+- Multi-source news aggregation with intelligent fallback
+- Production-grade API with authentication and rate limiting
+- Real-time sentiment analysis with confidence scoring
+- LSTM-based price movement predictions
+- Modern, responsive React dashboard
+
 ---
 
-## Key Features
+## Screenshots
+
+*Coming soon – add your screenshots here*
+
+| Desktop Dashboard | Mobile View |
+|-------------------|-------------|
+| ![Dashboard](screenshots/dashboard-desktop.png) | ![Mobile](screenshots/dashboard-mobile.png) |
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [API Documentation](#api-documentation)
+- [Getting an API Key](#getting-an-api-key)
+- [Installation](#installation)
+- [Deployment](#deployment)
+- [Tech Stack](#tech-stack)
+- [Contributing](#contributing)
+- [License](#license)
+- [Disclaimer](#disclaimer)
+
+---
+
+## Features
 
 ### 1. Automated News Aggregation
 - Multi-source integration with Alpha Vantage, Yahoo Finance, and Finnhub
 - SHA-256 based duplicate detection for unique articles
 - Dynamic filtering by date, sentiment, and source reliability
+- Intelligent fallback between data sources
 
 ### 2. Sentiment and Contextual Analysis
 - FinBERT-powered sentiment classification
@@ -51,13 +86,14 @@ This project delivers a real-time stock sentiment analysis platform that leverag
 - Dockerized deployment
 
 ### 5. Prediction Pipeline
+- LSTM neural network for price movement predictions
 - Scikit-learn pipeline with TF-IDF and Logistic Regression
 - Model persistence with Joblib
 - Gradio interface for interactive predictions
 
 ---
 
-## System Architecture
+## Architecture
 
 ### Component Architecture
 
@@ -191,10 +227,10 @@ sequenceDiagram
 
 All endpoints except `/health/`, `/api/docs/`, and `/api/schema/` require API key authentication.
 
-**Generating an API Key:**
+**Generating an API Key (Local Development):**
 
 ```bash
-python manage.py generate_apikey "Production Frontend"
+python manage.py generate_apikey "Development"
 # Output: Generated API Key: abc123def456...
 ```
 
@@ -228,16 +264,6 @@ All endpoints use version `v1` with the prefix `/api/v1/`.
 |---------|----------|--------|
 | v1 | `/api/v1/` | Current, stable |
 | Legacy | `/api/` | Deprecated (redirects to v1) |
-
-**Example:**
-
-```
-# Recommended (v1)
-GET /api/v1/stock-analysis/?symbol=AAPL
-
-# Legacy (redirects to v1)
-GET /api/stock-analysis/?symbol=AAPL
-```
 
 ### Standard Response Format
 
@@ -671,6 +697,36 @@ curl https://your-backend.onrender.com/api/schema/ > schema.json
 
 ---
 
+## Getting an API Key
+
+### For Production
+
+API keys are required for all authenticated endpoints. To obtain one:
+
+1. **Contact the administrator** at anyega.alex.kamau@gmail.com
+2. Provide your name and use case
+3. You'll receive a unique API key via email
+
+### For Development
+
+Generate a local key:
+
+```bash
+python manage.py generate_apikey "Development"
+# Output: Generated API Key: abc123def456...
+```
+
+### For Testing
+
+```bash
+python manage.py generate_apikey "Testing"
+```
+
+**Important:** Keep your API key secure. Never commit it to version control.
+Use environment variables for all secrets.
+
+---
+
 ## Installation
 
 ### Prerequisites
@@ -763,9 +819,24 @@ cp .env.example .env.development
 npm run dev
 ```
 
-### Environment Variables
+### Docker Setup
 
-**Backend (.env):**
+```bash
+# Build and run with Docker Compose
+docker-compose up --build
+
+# Run migrations
+docker-compose exec web python manage.py migrate
+
+# Generate API key
+docker-compose exec web python manage.py generate_apikey "Development"
+```
+
+---
+
+## Environment Variables
+
+### Backend (.env)
 
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
@@ -781,12 +852,13 @@ npm run dev
 | `REDIS_URL` | No | Redis connection | `redis://localhost:6379/1` |
 | `ENABLE_LSTM` | No | Enable LSTM predictions | `False` |
 | `LSTM_MODEL_PATH` | No | Path to LSTM model | `models/model.pth` |
+| `STATIC_API_KEY` | No | Static API key (optional fallback) | `your_key` |
 
-**Frontend (.env.development):**
+### Frontend (.env.development)
 
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
-| `VITE_API_BASE_URL` | Yes | Backend API URL | `http://localhost:8000/api/v1` |
+| `VITE_API_BASE_URL` | Yes | Backend API URL | `http://localhost:8000` |
 | `VITE_API_KEY` | Yes | API key for authentication | `your_api_key` |
 | `VITE_USE_MOCK_DATA` | No | Use mock data | `true` or `false` |
 
@@ -823,7 +895,7 @@ npm run dev
 
 | Variable | Value |
 |----------|-------|
-| `VITE_API_BASE_URL` | `https://your-backend.onrender.com/api/v1` |
+| `VITE_API_BASE_URL` | `https://your-backend.onrender.com` |
 | `VITE_API_KEY` | Your production API key |
 | `VITE_USE_MOCK_DATA` | `false` |
 
@@ -844,7 +916,7 @@ npm run dev
 
 - [ ] Environment variables configured
 - [ ] API key matches backend
-- [ ] API base URL includes `/api/v1`
+- [ ] API base URL does NOT include `/api/v1` (interceptor adds it)
 - [ ] Production build passes: `npm run build`
 - [ ] Dashboard loads correctly
 - [ ] Data fetches from backend
@@ -876,6 +948,10 @@ curl -H "X-API-Key: $API_KEY" \
 curl -H "X-API-Key: $API_KEY" \
   "https://your-backend.onrender.com/api/v1/news/symbol-search/?q=Apple"
 
+# LSTM prediction
+curl -H "X-API-Key: $API_KEY" \
+  "https://your-backend.onrender.com/api/v1/lstm-predict/?symbol=AAPL&news=Apple%20earnings"
+
 # View API documentation
 open https://your-backend.onrender.com/api/docs/
 ```
@@ -894,6 +970,7 @@ open https://your-backend.onrender.com/api/docs/
 | `401 Unauthorized` | API key missing or invalid | Generate key and add to requests |
 | `429 Too Many Requests` | Rate limit exceeded | Wait for reset or upgrade tier |
 | `ModuleNotFoundError: No module named 'drf_spectacular'` | Package missing | `pip install drf-spectacular` |
+| `Duplicate /api/v1/ in URL` | Interceptor adds prefix twice | Ensure `VITE_API_BASE_URL` is root domain only |
 
 ### Viewing Logs
 
@@ -922,61 +999,102 @@ celery -A sentiment_driven_stock_price_prediction_engine worker --loglevel=debug
 ## Tech Stack
 
 ### Backend
-- Django 5.1, Django REST Framework
-- PostgreSQL 16 with pgvector
-- Redis 7 for caching
-- FinBERT (Hugging Face Transformers)
-- spaCy for NLP
-- Joblib for model persistence
+- **Django 5.1** – Web framework
+- **Django REST Framework** – API development
+- **PostgreSQL 16** – Primary database
+- **Redis 7** – Caching (optional)
+- **Celery 5.3** – Async tasks (optional)
+- **FinBERT** – Sentiment analysis (Hugging Face Transformers)
+- **spaCy** – NLP and key phrase extraction
+- **Joblib** – Model persistence
 
 ### Frontend
-- React 18, React Router 6
-- React Query 5, Axios
-- Chart.js, Recharts
-- Tailwind CSS 3
-- Vite 5
+- **React 18** – UI framework
+- **React Router 6** – Routing
+- **React Query 5** – Data fetching and caching
+- **Chart.js / Recharts** – Data visualization
+- **Tailwind CSS 3** – Styling
+- **Vite 5** – Build tool
+- **Axios** – HTTP client
 
 ### ML Pipeline
-- Scikit-learn (Logistic Regression, TF-IDF)
-- Dask for large data processing
-- Gradio for interactive predictions
-- PyTorch for deep learning (LSTM)
+- **PyTorch** – Deep learning (LSTM)
+- **scikit-learn** – ML pipeline (TF-IDF, Logistic Regression)
+- **pandas** – Data manipulation
+- **numpy** – Numerical computing
+- **Dask** – Large data processing
+- **Gradio** – Interactive ML interface
 
 ### DevOps
-- Docker, Docker Compose
-- Git LFS for model files
-- GitHub Actions for CI/CD
+- **Docker** – Containerization
+- **Docker Compose** – Multi-container orchestration
+- **Vercel** – Frontend hosting
+- **Render** – Backend hosting
+- **Hugging Face Spaces** – ML model hosting
+- **GitHub Actions** – CI/CD (optional)
 
 ---
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch:
+We welcome contributions! Please follow these steps:
+
+1. **Fork** the repository
+2. **Create a feature branch**:
    ```bash
    git checkout -b feature/your-feature
    ```
-3. Make your changes
-4. Run tests:
+3. **Make your changes**
+4. **Run tests**:
    ```bash
    python manage.py test
    npm test
    ```
-5. Commit with a clear message:
+5. **Commit** with a clear message:
    ```bash
    git commit -m "feat: add your feature"
    ```
-6. Push to your branch:
+6. **Push** to your branch:
    ```bash
    git push origin feature/your-feature
    ```
-7. Open a Pull Request against `main`
+7. **Open a Pull Request** against `main`
 
 **Guidelines:**
 - Follow existing code style
 - Include tests for new features
 - Update documentation
 - Keep commits atomic and well-described
+- Reference related issues in PR description
+
+---
+
+## Roadmap
+
+### Phase 1: Core Features (✅ Complete)
+- [x] Real-time stock data fetching
+- [x] Sentiment analysis with FinBERT
+- [x] LSTM price predictions
+- [x] Interactive dashboard
+- [x] API key authentication
+- [x] Rate limiting
+- [x] Swagger/OpenAPI documentation
+
+### Phase 2: Enhancements (🔄 In Progress)
+- [ ] Self-service API key portal
+- [ ] Email notifications for alerts
+- [ ] Watchlist feature
+- [ ] Stock comparison tool
+- [ ] AI-powered market summaries
+- [ ] Mobile-responsive improvements
+
+### Phase 3: Advanced Features (📋 Planned)
+- [ ] Social media sentiment (Twitter/Reddit API)
+- [ ] WebSocket real-time updates
+- [ ] Native mobile app
+- [ ] Portfolio tracking
+- [ ] Custom alert rules
+- [ ] Machine learning model improvements
 
 ---
 
@@ -986,13 +1104,67 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ---
 
-## Contact
+## Disclaimer
 
-- Author: Anyega Alex Kamau
-- Email: anyega.alex.kamau@gmail.com
-- LinkedIn: [anyega-alex-kamau](https://linkedin.com/in/anyega-alex-kamau)
-- GitHub: [AnyegaAlex](https://github.com/AnyegaAlex)
+**Not Financial Advice**
+
+This project is for **educational and research purposes only**.
+
+The predictions, analysis, and recommendations provided by this software are:
+- Experimental and not guaranteed to be accurate
+- Not a substitute for professional financial advice
+- Based on historical data which may not predict future performance
+
+**Always consult a qualified financial advisor before making investment decisions.**
+
+**No Warranty**
+
+This software is provided "as is", without warranty of any kind, express or implied,
+including but not limited to the warranties of merchantability, fitness for a
+particular purpose, and noninfringement.
+
+**Use at Your Own Risk**
+
+Investing involves risk. You are solely responsible for your investment decisions.
+
+**Data Source Attribution**
+
+This project uses data from:
+- **Alpha Vantage** – Stock data and news (alphavantage.co)
+- **Finnhub** – News data (finnhub.io)
+- **Yahoo Finance** – Stock data (finance.yahoo.com)
+- **FinBERT** – Sentiment model (Prosus AI)
+
+All data is subject to the terms and conditions of these providers.
+
+**Liability**
+
+The authors and contributors of this project are not liable for any financial loss,
+damages, or other consequences arising from the use of this software.
 
 ---
 
-Built with ❤️ by AnyegaAlex – making investing smarter with AI.
+## Contact
+
+- **Author**: Anyega Alex Kamau
+- **Email**: anyega.alex.kamau@gmail.com
+- **LinkedIn**: [anyega-alex-kamau](https://linkedin.com/in/anyega-alex-kamau)
+- **GitHub**: [AnyegaAlex](https://github.com/AnyegaAlex)
+- **Portfolio**: [tickflowcapital.com](https://tickflowcapital.com)
+
+---
+
+## Acknowledgments
+
+- **Alpha Vantage** for providing financial data APIs
+- **Finnhub** for news data
+- **Hugging Face** for hosting models and spaces
+- **Vercel** for frontend hosting
+- **Render** for backend hosting
+
+---
+
+Built with Python, Django, React, and machine learning.
+
+*Making investing smarter with AI.*
+```
