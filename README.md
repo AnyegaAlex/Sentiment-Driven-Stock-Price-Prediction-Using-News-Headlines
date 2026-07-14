@@ -1,4 +1,3 @@
-```markdown
 # Sentiment-Driven Stock Price Prediction Using News Headlines
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
@@ -1167,4 +1166,3 @@ damages, or other consequences arising from the use of this software.
 Built with Python, Django, React, and machine learning.
 
 *Making investing smarter with AI.*
-```
