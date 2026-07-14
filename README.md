@@ -1,530 +1,998 @@
-# Sentiment-Driven Stock Price Prediction Using News Headlines 
+# Sentiment-Driven Stock Price Prediction Using News Headlines
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
-[![Django](https://img.shields.io/badge/Django-4.2-brightgreen)](https://www.djangoproject.com/)
+[![Django](https://img.shields.io/badge/Django-5.1-brightgreen)](https://www.djangoproject.com/)
 [![React](https://img.shields.io/badge/React-18-61DAFB)](https://reactjs.org/)
-[![Celery](https://img.shields.io/badge/Celery-5.3-lightgrey)](https://docs.celeryq.dev/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14-blue)](https://www.postgresql.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue)](https://www.postgresql.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## **Live Demo** 
-- **Frontend**: Hosted on Vercel → [https://sentiment-driven-stock-price-predic.vercel.app/](https://sentiment-driven-stock-price-predic.vercel.app/)
-- **Backend**: Hosted on Render → [https://sentiment-driven-stock-price-prediction.onrender.com](https://sentiment-driven-stock-price-prediction.onrender.com)
-- **Gradio (LSTM)**: Hosted on Hugging Face Spaces → [https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics](https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics)
-
 ---
 
-## **Overview** 
-
-This project delivers a **real‑time stock sentiment analysis platform** that leverages cutting‑edge NLP and machine learning to predict stock price movements based on financial news headlines. It features automated, multi‑source data pipelines that aggregate and deduplicate news from sources like Alpha Vantage, Yahoo Finance, and Finnhub. The system employs advanced sentiment analysis using **FinBERT** and **spaCy** to extract key insights, which are then integrated into an interactive dashboard for market monitoring. Designed to empower investors, the platform provides actionable, data‑driven insights by correlating news sentiment with stock price trends—enabling smarter, more informed decision‑making.
-
----
-
-## **Key Features** 
-
-### 1. Automated News Aggregation & Processing
-- **Multi‑Source Integration**: Seamlessly aggregates news from Alpha Vantage, Yahoo Finance, and Finnhub to ensure comprehensive market coverage.
-- **Duplicate Detection**: Employs SHA‑256 hashing for robust duplicate prevention, ensuring only unique articles are processed and stored.
-- **Dynamic Filtering**: Enables filtering of news by publication date, sentiment, and source reliability to provide the most relevant insights.
-
-### 2. Advanced Sentiment & Contextual Analysis
-- **FinBERT‑Powered Sentiment Analysis**: Leverages FinBERT for accurate, context‑aware sentiment classification, capturing the nuances of market sentiment.
-- **Real‑Time Confidence Scoring**: Provides a confidence score (ranging from 0 to 1) with every sentiment prediction, empowering users to gauge prediction reliability.
-- **Key Phrase Extraction**: Uses spaCy to extract critical key phrases from news content, aiding quick content digestion and context understanding.
-- **Historical Trend Visualization**: Visualizes sentiment trends over time to help track market mood shifts and forecast potential movements.
-
-### 3. Interactive Predictive Dashboard
-- **Unified Dashboard Interface**: Combines market metrics, news analysis, and prediction history in one interactive view.
-- **Dynamic Data Visualizations**: Features interactive charts (including dual‑axis graphs) with sentiment overlays and trend analyses.
-- **Custom Filtering & Real‑Time Refresh**: Allows users to apply custom filters on news and refresh data dynamically to get the latest market insights.
-- **Confidence & Reliability Indicators**: Highlights prediction confidence levels and news source reliability, ensuring informed decision‑making.
-
-### 4. Robust Enterprise‑Grade Infrastructure
-- **Asynchronous Task Management**: Powered by Django and Celery for efficient, reliable background processing of news data and machine learning tasks.
-- **Redis‑Backed Task Queue & Bulk Database Operations**: Optimized for high‑throughput operations, handling API rate limits, and ensuring performance via server‑side caching.
-- **Dockerized Deployment**: Facilitates easy setup, scaling, and consistent deployment across environments.
-
-### 5. Training & Prediction Pipeline
-- **Efficient Data Ingestion & Preprocessing**: Utilizes Dask for memory‑efficient data ingestion from Parquet files, ensuring scalable processing of historical news data.
-- **Automated Model Training**: Trains a scikit‑learn pipeline (featuring TF‑IDF vectorization and Logistic Regression) to predict stock movements, complete with detailed performance evaluations (accuracy, precision, F1 score).
-- **Model Persistence & Interactive Predictions**: Persists the trained model using Joblib and offers an interactive Gradio interface for real‑time stock movement predictions.
-
-### 6. Future Enhancements: AI‑Driven Market Overviews
-- **Upcoming AI Overviews**: Planned integration of AI‑generated summaries to provide market overviews and actionable insights, further enhancing the decision‑making process by summarizing complex news narratives.
-
----
-
-## **System Architecture** 
-
-### Frontend Architecture
-This section covers the user interface components built with React. The frontend is designed with a dashboard that displays market metrics (DashboardCards), a news analysis module (NewsAnalysis) that filters and presents news articles with key phrases and sentiment badges, and a prediction history component that visualizes past predictions. Routing and error handling are managed using React Router, React Query, and custom UI components.
-
-#### Data Flow Diagram
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant H as Header (Symbol Selector & Navigation)
-    participant D as Dashboard Page
-    participant DC as DashboardCards Component
-    participant NL as NewsList Component
-    participant NA as News Analysis Page
-    participant PH as Prediction History Page
-    participant API as API Server
-    participant EB as ErrorBoundary
-
-    %% --- Dashboard Tab Flow ---
-    U->>H: Select stock symbol (via dropdown)
-    H->>D: Route to Dashboard tab with selected symbol
-    D->>DC: Render DashboardCards (market metrics)
-    DC->>API: Request news data (async)
-    par Show loading spinner
-       DC->>U: Display loading indicator
-    end
-    API-->>DC: Return news data (cached/fresh)
-    DC->>U: Display market metrics above news list
-    D->>NL: Render NewsList (news articles with filtering & key phrases)
-    NL->>API: Request news data for {selectedSymbol} (async)
-    par Display skeleton loading
-       NL->>U: Show loading state
-    end
-    API-->>NL: Return news data
-    NL->>NL: Filter news by sentiment (via Select dropdown)
-    NL->>NL: Toggle key phrases expansion on click
-    NL->>U: Render news cards with images, metadata, sentiment icons, & key phrases
-
-    %% --- News Analysis Page Flow ---
-    U->>H: Navigate to News Analysis tab
-    H->>NA: Route to News Analysis Page with symbol parameter
-    NA->>API: Request detailed news analysis data (async)
-    par Show loading indicator
-       NA->>U: Display loading state
-    end
-    API-->>NA: Return detailed news analysis data
-    NA->>U: Render interactive news analysis view (filters, key phrase expansion, etc.)
-
-    %% --- Prediction History Page Flow ---
-    U->>H: Navigate to Prediction History tab
-    H->>PH: Route to Prediction History Page
-    PH->>API: Request prediction history data (async)
-    par Show chart loading indicator
-       PH->>U: Display loading spinner for prediction chart
-    end
-    API-->>PH: Return prediction history data
-    PH->>U: Render dual-axis prediction chart and modal for detailed analysis
-    PH->>U: Allow user to click "View Detailed Analysis" to open modal
-
-    %% --- Refresh Flow (applies to all tabs) ---
-    U->>D: Click refresh button
-    D->>API: Force new fetch of news data (async)
-```
-
-### Backend Architecture
-The backend is powered by Django and Celery for asynchronous tasks. It fetches news data from external APIs (Alpha Vantage, Finnhub, Yahoo Finance), processes the articles (normalization, deduplication, sentiment analysis, key phrase extraction, and source reliability assessment), and stores the results in a server‑side cache (Django DB). Robust error handling and retry mechanisms ensure the system’s resilience.
-
-```mermaid
-flowchart TD
-    A["Start: fetch_and_process_news Task"]
-    B["Check DB Cache for Recent Articles<br>last 24 hrs"]
-    C{"Cached Articles Exist?"}
-    D["Return cached articles info<br>(new_articles=0, duplicates=count)"]
-    E["Fetch articles from APIs"]
-    F["Loop Over Providers:<br>Alpha Vantage, Finnhub, Yahoo Finance"]
-    G{"Successful Fetch?"}
-    H["Set articles and break loop"]
-    I["Log error and try next provider"]
-    J{"Articles Found?"}
-    K["Log error and return error message"]
-    L["Optional: Filter Articles<br>last 24 hrs"]
-    M["Process Articles: _process_articles"]
-    
-    subgraph Deduplication [Article Deduplication]
-        N["Deduplicate Articles In-Memory<br>(normalize title, parse date, compute hash)"]
-    end
-    
-    subgraph Processing [Process Each Article]
-        O["For Each Deduplicated Article"]
-        P["Normalize Title & Parse Date"]
-        Q["Compute Unique Hash<br>(using rounded timestamp)"]
-        R["Prepare Content<br>Combine title and summary"]
-        S["Analyze Sentiment<br>(using FINBERT)"]
-        T["Extract Key Phrases<br>(using spaCy)"]
-        U["Determine Source Reliability"]
-        V["Update/Create DB Record<br>(with transaction.atomic)"]
-        W{"Record Created?"}
-        X["Increment new_articles count"]
-        Y["Increment duplicate_count"]
-    end
-    
-    Z["Process Next Article"]
-    AA["All Articles Processed"]
-    AB["Write Processing Log"]
-    AC["Return Success Message with Counts"]
-    AD["End Task"]
-    
-    A --> B
-    B --> C
-    C -- "Yes" --> D
-    C -- "No" --> E
-    E --> F
-    F --> G
-    G -- "Yes" --> H
-    G -- "No" --> I
-    I --> F
-    H --> J
-    J -- "No" --> K
-    J -- "Yes" --> L
-    L --> M
-    M --> N
-    N --> O
-    O --> P
-    P --> Q
-    Q --> R
-    R --> S
-    S --> T
-    T --> U
-    U --> V
-    V --> W
-    W -- "Yes" --> X
-    W -- "No" --> Y
-    X & Y --> Z
-    Z --> AA
-    AA --> AB
-    AB --> AC
-    AC --> AD
-    
-    %% Error Handling for API Fetch
-    I --- AE["Handle API errors and retry if rate-limited"]
-    AE --- F
-```
-
-### Training & Prediction Pipeline
-This section details the machine learning pipeline that processes historical news data for training. It uses Dask for efficient data ingestion from Parquet files, performs batch sentiment analysis with FinBERT, and trains a scikit‑learn pipeline (utilizing TF‑IDF for feature extraction and Logistic Regression for classification) to predict stock movements. The trained model is persisted using Joblib and can be accessed via a Gradio interface for interactive predictions.
-
-```mermaid
-flowchart TD
-    A["Start: Training Pipeline"]
-    B["Load Historical Data<br>(from Parquet using Dask)"]
-    C["Preprocess Data<br>(batch sentiment analysis with FinBERT)"]
-    D["Split Data<br>(Train/Validation/Test)"]
-    E["Define ML Pipeline<br>(TF-IDF & Logistic Regression)"]
-    F["Train Model"]
-    G["Evaluate Model<br>(Accuracy, Precision, F1)"]
-    H["Persist Trained Model<br>(using Joblib)"]
-    I["Launch Prediction Interface<br>(Gradio)"]
-    J["End Training Pipeline"]
-    
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-    E --> F
-    F --> G
-    G --> H
-    H --> I
-    I --> J
-```
-
-### End‑to‑End Sequence Diagram
-This combined sequence diagram illustrates the end‑to‑end flow of the application. It details how the frontend components (Dashboard with DashboardCards and NewsList, News Analysis page, Prediction History page) interact with the backend API for news processing, and how the training pipeline feeds into the prediction endpoint. This overview helps visualize the complete system architecture and data flow.
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant FE as Frontend (Dashboard/NewsAnalysis/PredictionHistory)
-    participant API as API Server (Celery Task)
-    participant DB as Server-side Cache (ProcessedNews)
-    participant EXT as External News APIs
-    participant EH as Error Handler
-    participant TP as Training Pipeline
-    participant MODEL as Trained Model (Persisted via Joblib)
-    
-    %% Frontend News Fetch Flow
-    U->>FE: Select stock symbol & navigate to Dashboard
-    FE->>API: Request news data (async)
-    API->>DB: Check cache for recent news
-    alt Cache Hit
-        DB-->>API: Return cached news
-    else Cache Miss
-        API->>EXT: Fetch news from external APIs
-        EXT-->>API: Return raw news data
-        API->>API: Process articles (normalization, deduplication, sentiment analysis,<br/>key phrase extraction, source reliability)
-        API->>DB: Store processed articles
-    end
-    API-->>FE: Return processed news data
-    FE->>U: Display Dashboard with DashboardCards & NewsList
-    
-    %% Frontend Prediction Flow
-    U->>FE: Navigate to Prediction History tab
-    FE->>TP: Request prediction history data (async)
-    TP->>MODEL: Retrieve predictions
-    MODEL-->>TP: Return prediction results
-    TP-->>FE: Return prediction history data
-    FE->>U: Display Prediction History (chart & modal)
-    
-    %% Error Handling
-    API-->>EH: Forward errors (e.g., rate limiting)
-    EH-->>API: Error handled & retried
-```
-
----
-
-## **API Endpoints** 
-
-### 1. Symbol Search
-Search for stock symbols using Alpha Vantage or Yahoo Finance as fallback.
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/news/symbol-search/?q=Apple` | Returns a list of matching symbols and their metadata. |
-
-**Parameters**:
-- `q` (required) – the search query (e.g., "Apple")
-
-**Response**:
-```json
-HTTP 200 OK
-[
-    {
-        "1. symbol": "APLE",
-        "2. name": "Apple Hospitality REIT Inc",
-        "3. type": "Equity",
-        "4. region": "United States",
-        "5. marketOpen": "09:30",
-        "6. marketClose": "16:00",
-        "7. timezone": "UTC-04",
-        "8. currency": "USD",
-        "9. matchScore": "0.8889"
-    },
-    ...
-]
-```
-
-### 2. Get News
-Retrieve processed news for a given stock symbol. Checks the database cache first, then fetches from external APIs if needed.
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/news/get-news/?symbol=IBM` | Returns a list of analyzed news articles. |
-
-**Parameters**:
-- `symbol` (required) – the stock symbol (e.g., "AAPL")
-- `refresh` (optional) – force a refresh (`true` or `false`, default `false`)
-
-**Response**:
-```json
-HTTP 200 OK
-{
-    "symbol": "IBM",
-    "news": [
-        {
-            "title": "Seagate Inks Deal to Acquire Intevac in $119 Million All-Cash Deal",
-            "summary": "STX will buy Intevac for $4.00 per share in an all-cash transaction. The buyout is expected to close by late March or early April 2025.",
-            "source": "Zacks Commentary",
-            "published_at": "2025-02-14T14:56:00Z",
-            "sentiment": "neutral",
-            "confidence": 0.9047,
-            "key_phrases": ["deals", "acquisition", "share price"],
-            "source_reliability": 80
-        }
-    ]
-}
-```
-
-### 3. Unified Stock Analysis
-Get a comprehensive analysis including recommendation, technical indicators, sentiment summary, and LSTM prediction.
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/stock-analysis/?symbol=IBM` | Returns a complete dashboard data object. |
-
-**Parameters**:
-- `symbol` (required)
-- `risk_type` – `low`, `medium`, `high` (default `medium`)
-- `hold_time` – `short-term`, `medium-term`, `long-term` (default `medium-term`)
-
-**Response**:
-```json
-HTTP 200 OK
-{
-    "symbol": "IBM",
-    "recommendation": "Hold",
-    "confidence": 0.65,
-    "sentiment": {
-        "overall": "Neutral",
-        "score": 0.12,
-        "recent_articles": 10
-    },
-    "technicalIndicators": {
-        "currentPrice": 180.00,
-        "sma50": 178.00,
-        "rsi": 52.0,
-        "support": 170.0,
-        "resistance": 190.0
-    },
-    "priceTargets": {
-        "bearish": 162.00,
-        "base": 180.00,
-        "bullish": 205.20
-    },
-    "keyFactors": [...],
-    "riskAssessment": {...}
-}
-```
-
-### 4. Prediction History
-Retrieve historical predictions for a symbol with pagination.
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/prediction-history/?symbol=IBM` | Returns paginated prediction records. |
-
----
-
-## **Installation** 
-
-### Prerequisites
-- Python 3.12+
-- Node.js 20+
-- PostgreSQL 14+
-- Redis (for Celery)
-
-### Backend Setup
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/AnyegaAlex/sentiment-driven-stock-price-prediction.git
-   cd sentiment-driven-stock-price-prediction
-   ```
-
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate   # On Windows: .venv\Scripts\activate
-   ```
-
-3. Install Python dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Set up environment variables (create a `.env` file in the backend root):
-   ```env
-   SECRET_KEY=your-django-secret-key
-   DEBUG=True
-   DATABASE_URL=postgresql://user:password@localhost:5432/stock_analysis
-   ALPHA_VANTAGE_KEY=your_alpha_vantage_key
-   FINNHUB_API_KEY=your_finnhub_key
-   RAPIDAPI_KEY=your_rapidapi_key
-   RAPIDAPI_HOST=apidojo-yahoo-finance-v1.p.rapidapi.com
-   CELERY_BROKER_URL=redis://localhost:6379/0
-   REDIS_URL=redis://localhost:6379/1
-   ENABLE_LSTM=False   # set to True if you have the model
-   ```
-
-5. Run migrations:
-   ```bash
-   python manage.py migrate
-   ```
-
-6. Start the backend server:
-   ```bash
-   python manage.py runserver
-   ```
-
-7. In a separate terminal, start Celery:
-   ```bash
-   celery -A sentiment_driven_stock_price_prediction_engine worker --pool=solo --loglevel=info
-   ```
-
-### Frontend Setup
-1. Navigate to the frontend directory:
-   ```bash
-   cd frontend
-   ```
-
-2. Install Node dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Create a `.env` file in the frontend root:
-   ```env
-   VITE_API_BASE_URL=http://localhost:8000
-   ```
-
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-### Docker (Optional)
-For production or consistent local development, a `Dockerfile` and `docker-compose.yml` are provided. Use:
-```bash
-docker-compose up --build
-```
-
----
-
-## **Deployment Status** 
+## Live Demo
 
 | Component | URL | Status |
 |-----------|-----|--------|
-| Frontend (Vercel) | [https://sentiment-driven-stock-price-predic.vercel.app/](https://sentiment-driven-stock-price-predic.vercel.app/) | ✅ Live |
-| Backend (Render) | [https://sentiment-driven-stock-price-prediction.onrender.com](https://sentiment-driven-stock-price-prediction.onrender.com) | ✅ Live |
-| Gradio Space (Hugging Face) | [https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics](https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics) | ✅ Live |
-
-### Known Issues & Workarounds
-- **LSTM Model**: The model is not loaded on Render by default. Set `ENABLE_LSTM=False` in environment variables if you don't have the `.pth` file.
-- **News API Rate Limits**: Free tier APIs have call limits. The system handles rate limits gracefully by falling back to cached data.
-- **Trailing Slashes**: All API calls now include trailing slashes to avoid 301 redirects.
+| Frontend (Vercel) | [https://sentiment-driven-stock-price-predic.vercel.app/](https://sentiment-driven-stock-price-predic.vercel.app/) | Live |
+| Backend API (Render) | [https://sentiment-driven-stock-price-prediction.onrender.com](https://sentiment-driven-stock-price-prediction.onrender.com/health/) | Live |
+| API Documentation | [https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/](https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/) | Live |
+| LSTM Model (Hugging Face) | [https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics](https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics) | Live |
 
 ---
 
-## **Tech Stack** 🛠️
+## Overview
 
-**Backend**
-- Django 4.2, Django REST Framework
-- Celery 5.3, Redis
-- PostgreSQL 14
+This project delivers a real-time stock sentiment analysis platform that leverages NLP and machine learning to predict stock price movements based on financial news headlines. The system aggregates news from multiple sources, performs sentiment analysis using FinBERT, and provides an interactive dashboard for market monitoring.
+
+---
+
+## Key Features
+
+### 1. Automated News Aggregation
+- Multi-source integration with Alpha Vantage, Yahoo Finance, and Finnhub
+- SHA-256 based duplicate detection for unique articles
+- Dynamic filtering by date, sentiment, and source reliability
+
+### 2. Sentiment and Contextual Analysis
+- FinBERT-powered sentiment classification
+- Confidence scoring (0 to 1) for each prediction
+- Key phrase extraction using spaCy
+- Historical sentiment trend visualization
+
+### 3. Interactive Dashboard
+- Unified view combining market metrics, news, and predictions
+- Interactive charts with sentiment overlays
+- Custom filtering and real-time refresh
+- Confidence and source reliability indicators
+
+### 4. Infrastructure
+- Django REST Framework with API key authentication
+- Redis-based caching with memory fallback
+- PostgreSQL database with connection pooling
+- Dockerized deployment
+
+### 5. Prediction Pipeline
+- Scikit-learn pipeline with TF-IDF and Logistic Regression
+- Model persistence with Joblib
+- Gradio interface for interactive predictions
+
+---
+
+## System Architecture
+
+### Component Architecture
+
+```mermaid
+flowchart TB
+    subgraph Frontend["Frontend (React)"]
+        UI[Dashboard UI]
+        Cards[Market Metrics Cards]
+        News[News List]
+        Charts[Prediction Charts]
+    end
+
+    subgraph Backend["Backend (Django)"]
+        API[REST API]
+        Auth[API Key Auth]
+        Cache[Redis Cache]
+        DB[(PostgreSQL)]
+    end
+
+    subgraph ML["ML Pipeline"]
+        Model[LSTM Model]
+        Gradio[Gradio Interface]
+    end
+
+    subgraph External["External APIs"]
+        AV[Alpha Vantage]
+        FH[Finnhub]
+        YH[Yahoo Finance]
+    end
+
+    UI --> API
+    Cards --> API
+    News --> API
+    Charts --> API
+    API --> Auth
+    API --> Cache
+    API --> DB
+    API --> Model
+    API --> AV
+    API --> FH
+    API --> YH
+    Gradio --> Model
+```
+
+### API Request Flow
+
+```mermaid
+sequenceDiagram
+    participant Client as Frontend/API Client
+    participant Auth as APIKeyMiddleware
+    participant Throttle as RateLimitThrottle
+    participant DB as PostgreSQL
+    participant Handler as View Handler
+
+    Client->>Auth: Request + X-API-Key header
+    Auth->>DB: Query APIKey table
+    
+    alt Invalid/Missing Key
+        DB-->>Auth: Key not found
+        Auth-->>Client: 401 Unauthorized
+    else Valid Key
+        DB-->>Auth: Key exists and active
+        Auth->>Throttle: Check rate limit
+        Throttle->>DB: Get usage count
+        
+        alt Under Limit
+            DB-->>Throttle: Usage < 200
+            Throttle-->>Auth: Allow request
+            Auth->>Handler: Forward request
+            Handler-->>Client: 200 OK + RateLimit headers
+        else Over Limit
+            DB-->>Throttle: Usage >= 200
+            Throttle-->>Client: 429 Too Many Requests
+        end
+    end
+```
+
+### News Processing Pipeline
+
+```mermaid
+flowchart TD
+    A[Fetch News Task] --> B{Check Cache}
+    B -->|Cache Hit| C[Return Cached Data]
+    B -->|Cache Miss| D[Fetch from External APIs]
+    
+    D --> E[Alpha Vantage]
+    D --> F[Finnhub]
+    D --> G[Yahoo Finance]
+    
+    E & F & G --> H[Normalize and Deduplicate]
+    H --> I[Sentiment Analysis with FinBERT]
+    I --> J[Key Phrase Extraction]
+    J --> K[Store in Database]
+    K --> L[Return Processed Data]
+    
+    M[Error Handler] -->|Retry| D
+    N[Rate Limiter] -->|Delay| D
+```
+
+### Authentication Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Backend
+    participant Database
+
+    User->>Backend: Request to /api/v1/stock-analysis/
+    Backend->>Backend: Check X-API-Key header
+    
+    alt Header Missing
+        Backend-->>User: 401 Unauthorized
+    else Header Present
+        Backend->>Database: Validate API key
+        alt Key Valid
+            Database-->>Backend: Key active
+            Backend->>Backend: Process request
+            Backend-->>User: 200 OK + Data
+        else Key Invalid
+            Database-->>Backend: Key not found
+            Backend-->>User: 401 Unauthorized
+        end
+    end
+```
+
+---
+
+## API Documentation
+
+### Authentication
+
+All endpoints except `/health/`, `/api/docs/`, and `/api/schema/` require API key authentication.
+
+**Generating an API Key:**
+
+```bash
+python manage.py generate_apikey "Production Frontend"
+# Output: Generated API Key: abc123def456...
+```
+
+**Using the API Key:**
+
+```bash
+curl -H "X-API-Key: abc123def456..." \
+  "https://your-backend.onrender.com/api/v1/stock-analysis/?symbol=AAPL"
+```
+
+**Request Headers:**
+
+| Header | Value | Required |
+|--------|-------|----------|
+| `X-API-Key` | Your API key | Yes |
+| `Content-Type` | `application/json` | For POST requests |
+
+**Response Headers:**
+
+| Header | Description |
+|--------|-------------|
+| `X-RateLimit-Limit` | Maximum requests per minute (200) |
+| `X-RateLimit-Remaining` | Remaining requests this minute |
+| `X-RateLimit-Reset` | Seconds until limit resets |
+
+### API Versioning
+
+All endpoints use version `v1` with the prefix `/api/v1/`.
+
+| Version | Base URL | Status |
+|---------|----------|--------|
+| v1 | `/api/v1/` | Current, stable |
+| Legacy | `/api/` | Deprecated (redirects to v1) |
+
+**Example:**
+
+```
+# Recommended (v1)
+GET /api/v1/stock-analysis/?symbol=AAPL
+
+# Legacy (redirects to v1)
+GET /api/stock-analysis/?symbol=AAPL
+```
+
+### Standard Response Format
+
+**Success Response:**
+
+```json
+{
+    "success": true,
+    "data": {
+        // Endpoint-specific data
+    },
+    "code": 200,
+    "timestamp": "2026-07-14T10:00:00Z"
+}
+```
+
+**Error Response:**
+
+```json
+{
+    "success": false,
+    "error": "Human-readable error message",
+    "code": 401,
+    "timestamp": "2026-07-14T10:00:00Z"
+}
+```
+
+### Error Codes
+
+| Code | Description |
+|------|-------------|
+| 1001 | Invalid API key |
+| 1002 | Missing API key |
+| 2001 | Missing required parameter |
+| 2002 | Invalid parameter value |
+| 3001 | Rate limit exceeded |
+| 4001 | Resource not found |
+| 9001 | Internal server error |
+
+---
+
+### Endpoints
+
+#### 1. Health Check
+
+**Method:** `GET`
+**URL:** `/health/`
+**Authentication:** Not required
+
+```bash
+curl https://your-backend.onrender.com/health/
+```
+
+**Response:**
+```json
+{
+    "status": "ok",
+    "redis": false
+}
+```
+
+---
+
+#### 2. Unified Stock Analysis
+
+**Method:** `GET`
+**URL:** `/api/v1/stock-analysis/`
+**Authentication:** Required
+
+**Parameters:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `symbol` | string | Yes | - | Stock ticker (e.g., AAPL) |
+| `risk_type` | string | No | `medium` | `low`, `medium`, `high` |
+| `hold_time` | string | No | `medium-term` | `short-term`, `medium-term`, `long-term` |
+
+```bash
+curl -H "X-API-Key: your_key" \
+  "https://your-backend.onrender.com/api/v1/stock-analysis/?symbol=AAPL"
+```
+
+**Response:**
+```json
+{
+    "success": true,
+    "data": {
+        "company": "Apple Inc.",
+        "symbol": "AAPL",
+        "recommendation": "HOLD",
+        "confidence": 0.5,
+        "sentiment": {
+            "overall": "Neutral",
+            "score": 0.5,
+            "recent_articles": 0
+        },
+        "technicalIndicators": {
+            "currentPrice": 116.16,
+            "sma50": 114.84,
+            "sma200": 111.81,
+            "rsi": 70.8,
+            "support": 110.35,
+            "resistance": 121.97,
+            "volume": 12424000
+        },
+        "priceTargets": {
+            "bearish": 104.54,
+            "base": 116.16,
+            "bullish": 132.42
+        },
+        "keyFactors": [
+            {
+                "title": "Market Sentiment",
+                "description": "Based on recent news",
+                "impact": "neutral"
+            }
+        ],
+        "riskAssessment": {
+            "level": "medium",
+            "horizon": "medium-term"
+        },
+        "lastUpdated": "2026-07-14T10:00:00Z"
+    },
+    "code": 200,
+    "timestamp": "2026-07-14T10:00:00Z"
+}
+```
+
+---
+
+#### 3. Technical Indicators
+
+**Method:** `GET`
+**URL:** `/api/v1/technical-indicators/`
+**Authentication:** Required
+
+**Parameters:**
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| `symbol` | string | Yes | - |
+| `timeframe` | string | No | `1d` |
+
+```bash
+curl -H "X-API-Key: your_key" \
+  "https://your-backend.onrender.com/api/v1/technical-indicators/?symbol=AAPL"
+```
+
+**Response:**
+```json
+{
+    "success": true,
+    "data": {
+        "technical": {
+            "current_price": 116.16,
+            "sma_50": 114.84,
+            "sma_200": 111.81,
+            "rsi": 70.8,
+            "support": 110.35,
+            "resistance": 121.97,
+            "pivot": 116.16,
+            "volume": 12424000,
+            "volatility": 0.15,
+            "price_history": [112.00, 112.58, ...]
+        }
+    },
+    "code": 200,
+    "timestamp": "2026-07-14T10:00:00Z"
+}
+```
+
+---
+
+#### 4. News with Sentiment
+
+**Method:** `GET`
+**URL:** `/api/v1/news/get-news/`
+**Authentication:** Required
+
+**Parameters:**
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| `symbol` | string | Yes | - |
+| `refresh` | boolean | No | `false` |
+
+```bash
+curl -H "X-API-Key: your_key" \
+  "https://your-backend.onrender.com/api/v1/news/get-news/?symbol=AAPL"
+```
+
+**Response:**
+```json
+{
+    "success": true,
+    "data": {
+        "symbol": "AAPL",
+        "news": [
+            {
+                "id": "abc123",
+                "title": "Apple Reports Strong Earnings",
+                "summary": "Apple Inc. reported Q3 earnings...",
+                "source": "Reuters",
+                "published_at": "2026-07-14T10:00:00Z",
+                "sentiment": "positive",
+                "confidence": 0.92,
+                "banner_image_url": "https://example.com/image.jpg",
+                "url": "https://example.com/article",
+                "key_phrases": ["iPhone sales", "earnings beat"],
+                "source_reliability": 85
+            }
+        ],
+        "count": 10,
+        "refresh_queued": false,
+        "cache_stale": false
+    },
+    "code": 200,
+    "timestamp": "2026-07-14T10:00:00Z"
+}
+```
+
+---
+
+#### 5. Symbol Search
+
+**Method:** `GET`
+**URL:** `/api/v1/news/symbol-search/`
+**Authentication:** Required
+
+**Parameters:**
+
+| Parameter | Type | Required |
+|-----------|------|----------|
+| `q` | string | Yes (min 2 chars) |
+
+```bash
+curl -H "X-API-Key: your_key" \
+  "https://your-backend.onrender.com/api/v1/news/symbol-search/?q=Apple"
+```
+
+**Response:**
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "symbol": "AAPL",
+            "name": "Apple Inc.",
+            "region": "United States"
+        },
+        {
+            "symbol": "AAPL34",
+            "name": "Apple Inc.",
+            "region": "Brazil"
+        }
+    ],
+    "code": 200,
+    "timestamp": "2026-07-14T10:00:00Z"
+}
+```
+
+---
+
+#### 6. Prediction History
+
+**Method:** `GET`
+**URL:** `/api/v1/prediction-history/`
+**Authentication:** Required
+
+**Parameters:**
+
+| Parameter | Type | Required | Default |
+|-----------|------|----------|---------|
+| `symbol` | string | No | - |
+| `limit` | integer | No | 50 |
+| `offset` | integer | No | 0 |
+
+```bash
+curl -H "X-API-Key: your_key" \
+  "https://your-backend.onrender.com/api/v1/prediction-history/?symbol=AAPL&limit=10"
+```
+
+**Response:**
+```json
+{
+    "success": true,
+    "data": {
+        "count": 125,
+        "next": 100,
+        "previous": 0,
+        "results": [
+            {
+                "id": 1,
+                "stock_symbol": "AAPL",
+                "predicted_movement": "UP",
+                "confidence": 0.82,
+                "date": "2026-07-12T10:00:00Z"
+            }
+        ]
+    },
+    "code": 200,
+    "timestamp": "2026-07-14T10:00:00Z"
+}
+```
+
+---
+
+#### 7. LSTM Prediction
+
+**Method:** `GET`
+**URL:** `/api/v1/lstm-predict/`
+**Authentication:** Required
+
+**Parameters:**
+
+| Parameter | Type | Required |
+|-----------|------|----------|
+| `symbol` | string | Yes |
+| `news` | string | No |
+
+```bash
+curl -H "X-API-Key: your_key" \
+  "https://your-backend.onrender.com/api/v1/lstm-predict/?symbol=AAPL&news=Apple%20earnings"
+```
+
+**Response:**
+```json
+{
+    "success": true,
+    "data": {
+        "symbol": "AAPL",
+        "prediction": "UP",
+        "confidence": 53.5,
+        "sentiment_score": 0.0,
+        "timestamp": "2026-07-14T10:00:00Z"
+    },
+    "code": 200,
+    "timestamp": "2026-07-14T10:00:00Z"
+}
+```
+
+---
+
+#### 8. Subscribe
+
+**Method:** `POST`
+**URL:** `/api/v1/subscribe/`
+**Authentication:** Required
+
+**Request Body:**
+```json
+{
+    "email": "user@example.com"
+}
+```
+
+```bash
+curl -X POST \
+  -H "X-API-Key: your_key" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com"}' \
+  "https://your-backend.onrender.com/api/v1/subscribe/"
+```
+
+**Response:**
+```json
+{
+    "success": true,
+    "message": "Subscribed successfully.",
+    "code": 201,
+    "timestamp": "2026-07-14T10:00:00Z"
+}
+```
+
+---
+
+#### 9. Available Symbols
+
+**Method:** `GET`
+**URL:** `/api/v1/symbols/`
+**Authentication:** Required
+
+```bash
+curl -H "X-API-Key: your_key" \
+  "https://your-backend.onrender.com/api/v1/symbols/"
+```
+
+**Response:**
+```json
+{
+    "success": true,
+    "data": [
+        {"symbol": "AAPL", "name": "Apple Inc.", "region": "US"},
+        {"symbol": "MSFT", "name": "Microsoft Corp.", "region": "US"},
+        {"symbol": "GOOGL", "name": "Alphabet Inc.", "region": "US"},
+        {"symbol": "AMZN", "name": "Amazon.com Inc.", "region": "US"},
+        {"symbol": "TSLA", "name": "Tesla Inc.", "region": "US"},
+        {"symbol": "NVDA", "name": "NVIDIA Corp.", "region": "US"},
+        {"symbol": "META", "name": "Meta Platforms Inc.", "region": "US"},
+        {"symbol": "IBM", "name": "International Business Machines", "region": "US"}
+    ],
+    "code": 200,
+    "timestamp": "2026-07-14T10:00:00Z"
+}
+```
+
+---
+
+#### 10. API Documentation
+
+**Interactive Documentation:**
+
+| Resource | URL | Description |
+|----------|-----|-------------|
+| Swagger UI | `/api/docs/` | Interactive API explorer |
+| OpenAPI Schema | `/api/schema/` | Machine-readable spec |
+
+```bash
+# Open Swagger UI in browser
+open https://your-backend.onrender.com/api/docs/
+
+# Download OpenAPI schema
+curl https://your-backend.onrender.com/api/schema/ > schema.json
+```
+
+**To import into Postman:**
+1. Open Postman
+2. Click Import -> Link
+3. Paste: `https://your-backend.onrender.com/api/schema/`
+4. Click Import
+
+---
+
+## Installation
+
+### Prerequisites
+
+| Tool | Version |
+|------|---------|
+| Python | 3.12+ |
+| Node.js | 20+ |
+| PostgreSQL | 16+ |
+| Redis | 7+ (optional) |
+
+### Backend Setup
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines.git
+cd sentiment_driven_stock_price_prediction_engine
+```
+
+2. Create and activate a virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+3. Install Python dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+4. Set up environment variables:
+
+```bash
+cp .env.example .env
+# Edit .env with your configuration
+```
+
+5. Run database migrations:
+
+```bash
+python manage.py migrate
+python manage.py createcachetable
+```
+
+6. Generate an API key:
+
+```bash
+python manage.py generate_apikey "Development"
+```
+
+7. Create a superuser (optional):
+
+```bash
+python manage.py createsuperuser
+```
+
+8. Start the development server:
+
+```bash
+python manage.py runserver
+```
+
+### Frontend Setup
+
+1. Navigate to the frontend directory:
+
+```bash
+cd frontend
+```
+
+2. Install Node dependencies:
+
+```bash
+npm install
+```
+
+3. Create environment file:
+
+```bash
+cp .env.example .env.development
+# Edit with your configuration
+```
+
+4. Start the development server:
+
+```bash
+npm run dev
+```
+
+### Environment Variables
+
+**Backend (.env):**
+
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `SECRET_KEY` | Yes | Django secret key | `django-insecure-...` |
+| `DEBUG` | Yes | Development mode | `True` or `False` |
+| `DATABASE_URL` | Yes | PostgreSQL connection | `postgresql://user:pass@localhost:5432/db` |
+| `ALLOWED_HOSTS` | Yes | Allowed hostnames | `localhost,127.0.0.1` |
+| `FRONTEND_URL` | Yes | Frontend URL for CORS | `http://localhost:5173` |
+| `ALPHA_VANTAGE_KEY` | Yes | Alpha Vantage API key | `your_key` |
+| `FINNHUB_API_KEY` | No | Finnhub API key | `your_key` |
+| `RAPIDAPI_KEY` | No | RapidAPI key | `your_key` |
+| `RAPIDAPI_HOST` | No | RapidAPI host | `apidojo-yahoo-finance-v1.p.rapidapi.com` |
+| `REDIS_URL` | No | Redis connection | `redis://localhost:6379/1` |
+| `ENABLE_LSTM` | No | Enable LSTM predictions | `False` |
+| `LSTM_MODEL_PATH` | No | Path to LSTM model | `models/model.pth` |
+
+**Frontend (.env.development):**
+
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `VITE_API_BASE_URL` | Yes | Backend API URL | `http://localhost:8000/api/v1` |
+| `VITE_API_KEY` | Yes | API key for authentication | `your_api_key` |
+| `VITE_USE_MOCK_DATA` | No | Use mock data | `true` or `false` |
+
+---
+
+## Deployment
+
+### Backend Deployment (Render)
+
+1. Push code to GitHub
+2. Create a new Web Service on Render
+3. Connect your GitHub repository
+4. Configure environment variables
+5. Set build command: `./build.sh`
+6. Set start command: `gunicorn sentiment_driven_stock_price_prediction_engine.wsgi:application`
+
+**Environment Variables on Render:**
+
+| Variable | Value |
+|----------|-------|
+| `SECRET_KEY` | Your Django secret key |
+| `DEBUG` | `False` |
+| `DATABASE_URL` | Render PostgreSQL URL |
+| `ALLOWED_HOSTS` | `your-service.onrender.com` |
+| `FRONTEND_URL` | `https://your-frontend.vercel.app` |
+| `ALPHA_VANTAGE_KEY` | Your API key |
+| `ENABLE_LSTM` | `False` |
+
+### Frontend Deployment (Vercel)
+
+1. Push code to GitHub
+2. Import project on Vercel
+3. Configure environment variables:
+
+| Variable | Value |
+|----------|-------|
+| `VITE_API_BASE_URL` | `https://your-backend.onrender.com/api/v1` |
+| `VITE_API_KEY` | Your production API key |
+| `VITE_USE_MOCK_DATA` | `false` |
+
+4. Deploy
+
+### Deployment Checklist
+
+**Backend:**
+
+- [ ] All environment variables configured
+- [ ] PostgreSQL database created and connected
+- [ ] Migrations run: `python manage.py migrate`
+- [ ] API key generated: `python manage.py generate_apikey "Production Frontend"`
+- [ ] Health check passes: `curl /health/`
+- [ ] Authenticated endpoint works: `curl -H "X-API-Key: key" /api/v1/stock-analysis/?symbol=AAPL`
+
+**Frontend:**
+
+- [ ] Environment variables configured
+- [ ] API key matches backend
+- [ ] API base URL includes `/api/v1`
+- [ ] Production build passes: `npm run build`
+- [ ] Dashboard loads correctly
+- [ ] Data fetches from backend
+
+---
+
+## Quick Test Commands
+
+```bash
+# Set your API key
+API_KEY="your_api_key_here"
+
+# Health check (public)
+curl https://your-backend.onrender.com/health/
+
+# Stock analysis (authenticated)
+curl -H "X-API-Key: $API_KEY" \
+  "https://your-backend.onrender.com/api/v1/stock-analysis/?symbol=AAPL"
+
+# Technical indicators
+curl -H "X-API-Key: $API_KEY" \
+  "https://your-backend.onrender.com/api/v1/technical-indicators/?symbol=AAPL"
+
+# News
+curl -H "X-API-Key: $API_KEY" \
+  "https://your-backend.onrender.com/api/v1/news/get-news/?symbol=AAPL"
+
+# Symbol search
+curl -H "X-API-Key: $API_KEY" \
+  "https://your-backend.onrender.com/api/v1/news/symbol-search/?q=Apple"
+
+# View API documentation
+open https://your-backend.onrender.com/api/docs/
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| `relation "authentication_apikey" does not exist` | Migrations not run | `python manage.py migrate` |
+| `SSL connection has been closed unexpectedly` | Database SSL configuration | Set `ssl_require=True` in database config |
+| `Invalid HTTP_HOST header` | ALLOWED_HOSTS missing | Add domain to ALLOWED_HOSTS |
+| `401 Unauthorized` | API key missing or invalid | Generate key and add to requests |
+| `429 Too Many Requests` | Rate limit exceeded | Wait for reset or upgrade tier |
+| `ModuleNotFoundError: No module named 'drf_spectacular'` | Package missing | `pip install drf-spectacular` |
+
+### Viewing Logs
+
+**Render:**
+1. Go to Render Dashboard
+2. Click your service
+3. Click **Logs** tab
+
+**Vercel:**
+1. Go to Vercel Dashboard
+2. Click your project
+3. Click **Deployments**
+4. Click **View Logs**
+
+**Locally:**
+```bash
+# Django logs
+python manage.py runserver --verbosity 3
+
+# Celery logs (if using)
+celery -A sentiment_driven_stock_price_prediction_engine worker --loglevel=debug
+```
+
+---
+
+## Tech Stack
+
+### Backend
+- Django 5.1, Django REST Framework
+- PostgreSQL 16 with pgvector
+- Redis 7 for caching
 - FinBERT (Hugging Face Transformers)
 - spaCy for NLP
 - Joblib for model persistence
 
-**Frontend**
+### Frontend
 - React 18, React Router 6
-- React Query, Axios
+- React Query 5, Axios
 - Chart.js, Recharts
-- Tailwind CSS
+- Tailwind CSS 3
+- Vite 5
 
-**ML Pipeline**
-- Scikit‑learn (Logistic Regression, TF‑IDF)
+### ML Pipeline
+- Scikit-learn (Logistic Regression, TF-IDF)
 - Dask for large data processing
 - Gradio for interactive predictions
+- PyTorch for deep learning (LSTM)
 
-**Deployment**
-- Vercel, Render, Hugging Face Spaces
-- Docker, Git LFS
-
----
-
-## **Contributing** 
-
-We welcome contributions! Please follow these steps:
-
-1. **Fork** the repository.
-2. **Create a feature branch** (`git checkout -b feature/your-feature`).
-3. **Make your changes** and add tests.
-4. **Commit** with a clear message (`git commit -m "Add awesome feature"`).
-5. **Push** to your branch (`git push origin feature/your-feature`).
-6. **Open a Pull Request** against `main`.
-
-Please ensure your code adheres to the existing style and includes appropriate tests. For major changes, open an issue first to discuss what you'd like to change.
+### DevOps
+- Docker, Docker Compose
+- Git LFS for model files
+- GitHub Actions for CI/CD
 
 ---
 
-## **License** 
+## Contributing
 
-This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
+1. Fork the repository
+2. Create a feature branch:
+   ```bash
+   git checkout -b feature/your-feature
+   ```
+3. Make your changes
+4. Run tests:
+   ```bash
+   python manage.py test
+   npm test
+   ```
+5. Commit with a clear message:
+   ```bash
+   git commit -m "feat: add your feature"
+   ```
+6. Push to your branch:
+   ```bash
+   git push origin feature/your-feature
+   ```
+7. Open a Pull Request against `main`
+
+**Guidelines:**
+- Follow existing code style
+- Include tests for new features
+- Update documentation
+- Keep commits atomic and well-described
 
 ---
 
-**Built with ❤️ by AnyegaAlex** – let’s make investing smarter with AI.
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+---
+
+## Contact
+
+- Author: Anyega Alex Kamau
+- Email: anyega.alex.kamau@gmail.com
+- LinkedIn: [anyega-alex-kamau](https://linkedin.com/in/anyega-alex-kamau)
+- GitHub: [AnyegaAlex](https://github.com/AnyegaAlex)
+
+---
+
+Built with ❤️ by AnyegaAlex – making investing smarter with AI.
