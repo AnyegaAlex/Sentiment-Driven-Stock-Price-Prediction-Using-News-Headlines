@@ -1,10 +1,11 @@
 from django.http import JsonResponse
 from django.core.cache import cache
+import os
 from .models import APIKey
 
 class APIKeyMiddleware:
     """Global authentication for all non-public endpoints."""
-    EXEMPT_PATHS = ['/admin/', '/health/', '/api/docs/', '/api/schema/']
+    EXEMPT_PATHS = ['/admin/', '/health/', '/api/docs/', '/api/schema/', '/generate-key/']
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -15,6 +16,14 @@ class APIKeyMiddleware:
             return self.get_response(request)
 
         api_key = request.headers.get('X-API-Key')
+        
+        # Check static API key fallback (from environment)
+        static_key = os.environ.get('STATIC_API_KEY')
+        if static_key and api_key == static_key:
+            request.api_key = api_key
+            return self.get_response(request)
+        
+        # Check database for API key
         if not api_key or not APIKey.is_valid(api_key):
             return JsonResponse(
                 {'error': 'Valid X-API-Key header required.'},

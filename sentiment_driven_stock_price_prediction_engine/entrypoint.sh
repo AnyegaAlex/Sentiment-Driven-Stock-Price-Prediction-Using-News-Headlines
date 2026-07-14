@@ -11,6 +11,18 @@ echo "Starting entrypoint script..."
 echo "Running migrations..."
 python manage.py migrate --noinput || echo "⚠️ Migration failed – continuing anyway..."
 
+# Generate API key if it doesn't exist
+echo "Checking for API key..."
+python manage.py shell << EOF
+from authentication.models import APIKey
+if not APIKey.objects.filter(name="Production Frontend").exists():
+    key = APIKey.objects.create(name="Production Frontend")
+    print(f"✅ Generated API Key: {key.key}")
+else:
+    key = APIKey.objects.get(name="Production Frontend")
+    print(f"✅ Existing API Key: {key.key}")
+EOF
+
 # Collect static files
 echo "Collecting static files..."
 python manage.py collectstatic --noinput

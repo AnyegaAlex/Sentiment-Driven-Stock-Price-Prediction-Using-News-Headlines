@@ -992,3 +992,25 @@ class SentimentAnalysisView(APIView):
                 success_response(data=fallback_data),
                 status=status.HTTP_200_OK
             )
+        
+
+from authentication.models import APIKey
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt
+def generate_key_view(request):
+    """Temporary endpoint to generate an API key."""
+    if request.method == 'GET':
+        name = request.GET.get('name', 'Production Frontend')
+        key, created = APIKey.objects.get_or_create(
+            name=name,
+            defaults={'is_active': True}
+        )
+        return JsonResponse({
+            "api_key": key.key,
+            "created": created,
+            "name": key.name,
+            "message": "Copy this key to Vercel as VITE_API_KEY"
+        })
+    return JsonResponse({"error": "GET only"}, status=405)

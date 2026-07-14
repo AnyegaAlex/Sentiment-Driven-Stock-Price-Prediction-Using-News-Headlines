@@ -1,6 +1,9 @@
 from django.db import models
 from django.utils import timezone
 import secrets
+import logging
+
+logger = logging.getLogger(__name__)
 
 class APIKey(models.Model):
     key = models.CharField(max_length=64, unique=True, editable=False)
@@ -22,6 +25,12 @@ class APIKey(models.Model):
                 return False
             return True
         except cls.DoesNotExist:
+            # Log warning but return False gracefully
+            logger.warning(f"API key validation failed: key not found or table missing")
+            return False
+        except Exception as e:
+            # Catch any database errors (table missing, connection issues)
+            logger.error(f"API key validation error: {e}")
             return False
 
     def __str__(self):

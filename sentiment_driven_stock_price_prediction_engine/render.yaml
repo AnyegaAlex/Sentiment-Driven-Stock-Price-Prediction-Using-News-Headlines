@@ -22,3 +22,6 @@ services:
         value: ".onrender.com"
       - key: CSRF_TRUSTED_ORIGINS
         value: "https://*.onrender.com"
+      # Static API key fallback
+      - key: STATIC_API_KEY
+        value: "your_static_key_here"  # Optional fallback

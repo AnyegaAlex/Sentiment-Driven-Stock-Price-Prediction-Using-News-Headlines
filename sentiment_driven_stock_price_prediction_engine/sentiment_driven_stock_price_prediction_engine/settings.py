@@ -344,6 +344,8 @@ ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY")
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 RAPIDAPI_HOST = os.getenv("RAPIDAPI_HOST", "apidojo-yahoo-finance-v1.p.rapidapi.com")
+# Static API key fallback (for Render environment variable)
+STATIC_API_KEY = os.getenv("STATIC_API_KEY", None)
 
 # --- Rate Limiting (external) ---
 RATE_LIMIT_PERIOD = 60  # 60 seconds
