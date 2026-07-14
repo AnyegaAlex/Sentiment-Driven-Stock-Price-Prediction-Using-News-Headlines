@@ -8,7 +8,6 @@ from .views import (
     SubscribeView,
     LSTMPredictionView,
     SentimentAnalysisView,
-    generate_key_view,  
 )
 
 urlpatterns = [
