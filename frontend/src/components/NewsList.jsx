@@ -5,8 +5,9 @@
  * Features:
  * - Sentiment badges (positive, neutral, negative) with icons
  * - Confidence score display with progress bars
+ * - Source reliability badge with tooltip
  * - Key phrases extraction and display
- * - Responsive grid layout (1, 2, or 3 columns based on screen size)
+ * - Responsive grid layout
  * - Loading skeleton states
  * - Error handling with retry functionality
  * - Image fallback handling
@@ -24,7 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Info, ExternalLink } from "lucide-react";
+import { Info, ExternalLink, Newspaper } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import apiClient from "@/services/client";
@@ -51,6 +52,24 @@ const SENTIMENT_CONFIG = {
     badgeClass: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300 border-rose-200 dark:border-rose-800",
     icon: "📉",
     progressClass: "bg-gradient-to-r from-rose-500 to-red-500 shadow-[0_0_12px_rgba(244,63,94,0.45)]"
+  }
+};
+
+/**
+ * Reliability color mapping
+ */
+const RELIABILITY_CONFIG = {
+  high: {
+    badge: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    label: "High"
+  },
+  medium: {
+    badge: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+    label: "Medium"
+  },
+  low: {
+    badge: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+    label: "Low"
   }
 };
 
@@ -98,12 +117,10 @@ const SAMPLE_NEWS = [
 const normalizeKeyPhrases = (phrases) => {
   if (!phrases) return [];
   
-  // Already an array
   if (Array.isArray(phrases)) {
     return phrases.filter(p => p && p.trim());
   }
   
-  // Comma-separated string
   if (typeof phrases === 'string') {
     return phrases.split(',').map(p => p.trim()).filter(Boolean);
   }
@@ -129,6 +146,17 @@ const parseDate = (dateString) => {
   }
 };
 
+/**
+ * Get reliability level from score
+ * @param {number} score - Reliability score (0-100)
+ * @returns {string} Reliability level
+ */
+const getReliabilityLevel = (score) => {
+  if (score >= 80) return 'high';
+  if (score >= 50) return 'medium';
+  return 'low';
+};
+
 // ============================================================================
 // Sub-Components
 // ============================================================================
@@ -142,22 +170,22 @@ const NewsItem = React.memo(function NewsItem({ item }) {
   
   // Normalize key phrases
   const keyPhrases = normalizeKeyPhrases(item.key_phrases || item.keyPhrases);
+  
+  // Get reliability configuration
+  const reliabilityScore = item.source_reliability || 0;
+  const reliabilityLevel = getReliabilityLevel(reliabilityScore);
+  const reliabilityConfig = RELIABILITY_CONFIG[reliabilityLevel];
 
   return (
-    <Card className="flex flex-col h-full hover:shadow-md transition-shadow">
-      <CardContent className="flex flex-col space-y-3 p-4 h-full">
-        {/* Title */}
-        <h3 className="font-semibold text-base line-clamp-2">
-          {item.title || "No title available"}
-        </h3>
-
+    <Card className="flex h-full flex-col hover:shadow-md transition-shadow dark:bg-gray-800 dark:border-gray-700">
+      <CardContent className="flex flex-1 flex-col space-y-3 p-4">
         {/* Image */}
         {item.banner_image_url || item.image ? (
-          <div className="relative pt-[50%]">
+          <div className="relative pt-[50%] rounded-md overflow-hidden">
             <img
               src={item.banner_image_url || item.image}
               alt={item.title || "News image"}
-              className="absolute top-0 left-0 w-full h-full object-cover rounded-md mb-3"
+              className="absolute inset-0 w-full h-full object-cover"
               loading="lazy"
               decoding="async"
               onError={(e) => {
@@ -167,78 +195,112 @@ const NewsItem = React.memo(function NewsItem({ item }) {
             />
           </div>
         ) : (
-          <div className="w-full h-0 pt-[50%] bg-muted rounded-md mb-3 flex items-center justify-center">
-            <span className="text-xs text-muted-foreground">No image available</span>
+          <div className="flex h-0 pt-[50%] items-center justify-center rounded-md bg-muted dark:bg-gray-700">
+            <Newspaper className="h-10 w-10 text-muted-foreground" />
           </div>
         )}
 
+        {/* Title */}
+        <h3 className="font-semibold text-base line-clamp-2 dark:text-white">
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:underline inline-flex items-center gap-1 text-primary"
+          >
+            {item.title || "No title available"}
+            <ExternalLink className="inline-block h-3 w-3 flex-shrink-0" />
+          </a>
+        </h3>
+
         {/* Summary */}
-        <p className="text-sm text-muted-foreground line-clamp-3">
+        <p className="text-sm text-muted-foreground line-clamp-3 dark:text-gray-400 flex-1">
           {item.summary || "No summary available."}
         </p>
 
-        {/* Metadata */}
-        <div className="text-xs text-muted-foreground mt-auto flex justify-between items-center">
-          <span>{parseDate(item.published_at || item.date)}</span>
-          <span className="italic truncate max-w-[120px]">{item.source || item.source_name}</span>
+        {/* Metadata Grid */}
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div>
+            <p className="text-muted-foreground dark:text-gray-500">Source</p>
+            <p className="font-medium dark:text-gray-300 truncate">
+              {item.source || item.source_name || "Unknown"}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground dark:text-gray-500">Published</p>
+            <p className="font-medium dark:text-gray-300">
+              {parseDate(item.published_at || item.date)}
+            </p>
+          </div>
         </div>
 
-        {/* Sentiment Badge + Confidence */}
-        <div className="flex justify-between items-center">
-          <Badge className={cn("px-3 py-1 rounded-full text-xs capitalize", config.badgeClass)}>
-            {config.icon} {sentiment}
+        {/* Reliability Badge */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground dark:text-gray-500">Reliability:</span>
+          <Badge className={cn("text-xs", reliabilityConfig.badge)}>
+            {reliabilityScore}%
           </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button className="text-muted-foreground hover:text-foreground">
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[200px] dark:bg-gray-900 dark:border-gray-700">
+              <p className="text-xs">Source reliability score based on historical accuracy.</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
 
-          {item.confidence !== undefined && item.confidence !== null && (
+        {/* Sentiment & Confidence */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground dark:text-gray-500">Sentiment:</span>
+            <Badge className={cn("px-2 py-0.5 text-xs rounded-full capitalize", config.badgeClass)}>
+              {config.icon} {sentiment}
+            </Badge>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground dark:text-gray-500">Confidence:</span>
+            <div className="flex-1 relative h-1.5 rounded bg-gray-200 dark:bg-gray-700">
+              <div
+                className={cn("absolute inset-0 h-full rounded transition-all", config.progressClass)}
+                style={{ width: `${Math.min(100, Math.round((item.confidence || 0) * 100))}%` }}
+              />
+            </div>
+            <span className="text-xs w-12 text-right dark:text-gray-400">
+              {Math.round((item.confidence || 0) * 100)}%
+            </span>
             <Tooltip>
-              <TooltipTrigger className="flex items-center gap-1">
-                <Info className="h-3 w-3 text-muted-foreground" />
-                <span className="text-xs">Confidence: {(item.confidence * 100).toFixed(0)}%</span>
+              <TooltipTrigger asChild>
+                <button className="text-muted-foreground hover:text-foreground">
+                  <Info className="h-3 w-3" />
+                </button>
               </TooltipTrigger>
-              <TooltipContent className="w-40">
-                <Progress 
-                  value={item.confidence * 100} 
-                  indicatorClassName={config.progressClass} 
-                />
-                <div className="text-center text-xs mt-1">Analysis Confidence</div>
+              <TooltipContent side="top" className="max-w-[200px] dark:bg-gray-900 dark:border-gray-700">
+                <p className="text-xs">Model confidence in sentiment analysis.</p>
               </TooltipContent>
             </Tooltip>
-          )}
+          </div>
         </div>
 
-        {/* Key Phrases - NOW HANDLES BOTH STRING AND ARRAY */}
+        {/* Key Phrases */}
         {keyPhrases.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {keyPhrases.slice(0, 3).map((phrase, index) => (
-              <Badge
-                key={`phrase-${index}`}
-                variant="outline"
-                className="text-xs px-2 py-0.5 rounded-full"
-              >
-                {phrase}
-              </Badge>
-            ))}
+          <div className="pt-2 border-t border-border dark:border-gray-700">
+            <h4 className="text-xs font-medium mb-1.5 dark:text-gray-300">Key Phrases</h4>
+            <div className="flex flex-wrap gap-1.5">
+              {keyPhrases.slice(0, 3).map((phrase, index) => (
+                <Badge
+                  key={`phrase-${index}`}
+                  variant="outline"
+                  className="text-[10px] px-2 py-0.5 rounded-full dark:border-gray-600 dark:text-gray-300"
+                >
+                  {phrase}
+                </Badge>
+              ))}
+            </div>
           </div>
-        )}
-
-        {/* Read More Link */}
-        {item.url && (
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            className="w-full mt-2 text-xs gap-1"
-          >
-            <a
-              href={item.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Read full article: ${item.title}`}
-            >
-              <ExternalLink className="h-3 w-3" />
-              Read Full Article
-            </a>
-          </Button>
         )}
       </CardContent>
     </Card>
@@ -247,7 +309,7 @@ const NewsItem = React.memo(function NewsItem({ item }) {
 
 NewsItem.propTypes = {
   item: PropTypes.shape({
-    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), // ✅ Allow both types
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     title: PropTypes.string,
     summary: PropTypes.string,
     source: PropTypes.string,
@@ -268,6 +330,7 @@ NewsItem.propTypes = {
     image: PropTypes.string,
     banner_image_url: PropTypes.string,
     symbol: PropTypes.string,
+    source_reliability: PropTypes.number,
   }).isRequired,
 };
 
@@ -306,14 +369,18 @@ ErrorDisplay.propTypes = {
 const NewsListSkeleton = ({ count = 6 }) => (
   <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
     {Array.from({ length: count }).map((_, index) => (
-      <Card key={`skeleton-${index}`} className="p-4 space-y-3">
-        <Skeleton className="h-5 w-4/5" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-3/4" />
+      <Card key={`skeleton-${index}`} className="p-4 space-y-3 dark:bg-gray-800">
+        <Skeleton className="h-32 w-full rounded-md bg-gray-200 dark:bg-gray-700" />
+        <Skeleton className="h-5 w-4/5 bg-gray-200 dark:bg-gray-700" />
+        <Skeleton className="h-4 w-full bg-gray-200 dark:bg-gray-700" />
+        <Skeleton className="h-4 w-full bg-gray-200 dark:bg-gray-700" />
+        <div className="grid grid-cols-2 gap-2">
+          <Skeleton className="h-4 w-16 bg-gray-200 dark:bg-gray-700" />
+          <Skeleton className="h-4 w-16 bg-gray-200 dark:bg-gray-700" />
+        </div>
         <div className="flex justify-between items-center pt-2">
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-16 bg-gray-200 dark:bg-gray-700" />
+          <Skeleton className="h-4 w-16 bg-gray-200 dark:bg-gray-700" />
         </div>
       </Card>
     ))}
@@ -366,13 +433,11 @@ const NewsList = ({
     setError(null);
 
     try {
-      // Try real API
       const response = await apiClient.get('/news/get-news/', {
         params: { symbol: displaySymbol },
         timeout: 10000
       });
       
-      // apiClient returns response.data directly
       const responseData = response.data || response;
       const newsArray = responseData?.news || responseData || [];
       const normalizedNews = Array.isArray(newsArray) ? newsArray : [];
@@ -381,7 +446,6 @@ const NewsList = ({
         setNews(normalizedNews);
         setError(null);
       } else {
-        // API returned empty array, use sample data
         console.warn(`API returned empty news for ${displaySymbol}, using sample data.`);
         setNews(SAMPLE_NEWS);
         setError({
@@ -390,7 +454,6 @@ const NewsList = ({
         });
       }
     } catch (apiError) {
-      // API failed, use sample data as fallback
       console.warn(`API failed for ${displaySymbol}:`, apiError.message);
       setNews(SAMPLE_NEWS);
       setError({
@@ -407,14 +470,11 @@ const NewsList = ({
    */
   useEffect(() => {
     if (Array.isArray(newsData)) {
-      return; // Parent-controlled
+      return;
     }
     fetchNews();
   }, [fetchNews, newsData]);
 
-  /**
-   * Determine loading state from parent or local
-   */
   const isLoading = parentLoading || loading;
 
   // ============================================================================
@@ -424,7 +484,9 @@ const NewsList = ({
   if (isLoading) {
     return (
       <div className="p-4">
-        <h2 className="text-xl font-semibold mb-4">Latest News for {displaySymbol}</h2>
+        <h2 className="text-xl font-semibold mb-4 dark:text-white">
+          Latest News for {displaySymbol}
+        </h2>
         <NewsListSkeleton />
       </div>
     );
@@ -433,7 +495,9 @@ const NewsList = ({
   if (error) {
     return (
       <div className="p-4">
-        <h2 className="text-xl font-semibold mb-4">Latest News for {displaySymbol}</h2>
+        <h2 className="text-xl font-semibold mb-4 dark:text-white">
+          Latest News for {displaySymbol}
+        </h2>
         <ErrorDisplay error={error} onRetry={fetchNews}>
           {news.length > 0 && (
             <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[80vh] overflow-y-auto pr-2">
@@ -450,8 +514,10 @@ const NewsList = ({
   if (!news.length) {
     return (
       <div className="p-4">
-        <h2 className="text-xl font-semibold mb-4">Latest News for {displaySymbol}</h2>
-        <div className="text-muted-foreground p-4 border rounded-lg text-center">
+        <h2 className="text-xl font-semibold mb-4 dark:text-white">
+          Latest News for {displaySymbol}
+        </h2>
+        <div className="text-muted-foreground dark:text-gray-400 p-4 border rounded-lg text-center">
           No news articles found for this stock.
         </div>
       </div>
@@ -460,7 +526,9 @@ const NewsList = ({
 
   return (
     <div className="p-4">
-      <h2 className="text-xl font-semibold mb-4">Latest News for {displaySymbol}</h2>
+      <h2 className="text-xl font-semibold mb-4 dark:text-white">
+        Latest News for {displaySymbol}
+      </h2>
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[80vh] overflow-y-auto pr-2">
         {news.map((item, index) => (
           <NewsItem key={`news-${index}-${item.id || item.url}`} item={item} />

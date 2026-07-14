@@ -12,10 +12,17 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { DashboardProvider, useDashboard } from "./context/DashboardContext";
 import { PersistGate } from "./context/PersistGate";
 import ReactGA from 'react-ga4';
+import Breadcrumbs from "./components/Breadcrumbs";
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { refetchOnWindowFocus: false, retry: 1 },
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+      staleTime: 5 * 60 * 1000,   // 5 minutes – data considered fresh
+      cacheTime: 10 * 60 * 1000,  // 10 minutes – keep cache after unmount
+      placeholderData: (previousData) => previousData, // Keep previous data while re-fetching
+    },
   },
 });
 
@@ -53,12 +60,12 @@ const PageTracker = () => {
 // App content – placed inside Router so useNavigate and context work
 const AppContent = () => {
   const navigate = useNavigate();
-  const { setStockSymbol } = useDashboard(); // ✅ get setter from context
+  const { setStockSymbol } = useDashboard();
 
   // Handler for symbol selection from header search
   const handleSymbolSelect = (symbol) => {
     if (symbol) {
-      setStockSymbol(symbol); // ✅ update global context
+      setStockSymbol(symbol);
       navigate(`/dashboard/${symbol}`);
     }
   };
@@ -73,6 +80,9 @@ const AppContent = () => {
           paddingBottom: '2rem',
         }}
       >
+        {/* ✅ Breadcrumbs added here – above ErrorBoundary */}
+        <Breadcrumbs />
+        
         <ErrorBoundary>
           <PageTracker />
           <Routes>

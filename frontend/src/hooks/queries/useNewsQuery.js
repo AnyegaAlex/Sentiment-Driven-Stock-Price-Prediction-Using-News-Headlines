@@ -15,7 +15,7 @@ export const useNewsQuery = (symbol) => {
     queryKey: queryKeys.news(symbol),
     queryFn: () => fetchNews(symbol),
     enabled: !!symbol,
-    staleTime: 2 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
     retry: 1,
   });
 };

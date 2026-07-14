@@ -14,9 +14,9 @@
  * - React Query: news data caching and fetching
  */
 
-import React, { useCallback } from "react";
-import PropTypes from "prop-types"; // ✅ ADD THIS
-import { useParams } from "react-router-dom";
+import React, { useCallback, useEffect } from "react";
+import PropTypes from "prop-types";
+import { useParams, useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LineChart, Newspaper, Settings, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,15 +31,12 @@ import NewsList from "../components/NewsList";
 // Hooks
 import { useLocalStorage, useSessionStorage } from "../hooks/useStorage";
 import { useNewsQuery } from "../hooks/queries/useNewsQuery";
+import { useDashboard } from "../context/DashboardContext";
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-/**
- * Tab Configuration
- * Single source of truth for tab definitions
- */
 const TAB_CONFIG = [
   {
     value: "opinion",
@@ -57,9 +54,6 @@ const TAB_CONFIG = [
 // Sub-Components
 // ============================================================================
 
-/**
- * Empty State - Displayed when no symbol is selected
- */
 const EmptyState = () => (
   <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
     <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-4 mb-6">
@@ -69,8 +63,7 @@ const EmptyState = () => (
       Find a Stock
     </h2>
     <p className="text-gray-600 dark:text-gray-400 max-w-md text-base sm:text-lg">
-      Use the search bar in the header to look up any stock symbol and get
-      AI-powered analysis.
+      Use the search bar in the header to look up any stock symbol and get AI-powered analysis.
     </p>
     <p className="text-gray-500 dark:text-gray-500 text-sm mt-2">
       Try searching for AAPL, TSLA, MSFT, or any other symbol.
@@ -78,9 +71,6 @@ const EmptyState = () => (
   </div>
 );
 
-/**
- * Preferences Summary Bar - Shows current settings with edit button
- */
 const PreferencesSummary = ({ riskType, holdTime, detailed, onEdit }) => (
   <div className="section-wrap glass-hover flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
     <div className="space-y-1 sm:space-y-0 sm:space-x-4 text-sm">
@@ -94,12 +84,7 @@ const PreferencesSummary = ({ riskType, holdTime, detailed, onEdit }) => (
         <strong>View:</strong> {detailed ? "Detailed" : "Summary"}
       </span>
     </div>
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={onEdit}
-      className="gap-2"
-    >
+    <Button variant="ghost" size="sm" onClick={onEdit} className="gap-2">
       <Settings className="w-4 h-4" />
       Edit Preferences
     </Button>
@@ -119,26 +104,11 @@ EmptyState.propTypes = {};
 // Main Component
 // ============================================================================
 
-/**
- * Dashboard Component
- * 
- * Renders the main dashboard page with stock analysis and news features.
- * 
- * @param {Object} props - Component props
- * @param {string} props.symbol - Stock symbol from URL (via useParams)
- * 
- * @returns {JSX.Element} Rendered dashboard page
- * 
- * @flow
- * 1. No symbol → Show "Find a Stock" landing page
- * 2. Symbol exists but no preferences → Show InvestmentPreferences
- * 3. Symbol and preferences exist → Show full dashboard with tabs
- */
 const Dashboard = () => {
-  // Extract symbol from URL path: /dashboard/:symbol
+  // --- All hooks must be called unconditionally at the top ---
   const { symbol: paramSymbol } = useParams();
-
-  // --- Hooks (called unconditionally per React rules) ---
+  const navigate = useNavigate();
+  const { stockSymbol: contextSymbol, setStockSymbol } = useDashboard();
 
   // Tab persistence across sessions (sessionStorage)
   const [selectedTab, setSelectedTab] = useSessionStorage(
@@ -146,68 +116,58 @@ const Dashboard = () => {
     "opinion"
   );
 
-  // Preferences persistence per symbol (localStorage)
+  // Preferences persistence per symbol – use paramSymbol or contextSymbol as key
+  const activeSymbol = paramSymbol || contextSymbol || '';
   const [preferencesSet, setPreferencesSet] = useLocalStorage(
-    `prefsSet_${paramSymbol}`,
+    `prefsSet_${activeSymbol}`,
     false
   );
   const [riskType, setRiskType] = useLocalStorage(
-    `risk_${paramSymbol}`,
+    `risk_${activeSymbol}`,
     "medium"
   );
   const [holdTime, setHoldTime] = useLocalStorage(
-    `holdTime_${paramSymbol}`,
+    `holdTime_${activeSymbol}`,
     "medium-term"
   );
   const [detailed, setDetailed] = useLocalStorage(
-    `detailed_${paramSymbol}`,
+    `detailed_${activeSymbol}`,
     false
   );
 
-  // React Query hook - fetches news data; enabled only when symbol exists
-  const { data: newsData = [], isLoading: newsLoading } = useNewsQuery(
-    paramSymbol || ''
-  );
+  // React Query hook – enabled only when activeSymbol is truthy
+  const { data: newsData = [], isLoading: newsLoading } = useNewsQuery(activeSymbol);
+
+  // --- Side effects and redirects ---
+  useEffect(() => {
+    if (!paramSymbol && contextSymbol) {
+      navigate(`/dashboard/${contextSymbol}`, { replace: true });
+    }
+  }, [paramSymbol, contextSymbol, navigate]);
+
+  // Determine the effective symbol (URL param > context)
+  const symbol = paramSymbol || contextSymbol;
 
   // --- Handlers ---
-
-  /**
-   * Saves investment preferences to localStorage and marks them as set
-   */
   const handlePreferencesSubmit = useCallback(() => {
-    const preferences = {
-      risk: riskType,
-      holdTime,
-      detailed,
-    };
-    localStorage.setItem(
-      `preferences_${paramSymbol}`,
-      JSON.stringify(preferences)
-    );
+    if (!symbol) return;
+    const preferences = { risk: riskType, holdTime, detailed };
+    localStorage.setItem(`preferences_${symbol}`, JSON.stringify(preferences));
     setPreferencesSet(true);
-  }, [paramSymbol, riskType, holdTime, detailed, setPreferencesSet]);
+  }, [symbol, riskType, holdTime, detailed, setPreferencesSet]);
 
-  /**
-   * Resets preferences to show the settings form again
-   */
   const handleEditPreferences = useCallback(() => {
     setPreferencesSet(false);
   }, [setPreferencesSet]);
 
-  // --- Render States ---
+  // --- Render Logic (after all hooks) ---
 
-  /**
-   * State 1: No symbol selected (empty landing page)
-   */
-  if (!paramSymbol) {
+  // State 1: No symbol
+  if (!symbol) {
     return <EmptyState />;
   }
 
-  const symbol = paramSymbol;
-
-  /**
-   * State 2: Symbol exists but preferences not yet configured
-   */
+  // State 2: Symbol exists but preferences not yet configured
   if (!preferencesSet) {
     return (
       <div className="p-4 md:p-6">
@@ -224,12 +184,9 @@ const Dashboard = () => {
     );
   }
 
-  /**
-   * State 3: Full dashboard with all features
-   */
+  // State 3: Full dashboard
   return (
     <div className="p-4 md:p-6 space-y-6">
-      {/* Preferences Summary Bar */}
       <PreferencesSummary
         riskType={riskType}
         holdTime={holdTime}
@@ -237,13 +194,7 @@ const Dashboard = () => {
         onEdit={handleEditPreferences}
       />
 
-      {/* Tab Navigation */}
-      <Tabs
-        value={selectedTab}
-        onValueChange={setSelectedTab}
-        className="space-y-6"
-      >
-        {/* Tab Headers */}
+      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
         <div className="sticky-subheader top-[110px] md:top-[120px] px-3 py-3">
           <TabsList className="w-full flex justify-center bg-transparent gap-2 p-0">
             {TAB_CONFIG.map((tab) => (
@@ -261,7 +212,6 @@ const Dashboard = () => {
           </TabsList>
         </div>
 
-        {/* Tab Content: Stock Opinion */}
         <TabsContent value="opinion" className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <StockOpinionCard
@@ -274,12 +224,8 @@ const Dashboard = () => {
           </div>
         </TabsContent>
 
-        {/* Tab Content: News Analysis */}
         <TabsContent value="news" className="space-y-6">
-          <NewsList
-            newsData={newsData}
-            loading={newsLoading}
-          />
+          <NewsList newsData={newsData} loading={newsLoading} />
         </TabsContent>
       </Tabs>
     </div>
