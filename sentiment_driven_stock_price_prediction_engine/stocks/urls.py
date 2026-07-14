@@ -32,6 +32,4 @@ urlpatterns = [
     # Sentiment Analysis endpoint
     path('sentiment-analysis/', SentimentAnalysisView.as_view(), name='sentiment-analysis'),
 
-    # Temporary key generation (remove after use)
-    path('generate-key/', generate_key_view, name='generate-key'),
 ]
