@@ -225,7 +225,11 @@ const Dashboard = () => {
         </TabsContent>
 
         <TabsContent value="news" className="space-y-6">
-          <NewsList newsData={newsData} loading={newsLoading} />
+          <NewsList 
+            symbol={symbol}        
+            newsData={newsData} 
+            loading={newsLoading} 
+          />
         </TabsContent>
       </Tabs>
     </div>

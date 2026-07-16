@@ -405,7 +405,7 @@ NewsListSkeleton.propTypes = {
  * @returns {JSX.Element}
  */
 const NewsList = ({
-  symbol = "IBM",
+  symbol,
   newsData = null,
   loading: parentLoading = false,
 }) => {
