@@ -29,7 +29,7 @@ const ROUTE_NAMES = {
 
 const Breadcrumbs = () => {
   const location = useLocation();
-  const { stockSymbol } = useDashboard();
+  const { stockSymbol, setStockSymbol } = useDashboard();
 
   // Split path into segments (e.g., '/dashboard/AAPL' → ['dashboard', 'AAPL'])
   const pathSegments = location.pathname.split('/').filter((segment) => segment !== '');
@@ -96,6 +96,17 @@ const Breadcrumbs = () => {
                   'hover:text-gray-200 transition-colors',
                   isHome ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-200'
                 )}
+                // ashboard link, clear symbol on click
+                onClick={
+                  item.path === '/dashboard'
+                    ? (e) => {
+                        // Only clear if we're actually navigating to /dashboard
+                        if (item.path === '/dashboard') {
+                          setStockSymbol(null);
+                        }
+                      }
+                    : undefined
+                }
               >
                 {item.label}
               </Link>
