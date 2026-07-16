@@ -1,189 +1,135 @@
-/**
- * PredictionHistory Page
- *
- * Displays historical predictions with:
- * - Summary statistics
- * - Interactive table with sortable columns
- * - Mobile-friendly card view
- * - Detailed modal on row click (custom implementation)
- */
+import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import apiClient from '@/services/client';
+import PredictionSummaryCards from '@/components/PredictionSummaryCards';
+import PredictionTable from '@/components/PredictionTable';
+import PredictionModal from '@/components/PredictionModal';
+import PerformanceChart from '@/components/PerformanceChart';
+import DriftAlert from '@/components/DriftAlert';
+import { FilterBar } from '@/components/FilterBar';
+import { Loader2 } from 'lucide-react';
 
-import React, { useState } from 'react';
-import { usePredictionHistoryQuery } from '@/hooks/queries/usePredictionHistoryQuery';
-import PredictionHistoryList from '@/components/charts/PredictionHistoryList';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Button } from '@/components/ui/button';
-import { X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+const fetchPredictions = async ({ symbol, dateRange, outcome, limit, offset }) => {
+  const params = new URLSearchParams();
+  if (symbol) params.append('symbol', symbol);
+  if (dateRange) params.append('date_from', dateRange.from);
+  if (dateRange) params.append('date_to', dateRange.to);
+  if (outcome) params.append('outcome', outcome);
+  params.append('limit', limit);
+  params.append('offset', offset);
+  const response = await apiClient.get(`/predictions/?${params.toString()}`);
+  return response;
+};
+
+const fetchPerformance = async (symbol) => {
+  const url = symbol ? `/performance/?symbol=${symbol}` : '/performance/';
+  const response = await apiClient.get(url);
+  return response;
+};
+
+const fetchDrift = async () => {
+  const response = await apiClient.get('/drift/');
+  return response;
+};
 
 const PredictionHistory = () => {
-  const { data, isLoading, error, refetch } = usePredictionHistoryQuery();
+  const [symbol, setSymbol] = useState('');
+  const [dateRange, setDateRange] = useState({ from: null, to: null });
+  const [outcome, setOutcome] = useState('all');
   const [selectedPrediction, setSelectedPrediction] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [page, setPage] = useState(0);
+  const limit = 25;
 
-  // Normalize data: ensure array
-  const predictions = React.useMemo(() => {
-    if (Array.isArray(data)) return data;
-    if (data?.results) return data.results;
-    return [];
-  }, [data]);
+  // Queries
+  const predictionsQuery = useQuery({
+    queryKey: ['predictions', { symbol, dateRange, outcome, page, limit }],
+    queryFn: () => fetchPredictions({ symbol, dateRange, outcome, limit, offset: page * limit }),
+  });
+
+  const performanceQuery = useQuery({
+    queryKey: ['performance', symbol],
+    queryFn: () => fetchPerformance(symbol),
+  });
+
+  const driftQuery = useQuery({
+    queryKey: ['drift'],
+    queryFn: fetchDrift,
+  });
 
   const handleRowClick = (prediction) => {
     setSelectedPrediction(prediction);
     setIsModalOpen(true);
   };
 
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setSelectedPrediction(null);
-  };
+  const closeModal = () => setIsModalOpen(false);
 
-  // Modal overlay click handler (close on backdrop click)
-  const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) {
-      closeModal();
-    }
-  };
+  const { data: predsData, isLoading: predsLoading, error: predsError } = predictionsQuery;
+  const { data: perfData, isLoading: perfLoading } = performanceQuery;
+  const { data: driftData } = driftQuery;
+
+  const predictions = predsData?.results || [];
+  const total = predsData?.total || 0;
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6 dark:text-white">Prediction History</h1>
+    <div className="container mx-auto px-4 py-8 space-y-8">
+      <h1 className="text-3xl font-bold dark:text-white">Prediction History</h1>
 
-      <PredictionHistoryList
-        predictions={predictions}
-        isLoading={isLoading}
-        error={error?.message}
-        onRetry={refetch}
-        onRowClick={handleRowClick}
-        itemsPerPage={10}
-        showPagination
-        emptyMessage="No predictions have been recorded yet. Start making predictions to see them here."
+      {/* Drift Alert */}
+      {driftData?.drift_detected && (
+        <DriftAlert severity={driftData.severity} drop={driftData.drop_percent} />
+      )}
+
+      {/* Summary Cards */}
+      {perfLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-24 bg-gray-200 dark:bg-gray-800 animate-pulse rounded-xl" />
+          ))}
+        </div>
+      ) : (
+        <PredictionSummaryCards data={perfData} />
+      )}
+
+      {/* Filter Bar */}
+      <FilterBar
+        symbol={symbol}
+        onSymbolChange={setSymbol}
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
+        outcome={outcome}
+        onOutcomeChange={setOutcome}
+        availableSymbols={['AAPL', 'TSLA', 'GOOGL', 'MSFT', 'AMZN', 'NVDA']}
       />
 
-      {/* Custom Modal */}
-      {isModalOpen && selectedPrediction && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-          onClick={handleOverlayClick}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="modal-title"
-        >
-          <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 border border-gray-200 dark:border-gray-700">
-            {/* Close button */}
-            <button
-              onClick={closeModal}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-              aria-label="Close modal"
-            >
-              <X className="h-6 w-6" />
-            </button>
+      {/* Performance Chart */}
+      <PerformanceChart data={perfData} />
 
-            <h2 id="modal-title" className="text-2xl font-bold mb-1 dark:text-white">
-              Prediction Details
-              <span className="ml-3 text-sm font-normal text-gray-400">
-                {selectedPrediction.stock_symbol || selectedPrediction.symbol || 'Unknown'}
-              </span>
-            </h2>
-
-            {selectedPrediction.headline && (
-              <p className="text-gray-500 dark:text-gray-400 mb-4">
-                {selectedPrediction.headline}
-              </p>
-            )}
-
-            <div className="space-y-4">
-              {/* Date & Source */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Date</p>
-                  <p className="font-medium dark:text-white">
-                    {selectedPrediction.date
-                      ? new Date(selectedPrediction.date).toLocaleString()
-                      : 'Unknown'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Source</p>
-                  <p className="font-medium dark:text-white">
-                    {selectedPrediction.source || '—'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Movement & Confidence */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Predicted Movement</p>
-                  <Badge
-                    className={
-                      selectedPrediction.predicted_movement === 'up'
-                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
-                        : selectedPrediction.predicted_movement === 'down'
-                          ? 'bg-rose-500/15 text-rose-300 border-rose-500/25'
-                          : 'bg-blue-500/15 text-blue-300 border-blue-500/25'
-                    }
-                  >
-                    {selectedPrediction.predicted_movement?.toUpperCase() || 'NEUTRAL'}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Confidence</p>
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium dark:text-white">
-                      {((selectedPrediction.confidence || 0) * 100).toFixed(0)}%
-                    </span>
-                    <Progress
-                      value={(selectedPrediction.confidence || 0) * 100}
-                      className="h-2 flex-1"
-                      indicatorClassName="bg-blue-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Sentiment Score */}
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Sentiment Score</p>
-                <div className="flex items-center gap-3">
-                  <span className="font-medium dark:text-white">
-                    {selectedPrediction.sentiment_score?.toFixed(2) || '0.00'}
-                  </span>
-                  <Progress
-                    value={((selectedPrediction.sentiment_score || 0) + 1) / 2 * 100}
-                    className="h-2 flex-1"
-                    indicatorClassName={
-                      selectedPrediction.sentiment_score > 0.2
-                        ? 'bg-emerald-500'
-                        : selectedPrediction.sentiment_score < -0.2
-                          ? 'bg-rose-500'
-                          : 'bg-blue-500'
-                    }
-                  />
-                </div>
-              </div>
-
-              {/* Optional URL */}
-              {selectedPrediction.url && (
-                <div className="pt-2">
-                  <Button asChild variant="outline" size="sm">
-                    <a href={selectedPrediction.url} target="_blank" rel="noopener noreferrer">
-                      Read Full Article
-                    </a>
-                  </Button>
-                </div>
-              )}
-
-              {/* Close button at bottom (optional) */}
-              <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
-                <Button variant="outline" onClick={closeModal}>
-                  Close
-                </Button>
-              </div>
-            </div>
-          </div>
+      {/* Prediction Table */}
+      {predsLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
+      ) : predsError ? (
+        <div className="text-red-500">Error loading predictions</div>
+      ) : (
+        <PredictionTable
+          predictions={predictions}
+          total={total}
+          page={page}
+          limit={limit}
+          onPageChange={setPage}
+          onRowClick={handleRowClick}
+        />
+      )}
+
+      {/* Prediction Modal */}
+      {selectedPrediction && (
+        <PredictionModal
+          prediction={selectedPrediction}
+          isOpen={isModalOpen}
+          onClose={closeModal}
+        />
       )}
     </div>
   );

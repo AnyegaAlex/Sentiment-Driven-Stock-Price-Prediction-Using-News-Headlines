@@ -24,6 +24,9 @@ from .opinion_generator import generate_stock_opinion, format_investment_analysi
 from .models import Prediction, Subscription
 from .serializers import (
     PredictionSerializer,
+    PredictionDetailSerializer,
+    PredictionListSerializer,
+    ModelPerformanceSnapshotSerializer,
     StockOpinionSerializer,
     SubscriptionSerializer,
     StockAnalysisSerializer,
@@ -32,7 +35,7 @@ from .serializers import (
 )
 from news.models import ProcessedNews
 from .lstm_predictor import get_lstm_predictor
-from .utils import save_prediction
+from .utils import save_prediction, calculate_performance_metrics, detect_drift
 
 logger = logging.getLogger(__name__)
 
@@ -992,4 +995,137 @@ class SentimentAnalysisView(APIView):
                 success_response(data=fallback_data),
                 status=status.HTTP_200_OK
             )
+
+
+# ============================================================
+# ✅ NEW VIEWS – PREDICTION HISTORY SYSTEM
+# ============================================================
+
+class PredictionListView(APIView):
+    """
+    List predictions with filters.
+    Returns paginated predictions with accuracy and SHAP data.
+    """
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        symbol = request.query_params.get('symbol')
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        outcome = request.query_params.get('outcome')  # 'correct', 'incorrect'
+        limit = int(request.query_params.get('limit', 50))
+        offset = int(request.query_params.get('offset', 0))
         
+        qs = Prediction.objects.all().order_by('-date')
+        
+        if symbol:
+            qs = qs.filter(stock_symbol=symbol.upper())
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+        if outcome == 'correct':
+            qs = qs.filter(is_correct=True)
+        elif outcome == 'incorrect':
+            qs = qs.filter(is_correct=False)
+        
+        total = qs.count()
+        qs = qs[offset:offset+limit]
+        
+        # Use PredictionDetailSerializer for full data
+        serializer = PredictionDetailSerializer(qs, many=True)
+        return Response({
+            'total': total,
+            'results': serializer.data,
+            'limit': limit,
+            'offset': offset
+        })
+
+
+class PerformanceSummaryView(APIView):
+    """
+    Get overall performance metrics.
+    Returns accuracy, precision, recall, F1, and per-symbol breakdown.
+    """
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        symbol = request.query_params.get('symbol')
+        days = int(request.query_params.get('days', 30))
+        
+        start_date = datetime.now() - timedelta(days=days)
+        qs = Prediction.objects.filter(
+            resolution_date__gte=start_date,
+            is_correct__isnull=False
+        )
+        if symbol:
+            qs = qs.filter(stock_symbol=symbol.upper())
+        
+        metrics = calculate_performance_metrics(qs)
+        
+        # Per-symbol breakdown
+        symbols = qs.values_list('stock_symbol', flat=True).distinct()
+        symbol_metrics = {}
+        for sym in symbols:
+            sym_qs = qs.filter(stock_symbol=sym)
+            symbol_metrics[sym] = calculate_performance_metrics(sym_qs)
+        
+        # Total counts
+        total_preds = qs.count()
+        correct_preds = qs.filter(is_correct=True).count()
+        
+        # Recent accuracy (last 7 days)
+        recent_start = datetime.now() - timedelta(days=7)
+        recent_qs = qs.filter(resolution_date__gte=recent_start)
+        recent_metrics = calculate_performance_metrics(recent_qs)
+        
+        return Response({
+            'total_predictions': total_preds,
+            'correct_predictions': correct_preds,
+            'overall': metrics,
+            'recent_accuracy': recent_metrics.get('accuracy', 0),
+            'by_symbol': symbol_metrics
+        })
+
+
+class DriftDetectionView(APIView):
+    """
+    Detect model drift by comparing recent vs baseline performance.
+    """
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        recent_days = int(request.query_params.get('recent_days', 30))
+        baseline_days = int(request.query_params.get('baseline_days', 90))
+        
+        result = detect_drift(
+            recent_period_days=recent_days,
+            baseline_period_days=baseline_days
+        )
+        
+        return Response(result)
+
+
+class SHAPExplanationView(APIView):
+    """
+    Get SHAP explanation for a specific prediction.
+    """
+    permission_classes = [AllowAny]
+    
+    def get(self, request, prediction_id):
+        try:
+            pred = Prediction.objects.get(id=prediction_id)
+            return Response({
+                'id': pred.id,
+                'stock_symbol': pred.stock_symbol,
+                'date': pred.date,
+                'predicted_movement': pred.predicted_movement,
+                'shap_values': pred.shap_values or {},
+                'feature_importance': pred.feature_importance or {},
+                'explanation': pred.prediction_explanation or 'No explanation available'
+            })
+        except Prediction.DoesNotExist:
+            return Response(
+                {'error': 'Prediction not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )

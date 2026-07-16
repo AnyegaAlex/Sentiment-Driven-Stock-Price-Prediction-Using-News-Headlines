@@ -70,10 +70,97 @@ class Prediction(models.Model):
         help_text="Source of prediction: lstm, technical, manual, etc."
     )
 
+    # ============================================================
+    #  – Accuracy Tracking
+    # ============================================================
+    
+    # Price tracking
+    price_at_prediction = models.DecimalField(
+        max_digits=12, 
+        decimal_places=4, 
+        null=True, 
+        blank=True,
+        help_text="Stock price when prediction was made"
+    )
+    price_at_resolution = models.DecimalField(
+        max_digits=12, 
+        decimal_places=4, 
+        null=True, 
+        blank=True,
+        help_text="Stock price when prediction was resolved"
+    )
+    
+    # Outcome tracking
+    actual_direction = models.CharField(
+        max_length=10, 
+        null=True, 
+        blank=True,
+        choices=[('up', 'Up'), ('down', 'Down'), ('neutral', 'Neutral')],
+        help_text="Actual price movement direction"
+    )
+    is_correct = models.BooleanField(
+        null=True, 
+        blank=True,
+        help_text="Whether prediction was correct"
+    )
+    
+    # Timing
+    resolution_date = models.DateTimeField(
+        null=True, 
+        blank=True,
+        help_text="When the prediction was resolved"
+    )
+    time_to_resolution = models.DurationField(
+        null=True, 
+        blank=True,
+        help_text="Time between prediction and resolution"
+    )
+    
+    # Performance
+    price_change_percent = models.DecimalField(
+        max_digits=6, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        help_text="Percentage change from prediction to resolution"
+    )
+
+    # ============================================================
+    # – SHAP Explainability
+    # ============================================================
+    
+    shap_values = models.JSONField(
+        null=True, 
+        blank=True,
+        help_text="SHAP values per feature for this prediction"
+    )
+    feature_importance = models.JSONField(
+        null=True, 
+        blank=True,
+        help_text="Feature importance rankings"
+    )
+    prediction_explanation = models.TextField(
+        null=True, 
+        blank=True,
+        help_text="Plain English explanation of why the model predicted this"
+    )
+
+    # ============================================================
+    # – Market Context
+    # ============================================================
+    
+    market_context = models.JSONField(
+        null=True, 
+        blank=True,
+        help_text="Market context (e.g., SPY performance, sector performance)"
+    )
+
     class Meta:
         ordering = ['-date']
         indexes = [
             models.Index(fields=['stock_symbol', '-date']),
+            models.Index(fields=['is_correct']),
+            models.Index(fields=['resolution_date']),
         ]
 
     def __str__(self):
@@ -103,6 +190,65 @@ class Prediction(models.Model):
             if keep_ids:
                 # Delete all other records for this symbol
                 cls.objects.filter(stock_symbol=symbol).exclude(id__in=keep_ids).delete()
+
+
+# ============================================================
+# – Performance Snapshot
+# ============================================================
+
+class ModelPerformanceSnapshot(models.Model):
+    """
+    Daily snapshot of model performance metrics.
+    Used for tracking accuracy, F1, and drift detection over time.
+    """
+    date = models.DateField(help_text="Date of the performance snapshot")
+    symbol = models.CharField(
+        max_length=10, 
+        null=True, 
+        blank=True,
+        help_text="Symbol this snapshot is for. Null = overall performance"
+    )
+    
+    # Basic metrics
+    total_predictions = models.IntegerField(default=0)
+    correct_predictions = models.IntegerField(default=0)
+    accuracy = models.FloatField(default=0.0)
+    
+    # Confusion matrix components
+    true_positives = models.IntegerField(default=0)
+    false_positives = models.IntegerField(default=0)
+    true_negatives = models.IntegerField(default=0)
+    false_negatives = models.IntegerField(default=0)
+    
+    # Classification metrics
+    precision = models.FloatField(default=0.0)
+    recall = models.FloatField(default=0.0)
+    f1_score = models.FloatField(default=0.0)
+    balanced_accuracy = models.FloatField(default=0.0)
+    
+    # Drift detection
+    drift_detected = models.BooleanField(default=False)
+    drift_severity = models.CharField(
+        max_length=20, 
+        null=True, 
+        blank=True,
+        choices=[('low', 'Low'), ('medium', 'Medium'), ('high', 'High')],
+        help_text="Severity of drift detected"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-date']
+        indexes = [
+            models.Index(fields=['date', 'symbol']),
+            models.Index(fields=['symbol']),
+        ]
+        unique_together = [['date', 'symbol']]  # One snapshot per symbol per day
+    
+    def __str__(self):
+        return f"{self.symbol or 'Overall'} - {self.date} (F1: {self.f1_score}%)"
 
 
 class Subscription(models.Model):
