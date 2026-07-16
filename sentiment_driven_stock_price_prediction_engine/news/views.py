@@ -547,6 +547,7 @@ def symbol_search(request):
                 headers={
                     "X-RapidAPI-Key": settings.RAPIDAPI_KEY,
                     "X-RapidAPI-Host": settings.RAPIDAPI_HOST,
+                    "x-rapidapi-ua": "RapidAPI-Playground",
                 },
                 timeout=10,
             )

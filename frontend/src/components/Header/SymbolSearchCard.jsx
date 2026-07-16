@@ -32,12 +32,14 @@ const SymbolSearchCard = ({ onSymbolSelect }) => {
   const handleSelect = (symbol) => {
     onSymbolSelect(symbol);
     setQuery(symbol);
-    setDebouncedQuery(symbol);
+    setDebouncedQuery(""); // Clear debounced query to close suggestions
+    searchRef.current?.blur(); // Remove focus to hide keyboard and dropdown
   };
 
   const clearSearch = () => {
     setQuery("");
     setDebouncedQuery("");
+    onSymbolSelect(null); // Clear the symbol from context
     searchRef.current?.focus();
   };
 
