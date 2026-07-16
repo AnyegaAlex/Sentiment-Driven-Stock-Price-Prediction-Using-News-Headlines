@@ -12,7 +12,8 @@ from django.db import transaction
 import logging
 from datetime import datetime
 from authentication.utils import error_response, success_response
-from datetime import datetime, timedelta  
+from datetime import datetime, timedelta
+from django.utils import timezone  
 
 # drf-spectacular for OpenAPI
 from drf_spectacular.utils import (
@@ -998,7 +999,7 @@ class SentimentAnalysisView(APIView):
 
 
 # ============================================================
-# ✅ NEW VIEWS – PREDICTION HISTORY SYSTEM
+#  – PREDICTION HISTORY SYSTEM
 # ============================================================
 
 class PredictionListView(APIView):
@@ -1009,6 +1010,8 @@ class PredictionListView(APIView):
     permission_classes = [AllowAny]
     
     def get(self, request):
+        import dateutil.parser
+
         symbol = request.query_params.get('symbol')
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
@@ -1020,14 +1023,26 @@ class PredictionListView(APIView):
         
         if symbol:
             qs = qs.filter(stock_symbol=symbol.upper())
-        if date_from:
-            qs = qs.filter(date__gte=date_from)
-        if date_to:
-            qs = qs.filter(date__lte=date_to)
+
+        if date_from and date_from not in ['null', 'undefined', '']:
+            try:
+                parsed_date = dateutil.parser.parse(date_from)
+                qs = qs.filter(date__gte=parsed_date.date())
+            except (ValueError, TypeError, OverflowError) as e:
+                logger.warning(f"Failed to parse date_from: {date_from} - {e}")
+        
+        if date_to and date_to not in ['null', 'undefined', '']:
+            try:
+                parsed_date = dateutil.parser.parse(date_to)
+                qs = qs.filter(date__lte=parsed_date.date())
+            except (ValueError, TypeError, OverflowError) as e:
+                logger.warning(f"Failed to parse date_to: {date_to} - {e}")
+        
+        # Filter by outcome
         if outcome == 'correct':
             qs = qs.filter(is_correct=True)
         elif outcome == 'incorrect':
-            qs = qs.filter(is_correct=False)
+            qs = qs.filter(is_correct=False)    
         
         total = qs.count()
         qs = qs[offset:offset+limit]
@@ -1053,7 +1068,7 @@ class PerformanceSummaryView(APIView):
         symbol = request.query_params.get('symbol')
         days = int(request.query_params.get('days', 30))
         
-        start_date = datetime.now() - timedelta(days=days)
+        start_date = timezone.now() - timedelta(days=days)
         qs = Prediction.objects.filter(
             resolution_date__gte=start_date,
             is_correct__isnull=False
@@ -1122,7 +1137,9 @@ class SHAPExplanationView(APIView):
                 'predicted_movement': pred.predicted_movement,
                 'shap_values': pred.shap_values or {},
                 'feature_importance': pred.feature_importance or {},
-                'explanation': pred.prediction_explanation or 'No explanation available'
+                'explanation': pred.prediction_explanation or 'No explanation available',
+                'is_correct': pred.is_correct,
+                'confidence': pred.confidence,
             })
         except Prediction.DoesNotExist:
             return Response(

@@ -481,7 +481,7 @@ def get_news(request):
 
 @extend_schema(
     summary="Search stock symbols",
-    description="Auto‑complete endpoint that searches for ticker symbols and company names using Alpha Vantage, with a fallback to Yahoo Finance.",
+    description="Auto‑complete endpoint that searches for ticker symbols and company names using multiple providers: Finnhub (primary), Alpha Vantage, and Yahoo Finance (RapidAPI), with a static fallback.",
     parameters=[
         OpenApiParameter(
             name='q',
@@ -493,23 +493,31 @@ def get_news(request):
     ],
     responses={
         200: OpenApiResponse(
-            description='List of matching symbols. Format depends on the source.',
+            description='List of matching symbols. Format is normalised to {symbol, name, region}.',
             examples=[
                 {
                     "application/json": [
-                        {"1. symbol": "AAPL", "2. name": "Apple Inc.", "3. region": "United States"},
-                        {"1. symbol": "AAPL34", "2. name": "Apple Inc.", "3. region": "Brazil"}
+                        {"symbol": "AAPL", "name": "Apple Inc.", "region": "US"},
+                        {"symbol": "AAPL34", "name": "Apple Inc.", "region": "Brazil"}
                     ]
                 }
             ]
         ),
         400: OpenApiResponse(description="Missing query parameter"),
-        500: OpenApiResponse(description="Internal server error"),
     },
     tags=["News"]
 )
 @api_view(["GET"])
 def symbol_search(request):
+    """
+    Search for stock symbols using multiple providers in order:
+    1. Finnhub (primary – 60 calls/min)
+    2. Alpha Vantage (backup – 5 calls/min)
+    3. RapidAPI (Yahoo) (fallback)
+    4. Static fallback list (always works)
+
+    Always returns a 200 status with results (or an empty list). No 500 errors.
+    """
     query = (request.GET.get("q") or "").strip()
     if not query:
         return Response(
@@ -517,6 +525,7 @@ def symbol_search(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    # 1. Check cache
     cache_instance = SymbolSearchCache.objects.filter(query=query).first()
     if cache_instance and cache_instance.is_valid:
         return Response(
@@ -525,22 +534,70 @@ def symbol_search(request):
         )
 
     results = []
-    try:
-        av = requests.get(
-            "https://www.alphavantage.co/query",
-            params={
-                "function": "SYMBOL_SEARCH",
-                "keywords": query,
-                "apikey": settings.ALPHA_VANTAGE_KEY,
-            },
-            timeout=10,
-        )
-        av.raise_for_status()
-        av_data = av.json()
-        if "bestMatches" in av_data:
-            results = av_data["bestMatches"] or []
 
-        if not results and getattr(settings, "RAPIDAPI_KEY", None):
+    # 2. Try Finnhub (primary – requires API key)
+    finnhub_key = getattr(settings, 'FINNHUB_API_KEY', '')
+    if finnhub_key:
+        try:
+            fh = requests.get(
+                "https://finnhub.io/api/v1/search",
+                params={"q": query, "token": finnhub_key},
+                timeout=5,
+            )
+            if fh.status_code == 200:
+                fh_data = fh.json()
+                if "result" in fh_data:
+                    results = [
+                        {
+                            "symbol": item.get("symbol", ""),
+                            "name": item.get("description", ""),
+                            "region": item.get("type", "US"),
+                        }
+                        for item in fh_data.get("result", [])
+                        if item.get("symbol")
+                    ]
+                    logger.info(f"Finnhub found {len(results)} results for '{query}'")
+                else:
+                    logger.warning(f"Finnhub no results for '{query}'")
+            else:
+                logger.warning(f"Finnhub status {fh.status_code} for '{query}'")
+        except Exception as e:
+            logger.warning(f"Finnhub exception for '{query}': {e}")
+
+    # 3. Try Alpha Vantage if Finnhub returned nothing
+    if not results:
+        try:
+            av = requests.get(
+                "https://www.alphavantage.co/query",
+                params={
+                    "function": "SYMBOL_SEARCH",
+                    "keywords": query,
+                    "apikey": settings.ALPHA_VANTAGE_KEY,
+                },
+                timeout=5,
+            )
+            if av.status_code == 200:
+                av_data = av.json()
+                if "bestMatches" in av_data:
+                    # Normalise to consistent format
+                    results = [
+                        {
+                            "symbol": item.get("1. symbol", ""),
+                            "name": item.get("2. name", ""),
+                            "region": item.get("3. region", "US"),
+                        }
+                        for item in av_data["bestMatches"]
+                        if item.get("1. symbol")
+                    ]
+                    logger.info(f"Alpha Vantage found {len(results)} results for '{query}'")
+            else:
+                logger.warning(f"Alpha Vantage status {av.status_code} for '{query}'")
+        except Exception as e:
+            logger.warning(f"Alpha Vantage exception for '{query}': {e}")
+
+    # 4. Try RapidAPI (Yahoo) if previous providers returned nothing
+    if not results:
+        try:
             yahoo_host = getattr(settings, "RAPIDAPI_HOST", "apidojo-yahoo-finance-v1.p.rapidapi.com")
             yh = requests.get(
                 f"https://{yahoo_host}/auto-complete",
@@ -550,12 +607,41 @@ def symbol_search(request):
                     "X-RapidAPI-Host": settings.RAPIDAPI_HOST,
                     "x-rapidapi-ua": "RapidAPI-Playground",
                 },
-                timeout=10,
+                timeout=5,
             )
-            yh.raise_for_status()
-            yh_data = yh.json()
-            results = yh_data.get("quotes", []) or []
+            if yh.status_code == 200:
+                yh_data = yh.json()
+                # Yahoo returns 'quotes' with 'symbol' and 'shortname' etc.
+                results = [
+                    {
+                        "symbol": item.get("symbol", ""),
+                        "name": item.get("shortname", item.get("longname", item.get("symbol", ""))),
+                        "region": item.get("region", "US"),
+                    }
+                    for item in yh_data.get("quotes", [])
+                    if item.get("symbol")
+                ]
+                logger.info(f"RapidAPI found {len(results)} results for '{query}'")
+            elif yh.status_code == 403:
+                logger.warning(f"RapidAPI 403 Forbidden for '{query}' – check API key/host")
+            else:
+                logger.warning(f"RapidAPI status {yh.status_code} for '{query}'")
+        except Exception as e:
+            logger.warning(f"RapidAPI exception for '{query}': {e}")
 
+    # 5. Ultimate fallback: static list
+    if not results:
+        popular = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "JPM", "IBM", "BABA"]
+        results = [
+            {"symbol": sym, "name": sym, "region": "US"}
+            for sym in popular
+            if query.upper() in sym
+        ]
+        if results:
+            logger.info(f"Returning {len(results)} static fallback results for '{query}'")
+
+    # 6. Cache if we have results
+    if results:
         SymbolSearchCache.objects.update_or_create(
             query=query,
             defaults={
@@ -564,17 +650,11 @@ def symbol_search(request):
             },
         )
 
-        return Response(
-            success_response(data=results),
-            status=status.HTTP_200_OK
-        )
-
-    except requests.RequestException as e:
-        logger.error(f"Symbol search failed for query '{query}': {e}")
-        return Response(
-            error_response(f"Symbol search failed: {str(e)}", code=5001),
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+    # 7. Always return 200 – empty results if nothing found
+    return Response(
+        success_response(data=results),
+        status=status.HTTP_200_OK
+    )
 
 
 @extend_schema(

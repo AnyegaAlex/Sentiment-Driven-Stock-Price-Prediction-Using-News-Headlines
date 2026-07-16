@@ -1,9 +1,10 @@
 """
-Institutional Stock Analysis Engine v5.2
+Institutional Stock Analysis Engine v5.3
 Production-ready with multi-source data fetching, LSTM integration, and robust fallbacks.
 
 Key Features:
-- Multi-source data fetching (Yahoo Finance primary, Alpha Vantage secondary)
+- Multi-source data fetching (Finnhub primary, Twelve Data secondary, Yahoo Finance, Alpha Vantage)
+- Redis caching with TTL
 - Rate limit handling with exponential backoff
 - Static fallback prices for major symbols
 - Market regime detection with caching
@@ -12,7 +13,7 @@ Key Features:
 - Comprehensive error handling and logging
 
 Author: Anyega Alex Kamau
-Version: 5.2
+Version: 5.3
 """
 
 import gc
@@ -21,6 +22,7 @@ import logging
 import datetime
 import time
 import os
+from django.conf import settings
 from typing import List, Dict, Any, Optional, Tuple, Union
 from enum import Enum
 from dataclasses import dataclass
@@ -41,6 +43,17 @@ pd.options.mode.chained_assignment = None
 
 # Import LSTM predictor
 from .lstm_predictor import get_lstm_predictor
+from .cache_utils import (
+    get_cached_price_data,
+    cache_price_data,
+    get_cached_technical_data,
+    cache_technical_data,
+    get_cached_data,
+    set_cached_data,
+    TTL_PRICE,
+    TTL_TECHNICAL,
+    TTL_MARKET_REGIME,
+)
 
 # Configure module logger
 logger = logging.getLogger(__name__)
@@ -142,6 +155,11 @@ class TechnicalMetrics(BaseModel):
     current_price: float = Field(..., gt=0)
     volatility: float = Field(..., ge=0)
     confidence: float = Field(..., ge=0, le=100)
+    volume: Optional[float] = None
+    support: Optional[float] = None         
+    resistance: Optional[float] = None      
+    pivot: Optional[float] = None            
+    price_history: Optional[List[float]] = None  
     market_regime: MarketRegimeResult
     
     class Config:
@@ -171,23 +189,24 @@ class TechnicalMetrics(BaseModel):
 
 class MarketRegimeDetector:
     """
-    Market regime detector with caching (30 minutes).
+    Market regime detector with Redis caching (30 minutes).
     
     Determines whether the market is in a bull, bear, or neutral regime
     based on SPY ETF price action and volatility.
     """
     
     def __init__(self):
-        self._cache = None
-        self._cache_timestamp = None
-        self._cache_duration = datetime.timedelta(minutes=Config.CACHE_DURATION_MINUTES)
         self._spy_cache = None
         self._spy_cache_timestamp = None
+        self._cache_duration = datetime.timedelta(minutes=15)
     
     def get_current_regime(self, force_refresh: bool = False) -> MarketRegimeResult:
-        """Get current market regime with caching."""
-        if not force_refresh and self._is_cache_valid():
-            return self._cache
+        """Get current market regime with Redis caching."""
+        if not force_refresh:
+            cached = get_cached_data("market_regime")
+            if cached is not None:
+                logger.debug("Market regime cache hit")
+                return cached
         
         spy_data = self._fetch_spy_data()
         if spy_data.empty:
@@ -220,8 +239,7 @@ class MarketRegimeDetector:
                 regime = MarketRegime.NEUTRAL
             
             result = MarketRegimeResult(regime=regime, confidence=confidence)
-            self._cache = result
-            self._cache_timestamp = datetime.datetime.now()
+            set_cached_data("market_regime", result, TTL_MARKET_REGIME)
             return result
             
         except Exception as e:
@@ -256,12 +274,6 @@ class MarketRegimeDetector:
         logger.error("All SPY download attempts failed")
         return pd.DataFrame()
     
-    def _is_cache_valid(self) -> bool:
-        """Check if the regime cache is still valid."""
-        if self._cache is None or self._cache_timestamp is None:
-            return False
-        return datetime.datetime.now() - self._cache_timestamp < self._cache_duration
-    
     def _get_neutral_regime(self) -> MarketRegimeResult:
         """Return a neutral regime as fallback."""
         return MarketRegimeResult(regime=MarketRegime.NEUTRAL, confidence=50)
@@ -273,113 +285,131 @@ class MarketRegimeDetector:
 
 class TechnicalAnalyzer:
     """
-    Technical analysis engine with multi-source data fetching and caching.
+    Technical analysis engine with multi-source data fetching and Redis caching.
     
-    Features:
-    - Yahoo Finance primary data source
-    - Alpha Vantage secondary data source
-    - Static fallback prices
-    - LRU cache eviction
-    - Rate limit handling
+    Data sources (in order of preference):
+    1. Finnhub (primary – 60 calls/min free tier)
+    2. Twelve Data (secondary – 800 calls/day)
+    3. Yahoo Finance (fallback – unlimited but unreliable)
+    4. Alpha Vantage (last resort – 5 calls/min)
+    5. Static fallback (ultimate fallback)
     """
     
     def __init__(self):
         self.regime_detector = MarketRegimeDetector()
-        self._data_cache = {}
-        self._cache_access_count = {}
-        self._max_cache_size = Config.CACHE_MAX_SIZE
         self._min_data_points = Config.MIN_DATA_POINTS
-    
-    def analyze(self, symbol: str) -> TechnicalMetrics:
-        """
-        Perform technical analysis on a given symbol.
         
-        Args:
-            symbol: Stock ticker symbol
-            
-        Returns:
-            TechnicalMetrics object with all indicators
+        # Get API keys from environment
+        self.finnhub_key = os.getenv('FINNHUB_API_KEY', '')
+        self.twelvedata_key = os.getenv('TWELVEDATA_API_KEY', '')
+        self.alpha_vantage_key = os.getenv('ALPHA_VANTAGE_KEY', '')
+        
+        if not self.finnhub_key:
+            logger.warning("FINNHUB_API_KEY not set – Finnhub data will be unavailable")
+        if not self.twelvedata_key:
+            logger.warning("TWELVEDATA_API_KEY not set – Twelve Data will be unavailable")
+    
+    def _fetch_from_finnhub(self, symbol: str) -> pd.DataFrame:
         """
+        Fetch price data from Finnhub API.
+        60 calls/min free tier – reliable and fast.
+        """
+        if not self.finnhub_key:
+            return pd.DataFrame()
+        
         try:
-            data = self._get_cached_data(symbol)
+            # Get quote (to verify symbol exists)
+            quote_url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={self.finnhub_key}"
+            quote_resp = requests.get(quote_url, timeout=5)
+            quote_data = quote_resp.json()
             
-            if data.empty or len(data) < self._min_data_points:
-                logger.warning(f"Insufficient data for {symbol}, using fallback")
-                return self._get_fallback_metrics(symbol)
+            if 'c' not in quote_data or quote_data['c'] <= 0:
+                logger.debug(f"Finnhub: No valid quote for {symbol}")
+                return pd.DataFrame()
             
-            closes = data['Close']
-            sma_200 = closes.rolling(min(200, len(closes))).mean().iloc[-1]
-            sma_50 = closes.rolling(50).mean().iloc[-1]
-            current_price = closes.iloc[-1]
-            returns = closes.pct_change().dropna()
-            recent_returns = returns.tail(60)
-            volatility = recent_returns.std() * np.sqrt(252)
-            rsi = self._calculate_rsi(closes)
-            regime = self.regime_detector.get_current_regime()
-            confidence = self._calculate_confidence(
-                data, sma_50, sma_200, current_price, rsi, volatility
+            # Get historical candles (up to 300 days)
+            now = datetime.datetime.now()
+            start = (now - datetime.timedelta(days=300)).strftime('%Y-%m-%d')
+            end = now.strftime('%Y-%m-%d')
+            
+            candle_url = (
+                f"https://finnhub.io/api/v1/stock/candle"
+                f"?symbol={symbol}"
+                f"&resolution=D"
+                f"&from={start}"
+                f"&to={end}"
+                f"&token={self.finnhub_key}"
             )
+            candle_resp = requests.get(candle_url, timeout=10)
+            candle_data = candle_resp.json()
             
-            # Ensure price is valid
-            if current_price <= 0:
-                current_price = Config.FALLBACK_PRICES.get(symbol, Config.DEFAULT_FALLBACK_PRICE)
-                logger.warning(f"Zero price detected for {symbol}, using fallback {current_price}")
+            if 'c' not in candle_data or len(candle_data['c']) < 20:
+                logger.debug(f"Finnhub: Insufficient candle data for {symbol}")
+                return pd.DataFrame()
             
-            return TechnicalMetrics(
-                sma_50=float(sma_50),
-                sma_200=float(sma_200),
-                rsi=float(rsi),
-                current_price=float(current_price),
-                volatility=float(volatility),
-                confidence=float(confidence),
-                market_regime=regime
-            )
+            # Build DataFrame
+            df = pd.DataFrame({
+                'Close': candle_data['c'],
+                'High': candle_data['h'],
+                'Low': candle_data['l'],
+                'Open': candle_data['o'],
+                'Volume': candle_data['v']
+            }, index=pd.to_datetime(candle_data['t'], unit='s'))
             
+            df = df.sort_index()
+            logger.info(f"Fetched {len(df)} days for {symbol} from Finnhub")
+            return df
+
         except Exception as e:
-            logger.error(f"Technical analysis failed for {symbol}: {str(e)}")
-            return self._get_fallback_metrics(symbol)
+            logger.warning(f"Finnhub fetch failed for {symbol}: {e}")
+            return pd.DataFrame()
     
-    def _get_cached_data(self, symbol: str) -> pd.DataFrame:
+    def _fetch_from_twelvedata(self, symbol: str) -> pd.DataFrame:
         """
-        Get data from cache or fetch from sources.
-        
-        Data sources (in order):
-        1. Memory cache
-        2. Yahoo Finance
-        3. Static fallback
+        Fetch price data from Twelve Data API.
+        800 calls/day free tier – reliable backup.
         """
-        self._cache_access_count[symbol] = self._cache_access_count.get(symbol, 0) + 1
-        
-        # Return cached data if available
-        if symbol in self._data_cache:
-            logger.debug(f"Cache hit for {symbol}")
-            return self._data_cache[symbol]
-        
-        # Evict least used if cache is full
-        if len(self._data_cache) >= self._max_cache_size:
-            self._evict_least_used()
-        
-        # Fetch data from sources
-        data = self._fetch_from_yahoo(symbol)
-        
-        if data.empty:
-            data = self._fetch_from_alpha_vantage(symbol)
-        
-        if data.empty:
-            logger.warning(f"Using fallback data for {symbol}")
+        if not self.twelvedata_key:
             return pd.DataFrame()
-        
-        # Validate data quality
-        if len(data) < 20:
-            logger.warning(f"Insufficient data for {symbol}: {len(data)} days")
+
+        try:
+            url = "https://api.twelvedata.com/time_series"
+            params = {
+                'symbol': symbol,
+                'interval': '1day',
+                'outputsize': 200,
+                'apikey': self.twelvedata_key,
+            }
+            response = requests.get(url, params=params, timeout=10)
+            data = response.json()
+
+            if 'values' not in data or not data['values']:
+                logger.debug(f"Twelve Data: No data for {symbol}")
+                return pd.DataFrame()
+
+            # Build DataFrame
+            df = pd.DataFrame(data['values'])
+            df['datetime'] = pd.to_datetime(df['datetime'])
+            df.set_index('datetime', inplace=True)
+
+
+            df.rename(columns={
+                'open': 'Open',
+                'high': 'High',
+                'low': 'Low',
+                'close': 'Close',
+                'volume': 'Volume'
+            }, inplace=True)
+
+            df = df.astype(float)
+            df = df.sort_index()
+
+            logger.info(f"Fetched {len(df)} days for {symbol} from Twelve Data")
+            return df
+
+        except Exception as e:
+            logger.warning(f"Twelve Data fetch failed for {symbol}: {e}")
             return pd.DataFrame()
-        
-        if (data['Close'] <= 0).any():
-            logger.warning(f"Invalid prices in {symbol} data")
-            return pd.DataFrame()
-        
-        self._data_cache[symbol] = data
-        return data
     
     def _fetch_from_yahoo(self, symbol: str) -> pd.DataFrame:
         """Fetch data from Yahoo Finance with rate limit handling."""
@@ -421,19 +451,17 @@ class TechnicalAnalyzer:
         return data
     
     def _fetch_from_alpha_vantage(self, symbol: str) -> pd.DataFrame:
-        """Fetch data from Alpha Vantage as secondary source."""
+        """Fetch data from Alpha Vantage as last resort."""
+        if not self.alpha_vantage_key:
+            return pd.DataFrame()
+        
         try:
-            alpha_key = os.getenv('ALPHA_VANTAGE_KEY')
-            if not alpha_key:
-                logger.debug("No Alpha Vantage key available")
-                return pd.DataFrame()
-            
             response = requests.get(
                 'https://www.alphavantage.co/query',
                 params={
                     'function': 'TIME_SERIES_DAILY',
                     'symbol': symbol,
-                    'apikey': alpha_key,
+                    'apikey': self.alpha_vantage_key,
                     'outputsize': 'compact'
                 },
                 timeout=Config.REQUEST_TIMEOUT
@@ -456,18 +484,122 @@ class TechnicalAnalyzer:
         
         return pd.DataFrame()
     
-    def _evict_least_used(self):
-        """Evict the least recently accessed item from cache."""
-        if not self._data_cache:
-            return
-        min_symbol = min(
-            self._cache_access_count,
-            key=lambda s: self._cache_access_count.get(s, 0)
-        )
-        if min_symbol in self._data_cache:
-            del self._data_cache[min_symbol]
-        if min_symbol in self._cache_access_count:
-            del self._cache_access_count[min_symbol]
+    def _get_cached_data(self, symbol: str) -> pd.DataFrame:
+        """
+        Get data from Redis cache or fetch from sources.
+        
+        Data sources (in order):
+        1. Redis cache
+        2. Finnhub (primary)
+        3. Twelve Data (secondary)
+        4. Yahoo Finance (fallback)
+        5. Alpha Vantage (last resort)
+        """
+        # 1. Try Redis cache first
+        cached_data = get_cached_price_data(symbol)
+        if cached_data is not None and not cached_data.empty:
+            logger.debug(f"Cache hit for {symbol}")
+            return cached_data
+        
+        # 2. Fetch from Finnhub (primary)
+        logger.info(f"Fetching {symbol} from Finnhub (primary)")
+        data = self._fetch_from_finnhub(symbol)
+        if not data.empty:
+            cache_price_data(symbol, data, TTL_PRICE)
+            return data
+        
+        # 3. Fetch from Twelve Data (secondary)
+        logger.info(f"Fetching {symbol} from Twelve Data (secondary)")
+        data = self._fetch_from_twelvedata(symbol)
+        if not data.empty:
+            cache_price_data(symbol, data, TTL_PRICE)
+            return data
+        
+        # 4. Fetch from Yahoo Finance (fallback)
+        logger.info(f"Fetching {symbol} from Yahoo Finance (fallback)")
+        data = self._fetch_from_yahoo(symbol)
+        if not data.empty:
+            cache_price_data(symbol, data, TTL_PRICE)
+            return data
+        
+        # 5. Fetch from Alpha Vantage (last resort)
+        logger.info(f"Fetching {symbol} from Alpha Vantage (last resort)")
+        data = self._fetch_from_alpha_vantage(symbol)
+        if not data.empty:
+            cache_price_data(symbol, data, TTL_PRICE)
+            return data
+        
+        logger.warning(f"All data sources failed for {symbol}")
+        return pd.DataFrame()
+    
+    def analyze(self, symbol: str) -> TechnicalMetrics:
+        """
+        Perform technical analysis on a given symbol.
+        
+        Args:
+            symbol: Stock ticker symbol
+            
+        Returns:
+            TechnicalMetrics object with all indicators
+        """
+        try:
+            # 1. Check Redis for cached technical metrics
+            cached_metrics = get_cached_technical_data(symbol)
+            if cached_metrics is not None:
+                logger.debug(f"Technical metrics cache hit for {symbol}")
+                return cached_metrics
+            
+            # 2. Fetch price data (from cache or API)
+            data = self._get_cached_data(symbol)
+            
+            if data.empty or len(data) < self._min_data_points:
+                logger.warning(f"Insufficient data for {symbol}, using fallback")
+                metrics = self._get_fallback_metrics(symbol)
+                cache_technical_data(symbol, metrics, TTL_TECHNICAL)
+                return metrics
+            
+            # 3. Calculate metrics
+            closes = data['Close']
+            sma_200 = closes.rolling(min(200, len(closes))).mean().iloc[-1]
+            sma_50 = closes.rolling(50).mean().iloc[-1]
+            current_price = closes.iloc[-1]
+            returns = closes.pct_change().dropna()
+            recent_returns = returns.tail(60)
+            volatility = recent_returns.std() * np.sqrt(252)
+            rsi = self._calculate_rsi(closes)
+            regime = self.regime_detector.get_current_regime()
+            confidence = self._calculate_confidence(
+                data, sma_50, sma_200, current_price, rsi, volatility
+            )
+
+            volume = float(data['Volume'].iloc[-1]) if 'Volume' in data.columns else None
+            
+            # Ensure price is valid
+            if current_price <= 0:
+                current_price = Config.FALLBACK_PRICES.get(symbol, Config.DEFAULT_FALLBACK_PRICE)
+                logger.warning(f"Zero price detected for {symbol}, using fallback {current_price}")
+            
+            metrics = TechnicalMetrics(
+                sma_50=float(sma_50),
+                sma_200=float(sma_200),
+                rsi=float(rsi),
+                current_price=float(current_price),
+                volatility=float(volatility),
+                confidence=float(confidence),
+                volume=volume, 
+                market_regime=regime
+            )
+            
+            # 4. Store in Redis cache
+            cache_technical_data(symbol, metrics, TTL_TECHNICAL)
+            
+            return metrics
+            
+        except Exception as e:
+            logger.error(f"Technical analysis failed for {symbol}: {str(e)}")
+            metrics = self._get_fallback_metrics(symbol)
+            cache_technical_data(symbol, metrics, TTL_TECHNICAL)
+            return metrics
     
     def _calculate_rsi(self, closes: pd.Series, window: int = 14) -> float:
         """Calculate RSI indicator."""
@@ -496,7 +628,6 @@ class TechnicalAnalyzer:
     ) -> float:
         """Calculate confidence score for the analysis."""
         try:
-            closes = data['Close']
             above_50ma = current_price > sma_50
             above_200ma = current_price > sma_200
             rsi_not_overbought = rsi < 70
@@ -534,6 +665,7 @@ class TechnicalAnalyzer:
             current_price=price,
             volatility=0.2,
             confidence=30.0,
+            volume=None,
             market_regime=MarketRegimeResult(
                 regime=MarketRegime.NEUTRAL,
                 confidence=50.0
@@ -542,9 +674,10 @@ class TechnicalAnalyzer:
     
     def clear_cache(self):
         """Clear all cached data."""
-        self._data_cache.clear()
-        self._cache_access_count.clear()
-        gc.collect()
+        from .cache_utils import clear_cache_pattern
+        clear_cache_pattern("technical:*")
+        clear_cache_pattern("price:*")
+        logger.info("Cleared all technical and price cache")
 
 
 # ============================================================================
@@ -565,7 +698,7 @@ class InstitutionalAnalysisEngine:
     def __init__(self, symbol: str, risk_type: Union[str, RiskProfile] = "medium"):
         self.symbol = symbol.upper()
         self.risk_type = RiskProfile(risk_type) if isinstance(risk_type, str) else risk_type
-        self.technical_analyzer = TechnicalAnalyzer()
+        self.technical_analyzer = get_technical_analyzer()
         self._validate_symbol()
     
     def _validate_symbol(self):
@@ -640,7 +773,8 @@ class InstitutionalAnalysisEngine:
                 "sma_50": round(technicals.sma_50, 2),
                 "sma_200": round(technicals.sma_200, 2),
                 "rsi": round(technicals.rsi, 1),
-                "volatility": round(technicals.volatility * 100, 1)
+                "volatility": round(technicals.volatility * 100, 1),
+                "volume": int(technicals.volume) if technicals.volume else 0,
             },
             "market_regime": {
                 "regime": technicals.market_regime.regime.value,
@@ -800,7 +934,7 @@ def format_investment_analysis(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
                 datetime.datetime.utcnow().isoformat() + "Z"
             ),
             "metadata": {
-                "version": "5.2",
+                "version": "5.3",
                 "provider": "Institutional Analysis Engine"
             }
         }
@@ -877,13 +1011,47 @@ def validate_symbol(symbol: str) -> bool:
 
 def clear_all_caches():
     """Clear all cached data."""
-    analyzer = TechnicalAnalyzer()
+    analyzer = get_technical_analyzer()
     analyzer.clear_cache()
     logger.info("All caches cleared")
+
+
+# ============================================================================
+# SINGLETON INSTANCE – Shared across all views
+# ============================================================================
+
+_shared_analyzer = None
+_shared_analyzer_lock = None
+
+def get_technical_analyzer() -> TechnicalAnalyzer:
+    """
+    Get or create a shared TechnicalAnalyzer instance.
+    This ensures cache is shared across all requests.
+    """
+    global _shared_analyzer, _shared_analyzer_lock
+    
+    if _shared_analyzer is None:
+        import threading
+        _shared_analyzer_lock = threading.Lock()
+        
+        with _shared_analyzer_lock:
+            if _shared_analyzer is None:
+                logger.info("Creating shared TechnicalAnalyzer instance")
+                _shared_analyzer = TechnicalAnalyzer()
+    
+    return _shared_analyzer
+
+
+def clear_shared_cache():
+    """Clear the shared cache (useful for testing or manual refresh)."""
+    global _shared_analyzer
+    if _shared_analyzer is not None:
+        _shared_analyzer.clear_cache()
+        logger.info("Shared cache cleared")
 
 
 # ============================================================================
 # Module Initialization
 # ============================================================================
 
-logger.info("Institutional Analysis Engine v5.2 initialized")
+logger.info("Institutional Analysis Engine v5.3 initialized")

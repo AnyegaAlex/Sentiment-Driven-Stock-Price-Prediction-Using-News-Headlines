@@ -11,7 +11,7 @@ class PredictionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Prediction
         fields = '__all__'
-        read_only_fields = ['created_at']
+        read_only_fields = ['id', 'created_at']
 
 class SubscriptionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -102,7 +102,8 @@ class PredictionDetailSerializer(serializers.ModelSerializer):
             # Metadata
             'created_at'
         ]
-        read_only_fields = '__all__'
+        # Use a list, not a string
+        read_only_fields = ['id', 'created_at']
     
     def get_accuracy_label(self, obj):
         if obj.is_correct is None:
@@ -135,6 +136,8 @@ class PredictionListSerializer(serializers.ModelSerializer):
             'price_change_percent',
             'source'
         ]
+        # Use a list, not a string
+        read_only_fields = ['id']
     
     def get_confidence_percent(self, obj):
         return round(obj.confidence * 100, 1) if obj.confidence else 0
