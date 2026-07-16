@@ -541,8 +541,9 @@ def symbol_search(request):
             results = av_data["bestMatches"] or []
 
         if not results and getattr(settings, "RAPIDAPI_KEY", None):
+            yahoo_host = getattr(settings, "RAPIDAPI_HOST", "apidojo-yahoo-finance-v1.p.rapidapi.com")
             yh = requests.get(
-                "https://apidojo-yahoo-finance-v1.p.rapidapi.com/auto-complete",
+                f"https://{yahoo_host}/auto-complete",
                 params={"q": query, "region": "US"},
                 headers={
                     "X-RapidAPI-Key": settings.RAPIDAPI_KEY,
