@@ -1,0 +1,17 @@
+Tickflow Sentiment – Email Verification
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Hi {{ user.username }},
+
+Welcome to Tickflow Sentiment! Please verify your email address to start using AI-powered financial intelligence.
+
+Verify your email: {{ verification_link }}
+
+Or enter this code: {{ code }}
+
+This link and code will expire in {{ expires_in }} minutes.
+
+If you didn't create an account, you can safely ignore this email.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+© 2026 Tickflow Capital

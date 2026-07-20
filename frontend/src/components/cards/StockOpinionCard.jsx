@@ -1,9 +1,13 @@
+// components/cards/StockOpinionCard.jsx
 /**
  * StockOpinionCard
  *
  * Displays comprehensive stock analysis including recommendation, price metrics,
  * technical indicators, sentiment analysis, price targets, LSTM prediction,
  * and a preview of recent predictions.
+ *
+ * All components gracefully handle missing data (zero values, empty arrays)
+ * by displaying "N/A", "—", or a helpful message.
  *
  * @component
  * @param {Object} props
@@ -63,13 +67,25 @@ import {
 // ============================================================================
 
 const RECOMMENDATION_CONFIG = {
-  BUY: { color: COLOR_SCHEMES.positive, icon: TrendingUp },
-  SELL: { color: COLOR_SCHEMES.negative, icon: TrendingDown },
-  HOLD: { color: COLOR_SCHEMES.neutral, icon: Minus },
+  BUY: { color: COLOR_SCHEMES.positive, icon: TrendingUp, label: 'Buy' },
+  STRONG_BUY: { color: COLOR_SCHEMES.positive, icon: TrendingUp, label: 'Strong Buy' },
+  SELL: { color: COLOR_SCHEMES.negative, icon: TrendingDown, label: 'Sell' },
+  STRONG_SELL: { color: COLOR_SCHEMES.negative, icon: TrendingDown, label: 'Strong Sell' },
+  HOLD: { color: COLOR_SCHEMES.neutral, icon: Minus, label: 'Hold' },
+  NEUTRAL: { color: COLOR_SCHEMES.neutral, icon: Minus, label: 'Neutral' },
+};
+
+const RECOMMENDATION_DISPLAY = {
+  BUY: 'BUY',
+  STRONG_BUY: 'STRONG BUY',
+  SELL: 'SELL',
+  STRONG_SELL: 'STRONG SELL',
+  HOLD: 'HOLD',
+  NEUTRAL: 'NEUTRAL',
 };
 
 // ============================================================================
-// Sub-Components
+// Sub-Components (with missing‑data fallbacks)
 // ============================================================================
 
 const Section = ({ title, icon: Icon, children }) => (
@@ -92,9 +108,12 @@ Section.propTypes = {
   children: PropTypes.node.isRequired,
 };
 
+// ✅ Displays "N/A" for zero SMAs
 const PriceOverviewCard = ({ currentPrice, sma50, sma200 }) => {
   const sma50Diff = sma50 ? ((currentPrice - sma50) / sma50) * 100 : 0;
   const sma200Diff = sma200 ? ((currentPrice - sma200) / sma200) * 100 : 0;
+
+  const formatSMA = (value) => (value === 0 ? 'N/A' : `$${value.toFixed(2)}`);
 
   return (
     <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 sm:p-5 dark:border-gray-700/50 dark:bg-gray-800/30">
@@ -124,22 +143,26 @@ const PriceOverviewCard = ({ currentPrice, sma50, sma200 }) => {
           <div className="text-xs text-gray-500 dark:text-gray-400">SMA 50</div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs sm:text-sm font-mono text-gray-700 dark:text-gray-300">
-              ${sma50.toFixed(2)}
+              {formatSMA(sma50)}
             </span>
-            <Badge className={cn('text-xs font-medium', sma50Diff >= 0 ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
-              {formatPercentage(sma50Diff)}
-            </Badge>
+            {sma50 !== 0 && (
+              <Badge className={cn('text-xs font-medium', sma50Diff >= 0 ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
+                {formatPercentage(sma50Diff)}
+              </Badge>
+            )}
           </div>
         </div>
         <div className="space-y-1">
           <div className="text-xs text-gray-500 dark:text-gray-400">SMA 200</div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs sm:text-sm font-mono text-gray-700 dark:text-gray-300">
-              ${sma200.toFixed(2)}
+              {formatSMA(sma200)}
             </span>
-            <Badge className={cn('text-xs font-medium', sma200Diff >= 0 ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
-              {formatPercentage(sma200Diff)}
-            </Badge>
+            {sma200 !== 0 && (
+              <Badge className={cn('text-xs font-medium', sma200Diff >= 0 ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
+                {formatPercentage(sma200Diff)}
+              </Badge>
+            )}
           </div>
         </div>
       </div>
@@ -196,7 +219,21 @@ SentimentCard.propTypes = {
   direction: PropTypes.oneOf(['up', 'down', 'neutral']).isRequired,
 };
 
+// ✅ Displays "—" when RSI is zero
 const RSIIndicator = ({ value }) => {
+  if (value === 0) {
+    return (
+      <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/30 dark:bg-gray-800/20">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-500 dark:text-gray-400">RSI (14)</span>
+          <Badge variant="outline" className="text-xs text-gray-400">N/A</Badge>
+        </div>
+        <div className="mt-2 text-2xl font-bold text-gray-400 dark:text-gray-500 font-mono">—</div>
+        <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">Data unavailable</div>
+      </div>
+    );
+  }
+
   const status = getRSIStatus(value);
   return (
     <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/30 dark:bg-gray-800/20">
@@ -219,9 +256,23 @@ const RSIIndicator = ({ value }) => {
 
 RSIIndicator.propTypes = { value: PropTypes.number.isRequired };
 
+// ✅ Displays "N/A" when support/resistance is zero
 const SupportResistanceIndicator = ({ type, value, current }) => {
+  if (value === 0) {
+    return (
+      <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/30 dark:bg-gray-800/20">
+        <div className="flex items-center justify-between">
+          <span className="text-xs capitalize text-gray-500 dark:text-gray-400">{type}</span>
+          <Badge variant="outline" className="text-xs text-gray-400">N/A</Badge>
+        </div>
+        <div className="mt-2 text-2xl font-bold text-gray-400 dark:text-gray-500 font-mono">—</div>
+        <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">Data unavailable</div>
+      </div>
+    );
+  }
+
   const isSupport = type === 'support';
-  const distance = value ? ((current - value) / value) * 100 : 0;
+  const distance = ((current - value) / value) * 100;
   const isAbove = current >= value;
   const status = isSupport
     ? isAbove ? 'Above Support' : 'Below Support'
@@ -252,6 +303,7 @@ SupportResistanceIndicator.propTypes = {
   current: PropTypes.number.isRequired,
 };
 
+// ✅ Displays "—" when volume is zero
 const VolumeIndicator = ({ volume }) => (
   <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/30 dark:bg-gray-800/20">
     <div className="flex items-center justify-between">
@@ -259,9 +311,11 @@ const VolumeIndicator = ({ volume }) => (
       <Activity className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
     </div>
     <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-50 font-mono">
-      {formatVolume(volume)}
+      {volume > 0 ? formatVolume(volume) : '—'}
     </div>
-    <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">24h trading volume</div>
+    <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+      {volume > 0 ? '24h trading volume' : 'Data unavailable'}
+    </div>
   </div>
 );
 
@@ -333,19 +387,23 @@ FactorItem.propTypes = {
 };
 
 const RecommendationBadge = ({ recommendation }) => {
-  const config = RECOMMENDATION_CONFIG[recommendation] || RECOMMENDATION_CONFIG.HOLD;
+  const normalizedRec = recommendation?.toUpperCase() || 'HOLD';
+  const config = RECOMMENDATION_CONFIG[normalizedRec] || RECOMMENDATION_CONFIG.HOLD;
   const Icon = config.icon;
+  const displayLabel = RECOMMENDATION_DISPLAY[normalizedRec] || normalizedRec;
 
   return (
     <Badge className={cn('flex h-9 items-center border px-3 py-1.5 text-sm font-semibold', config.color.badge)}>
       <Icon className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-      {recommendation}
+      {displayLabel}
     </Badge>
   );
 };
 
 RecommendationBadge.propTypes = {
-  recommendation: PropTypes.oneOf(['BUY', 'SELL', 'HOLD']).isRequired,
+  recommendation: PropTypes.oneOf([
+    'BUY', 'STRONG_BUY', 'SELL', 'STRONG_SELL', 'HOLD', 'NEUTRAL'
+  ]),
 };
 
 const ConfidenceBadge = ({ confidence }) => (
@@ -358,10 +416,6 @@ const ConfidenceBadge = ({ confidence }) => (
 );
 
 ConfidenceBadge.propTypes = { confidence: PropTypes.number };
-
-// ============================================================================
-// LSTM Prediction Badge
-// ============================================================================
 
 const LSTMPredictionBadge = ({ prediction }) => {
   if (!prediction || prediction.direction === 'UNAVAILABLE') {
@@ -396,13 +450,12 @@ LSTMPredictionBadge.propTypes = {
 };
 
 // ============================================================================
-// Recent Predictions Component (FIXED)
+// Recent Predictions
 // ============================================================================
 
 const RecentPredictions = ({ symbol }) => {
   const { data: historyData, isLoading, error } = usePredictionHistoryQuery({ symbol, limit: 3 });
 
-  // Normalize data: ensure it's an array
   const history = useMemo(() => {
     if (Array.isArray(historyData)) return historyData;
     if (historyData?.results) return historyData.results;
@@ -424,7 +477,9 @@ const RecentPredictions = ({ symbol }) => {
 
   if (error || !history.length) {
     return (
-      <div className="text-xs text-gray-500 dark:text-gray-400">No recent predictions</div>
+      <div className="text-xs text-gray-500 dark:text-gray-400">
+        {error ? 'Unable to load recent predictions' : 'No recent predictions'}
+      </div>
     );
   }
 
@@ -445,21 +500,11 @@ const RecentPredictions = ({ symbol }) => {
       </div>
       <div className="grid grid-cols-3 gap-2">
         {predictions.map((pred, idx) => {
-          // Safe access with fallback
           const movement = pred?.predicted_movement || pred?.movement || 'neutral';
           const isUp = movement === 'up' || movement === 'UP';
           const isDown = movement === 'down' || movement === 'DOWN';
-          const config = isUp
-            ? COLOR_SCHEMES.positive
-            : isDown
-            ? COLOR_SCHEMES.negative
-            : COLOR_SCHEMES.neutral;
-          const Icon = isUp
-            ? TrendingUp
-            : isDown
-            ? TrendingDown
-            : Minus;
-
+          const config = isUp ? COLOR_SCHEMES.positive : isDown ? COLOR_SCHEMES.negative : COLOR_SCHEMES.neutral;
+          const Icon = isUp ? TrendingUp : isDown ? TrendingDown : Minus;
           const displayMovement = movement.toUpperCase();
 
           return (
@@ -522,11 +567,11 @@ const StockOpinionCard = ({
       sentimentDirection,
       technicals: {
         currentPrice,
-        rsi: data.technicalIndicators?.rsi || 50,
-        sma50: data.technicalIndicators?.sma50 || currentPrice,
-        sma200: data.technicalIndicators?.sma200 || currentPrice,
-        support: data.technicalIndicators?.support || currentPrice,
-        resistance: data.technicalIndicators?.resistance || currentPrice,
+        rsi: data.technicalIndicators?.rsi || 0,
+        sma50: data.technicalIndicators?.sma50 || 0,
+        sma200: data.technicalIndicators?.sma200 || 0,
+        support: data.technicalIndicators?.support || 0,
+        resistance: data.technicalIndicators?.resistance || 0,
         volume: data.technicalIndicators?.volume || 0,
       },
       targets: {
@@ -612,12 +657,14 @@ const StockOpinionCard = ({
 
   const { sentimentPercentage, sentimentDirection, technicals, targets, lstmPrediction } = derived;
   const recommendation = data.recommendation || 'HOLD';
-  const recommendationConfig = RECOMMENDATION_CONFIG[recommendation] || RECOMMENDATION_CONFIG.HOLD;
+
+  // Check if key technical data is missing
+  const hasTechnicalData = technicals.sma50 > 0 || technicals.sma200 > 0;
 
   return (
     <CardWrapper className={cn('relative overflow-hidden', className)}>
       <div
-        className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br opacity-5', recommendationConfig.color.gradient)}
+        className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br opacity-5', RECOMMENDATION_CONFIG[recommendation]?.color?.gradient || '')}
         aria-hidden="true"
       />
 
@@ -637,6 +684,11 @@ const StockOpinionCard = ({
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {!hasTechnicalData && (
+              <Badge variant="destructive" className="text-xs">
+                Technical data unavailable
+              </Badge>
+            )}
             <RecommendationBadge recommendation={recommendation} />
             <ConfidenceBadge confidence={data.confidence} />
             <LSTMPredictionBadge prediction={lstmPrediction} />
@@ -656,7 +708,11 @@ const StockOpinionCard = ({
 
       <CardContent className="relative space-y-4 p-4 sm:space-y-5 sm:p-5">
         <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
-          <PriceOverviewCard currentPrice={technicals.currentPrice} sma50={technicals.sma50} sma200={technicals.sma200} />
+          <PriceOverviewCard
+            currentPrice={technicals.currentPrice}
+            sma50={technicals.sma50}
+            sma200={technicals.sma200}
+          />
           <SentimentCard percentage={sentimentPercentage} direction={sentimentDirection} />
         </div>
 
@@ -687,7 +743,6 @@ const StockOpinionCard = ({
           </Section>
         )}
 
-        {/* Recent Predictions Section */}
         <div className="pt-1">
           <RecentPredictions symbol={symbol} />
         </div>

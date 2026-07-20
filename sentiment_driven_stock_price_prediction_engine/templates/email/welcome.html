@@ -1,0 +1,161 @@
+<!--
+    templates/email/welcome.html
+    Welcome email sent after a user successfully verifies their email address.
+    Rendered with context: user (User object), onboarding_url (string), year (int).
+-->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Tickflow Sentiment</title>
+    <style>
+        /* Reset and base styles – unchanged to preserve design */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9fafb;
+            color: #111827;
+        }
+        .container {
+            background-color: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #f3f4f6;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2563eb;
+        }
+        h1 {
+            font-size: 24px;
+            color: #111827;
+            margin-bottom: 16px;
+        }
+        .btn {
+            display: inline-block;
+            background-color: #2563eb;
+            color: white !important; /* fallback */
+            padding: 14px 32px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            margin-top: 24px;
+        }
+        .btn:hover {
+            background-color: #1d4ed8;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 14px;
+            color: #6b7280;
+            text-align: center;
+        }
+        .highlight {
+            background-color: #eff6ff;
+            padding: 16px;
+            border-radius: 8px;
+            border-left: 4px solid #2563eb;
+            margin: 20px 0;
+        }
+        .highlight p {
+            margin: 0;
+            color: #1e40af;
+        }
+        .tip-box {
+            margin: 24px 0;
+            background-color: #f3f4f6;
+            padding: 16px;
+            border-radius: 8px;
+        }
+        .tip-box p {
+            margin: 0;
+            font-size: 14px;
+            color: #6b7280;
+            text-align: center;
+        }
+        @media (max-width: 480px) {
+            .container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">Tickflow Sentiment</div>
+        </div>
+
+        <h1>Your account is ready</h1>
+
+        <p>Hi {{ user.username }},</p>
+
+        <p>
+            Thanks for verifying your email. Your account is active – you can now
+            start using our tools to analyse stocks, track sentiment, and make
+            more informed trading decisions.
+        </p>
+
+        <div class="highlight">
+            <p>
+                Before you dive in, we recommend completing your onboarding.
+                It takes two minutes and sets up your watchlist and preferences,
+                so we can tailor the experience to you.
+            </p>
+        </div>
+
+        <p>With Tickflow Sentiment, you can:</p>
+        <ul style="padding-left: 20px; margin: 16px 0;">
+            <li>Get real‑time stock predictions based on news sentiment</li>
+            <li>Track your past predictions and see how accurate they were</li>
+            <li>Set up alerts for price moves and news events</li>
+        </ul>
+
+        <!-- ✅ FIX: Inline styles with !important for maximum readability -->
+        <div style="text-align: center;">
+            <a href="{{ onboarding_url }}" 
+               style="display: inline-block; 
+                      background-color: #2563eb; 
+                      color: #ffffff !important; 
+                      padding: 14px 32px; 
+                      text-decoration: none; 
+                      border-radius: 8px; 
+                      font-weight: 600; 
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                      font-size: 16px;
+                      border: none;
+                      text-align: center;">
+                Complete onboarding
+            </a>
+        </div>
+
+        <div class="tip-box">
+            <p>
+                <strong>Tip:</strong> Add your favourite stocks to your watchlist
+                during onboarding – we’ll surface news and predictions for them first.
+            </p>
+        </div>
+
+        <div class="footer">
+            <p style="margin: 0;">
+                &copy; {{ year }} Tickflow Capital. All rights reserved.
+            </p>
+            <p style="margin: 8px 0 0 0; font-size: 12px;">
+                You received this email because you created an account on Tickflow Sentiment.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

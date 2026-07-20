@@ -1,0 +1,11 @@
+branch_protection:
+  - name: main
+    required_reviewers: 1
+    required_checks:
+      - test
+      - build
+  - name: staging
+    required_reviewers: 0
+    required_checks:
+      - test
+      - build

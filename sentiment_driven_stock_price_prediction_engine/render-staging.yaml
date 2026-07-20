@@ -1,0 +1,29 @@
+# render-staging.yaml – Staging environment configuration
+
+services:
+  - type: web
+    name: tickflow-sentiment-staging
+    runtime: python
+    repo: https://github.com/your-org/tickflow-sentiment
+    branch: staging
+    plan: starter
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tickflow-db-staging
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: false
+      - key: SENTRY_ENVIRONMENT
+        value: staging
+      - key: ALLOWED_HOSTS
+        value: .onrender.com,.staging.tickflow.com
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://staging.tickflow.com,https://tickflow-sentiment-staging.onrender.com
+
+databases:
+  - name: tickflow-db-staging
+    plan: starter
+    ipAllowList: []

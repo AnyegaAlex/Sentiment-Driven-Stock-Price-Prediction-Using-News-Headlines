@@ -19,22 +19,10 @@ def home(request):
         }
     })
 
-
-def health_check(request):
-    try:
-        cache.set("health_test", "success", timeout=5)
-        return JsonResponse({
-            "status": "ok",
-            "redis": cache.get("health_test") == "success"
-        })
-    except Exception as e:
-        return JsonResponse({"status": "error", "detail": str(e)}, status=500)
-
-
 urlpatterns = [
     # Root & health
     path('', home),
-    path('health/', health_check),
+    path('api/v1/health/', include('health.urls')),
     path('admin/', admin.site.urls),
     
     # Version 1 APIs - Main endpoints
@@ -44,4 +32,5 @@ urlpatterns = [
     # Swagger / OpenAPI documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/v1/auth/', include('authentication.urls')),
 ]

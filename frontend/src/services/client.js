@@ -4,8 +4,9 @@ import axios from 'axios';
  * API Client for Sentiment-Driven Stock Prediction System
  * 
  * Features:
- * - API key authentication via X-API-Key header
- * - Automatic /api/v1/ URL prefixing
+ * - JWT token authentication (primary) with automatic refresh
+ * - API key authentication (fallback for public/demo endpoints)
+ * - Automatic /api/v1/ URL prefixing (only if not already in baseURL)
  * - Request caching with timestamp
  * - Comprehensive error handling
  * - Retry logic for failed requests
@@ -20,7 +21,6 @@ const baseURL = import.meta.env.VITE_API_BASE_URL ||
 const apiClient = axios.create({
   baseURL: baseURL.endsWith('/') ? baseURL.slice(0, -1) : baseURL,
   timeout: 15000,
-  // withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -28,19 +28,31 @@ const apiClient = axios.create({
 });
 
 /**
+ * Check if baseURL already contains /api/v1
+ */
+const BASE_URL_CONTAINS_API_V1 = /\/api\/v1/.test(baseURL);
+
+/**
  * Request Interceptor
- * Handles: API key injection, URL prefixing, cache busting
+ * Handles: JWT/API key injection, URL prefixing, cache busting
  */
 apiClient.interceptors.request.use(
   (config) => {
-    // 1. Add API key to every request
-    const apiKey = import.meta.env.VITE_API_KEY;
-    if (apiKey) {
-      config.headers['X-API-Key'] = apiKey;
+    // 1. Authentication: JWT first, API key as fallback
+    const accessToken = localStorage.getItem('accessToken');
+    if (accessToken) {
+      // ✅ Primary: JWT token for authenticated users
+      config.headers['Authorization'] = `Bearer ${accessToken}`;
+    } else {
+      // ✅ Fallback: API key for public/demo endpoints
+      const apiKey = import.meta.env.VITE_API_KEY;
+      if (apiKey) {
+        config.headers['X-API-Key'] = apiKey;
+      }
     }
 
-    // 2. Add /api/v1/ prefix to relative URLs - FIXED
-    if (config.url && config.url.startsWith('/')) {
+    // 2. Add /api/v1/ prefix ONLY if baseURL doesn't already contain it
+    if (config.url && config.url.startsWith('/') && !BASE_URL_CONTAINS_API_V1) {
       // Skip prefixing for health, docs, and schema endpoints
       const exemptPaths = ['/health/', '/api/docs/', '/api/schema/'];
       const isExempt = exemptPaths.some(path => config.url.startsWith(path));
@@ -86,7 +98,7 @@ apiClient.interceptors.request.use(
 
 /**
  * Response Interceptor
- * Handles: Response transformation, error formatting, mock fallback
+ * Handles: Response transformation, error formatting, token refresh
  */
 apiClient.interceptors.response.use(
   // Success handler - extract data from response
@@ -97,8 +109,10 @@ apiClient.interceptors.response.use(
     return response.data;
   },
   
-  // Error handler - format errors consistently
-  (error) => {
+  // Error handler - format errors consistently, handle token refresh
+  async (error) => {
+    const originalRequest = error.config;
+
     // Network errors (no response)
     if (!error.response) {
       console.error('[Network Error]', error.message);
@@ -119,12 +133,43 @@ apiClient.interceptors.response.use(
       message: data?.message || data?.error || error.message,
     });
 
-    // Handle 401 Unauthorized
-    if (status === 401) {
-      sessionStorage.removeItem('accessToken');
-      window.dispatchEvent(new CustomEvent('unauthorized', {
-        detail: { message: 'Your session has expired. Please login again.' }
-      }));
+    // Handle 401 Unauthorized – attempt token refresh
+    if (status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      const refreshToken = localStorage.getItem('refreshToken');
+      
+      if (refreshToken) {
+        try {
+          // Call refresh endpoint
+          const refreshResponse = await axios.post(
+            `${baseURL}/auth/refresh/`,
+            { refresh: refreshToken },
+            { headers: { 'Content-Type': 'application/json' } }
+          );
+          
+          const newAccessToken = refreshResponse.data.access;
+          localStorage.setItem('accessToken', newAccessToken);
+          originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
+          return apiClient(originalRequest);
+        } catch (refreshError) {
+          // Refresh failed – logout
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          window.dispatchEvent(new CustomEvent('unauthorized', {
+            detail: { message: 'Your session has expired. Please login again.' }
+          }));
+          return Promise.reject({
+            code: 401,
+            message: 'Session expired. Please login again.',
+          });
+        }
+      } else {
+        // No refresh token – logout
+        localStorage.removeItem('accessToken');
+        window.dispatchEvent(new CustomEvent('unauthorized', {
+          detail: { message: 'Your session has expired. Please login again.' }
+        }));
+      }
     }
 
     // Handle 429 Rate Limiting

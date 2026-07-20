@@ -1,3 +1,4 @@
+// components/cards/SentimentAnalysisCard.jsx
 /**
  * SentimentAnalysisCard
  *
@@ -60,6 +61,10 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
+// ============================================================================
+// Constants
+// ============================================================================
+
 const SENTIMENT_ICONS = {
   positive: Smile,
   neutral: Meh,
@@ -71,6 +76,13 @@ const TIME_RANGE_OPTIONS = [
   { value: '30d', label: '30D' },
 ];
 
+// ============================================================================
+// Sub-Components
+// ============================================================================
+
+/**
+ * TimeRangeSelector – allows user to switch between 7‑day and 30‑day views.
+ */
 const TimeRangeSelector = ({ timeRange, onChange }) => (
   <div
     className="flex gap-1 rounded-lg border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-800"
@@ -103,6 +115,9 @@ TimeRangeSelector.propTypes = {
   onChange: PropTypes.func.isRequired,
 };
 
+/**
+ * SentimentMetric – displays a single sentiment metric with progress bar and trend.
+ */
 const SentimentMetric = ({ icon: Icon, label, value, trend, variant }) => {
   const config = COLOR_SCHEMES[variant];
   const TrendIcon = trend.includes('+') ? TrendingUp : trend === 'Stable' ? null : TrendingDown;
@@ -149,6 +164,9 @@ SentimentMetric.propTypes = {
   variant: PropTypes.oneOf(['positive', 'neutral', 'negative']).isRequired,
 };
 
+/**
+ * SourceMetric – displays a single data point about news sources.
+ */
 const SourceMetric = ({ label, value, icon: Icon, variant = 'neutral', truncate }) => {
   const config = COLOR_SCHEMES[variant];
 
@@ -173,6 +191,9 @@ SourceMetric.propTypes = {
   truncate: PropTypes.bool,
 };
 
+/**
+ * NewsSourceAnalysis – aggregated source reliability and count.
+ */
 const NewsSourceAnalysis = ({ newsCount, sourceStats, reliabilityScore }) => (
   <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 sm:p-4 dark:border-gray-700/50 dark:bg-gray-800/30">
     <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-300 sm:text-sm">
@@ -208,17 +229,14 @@ NewsSourceAnalysis.propTypes = {
   reliabilityScore: PropTypes.number.isRequired,
 };
 
-// ============================================================================
-// Recent News List
-// ============================================================================
-
+/**
+ * RecentNewsList – shows the latest headlines for the symbol.
+ */
 const RecentNewsList = ({ symbol }) => {
   const { data: newsData, isLoading, error } = useNewsQuery(symbol);
 
-  // Normalize data: extract news array
   const news = useMemo(() => {
     if (!newsData) return [];
-    // The API might return { news: [...] } or directly an array
     if (Array.isArray(newsData)) return newsData;
     if (newsData?.news) return newsData.news;
     return [];
@@ -286,6 +304,7 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
   const [chartDimensions, setChartDimensions] = useState({ width: 0, height: 0 });
   const chartContainerRef = useRef(null);
 
+  // Update chart dimensions on resize
   useEffect(() => {
     const updateDimensions = () => {
       if (chartContainerRef.current) {
@@ -302,6 +321,7 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
 
   const { data: rawData, isLoading, error, refetch } = useSentimentAnalysisQuery(symbol, timeRange);
 
+  // Validate and normalize API response
   const validateSentimentData = useCallback((responseData) => {
     const apiData = responseData?.data || responseData || {};
     const sentiment = apiData?.sentiment || {};
@@ -318,6 +338,7 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
 
   const data = useMemo(() => (rawData ? validateSentimentData(rawData) : null), [rawData, validateSentimentData]);
 
+  // Derived metrics
   const metrics = useMemo(() => {
     if (!data) return null;
 
@@ -325,12 +346,14 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
     const isBullish = sentimentScore >= 60;
     const isBearish = sentimentScore <= 40;
 
+    // Build a realistic distribution (approximated from sentiment score)
     let distribution = {
       positive: Math.round(sentimentScore * 0.7),
       neutral: Math.round(30 - Math.abs(sentimentScore - 50) * 0.3),
       negative: 100 - Math.round(sentimentScore * 0.7 + (30 - Math.abs(sentimentScore - 50) * 0.3)),
     };
 
+    // Normalise to ensure sum = 100
     const total = distribution.positive + distribution.neutral + distribution.negative;
     if (total !== 100 && total > 0) {
       distribution.positive = Math.round((distribution.positive / total) * 100);
@@ -353,6 +376,7 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
     };
   }, [data]);
 
+  // Historical chart data
   const historicalChartData = useMemo(() => {
     if (!data?.history) return null;
     const history = data.history.slice(-getTimeRangeDays(timeRange));
@@ -380,6 +404,7 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
     };
   }, [data, timeRange, metrics, chartDimensions.width]);
 
+  // Distribution chart data
   const distributionChartData = useMemo(
     () => ({
       labels: ['Positive', 'Neutral', 'Negative'],
@@ -402,6 +427,9 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
 
   useEffect(handleError, [handleError]);
 
+  // ========================================================================
+  // Loading State
+  // ========================================================================
   if (isLoading) {
     return (
       <CardSkeleton className={className}>
@@ -440,12 +468,34 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
     );
   }
 
+  // ========================================================================
+  // Error State
+  // ========================================================================
   if (error) {
     return <CardError error={error} onRetry={refetch} className={className} title="Sentiment Analysis Error" />;
   }
 
-  if (!data || !metrics) return null;
+  // ========================================================================
+  // No Data State
+  // ========================================================================
+  if (!data || !metrics) {
+    return (
+      <CardWrapper className={className}>
+        <CardHeader>
+          <CardTitle>Market Sentiment</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="py-8 text-center text-gray-500 dark:text-gray-400">
+            No sentiment data available for {symbol}
+          </div>
+        </CardContent>
+      </CardWrapper>
+    );
+  }
 
+  // ========================================================================
+  // Render
+  // ========================================================================
   const sentimentVariant = metrics.isBullish ? 'positive' : metrics.isBearish ? 'negative' : 'neutral';
   const sentimentLabel = metrics.isBullish ? 'Bullish' : metrics.isBearish ? 'Bearish' : 'Neutral';
   const SentimentIcon = SENTIMENT_ICONS[sentimentVariant];
@@ -492,7 +542,7 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
       </CardHeader>
 
       <CardContent className="relative space-y-3 p-3 sm:space-y-4 sm:p-4">
-        {/* Sentiment Metrics – Stacked vertically */}
+        {/* Sentiment Metrics – stacked vertically */}
         <div className="grid grid-cols-1 gap-2 sm:gap-3">
           <SentimentMetric
             icon={Smile}
@@ -564,6 +614,8 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
     </CardWrapper>
   );
 };
+
+SentimentAnalysisCard.displayName = 'SentimentAnalysisCard';
 
 SentimentAnalysisCard.propTypes = {
   symbol: PropTypes.string.isRequired,

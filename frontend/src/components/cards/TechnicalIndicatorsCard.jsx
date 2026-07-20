@@ -1,9 +1,14 @@
+// components/cards/TechnicalIndicatorsCard.jsx
 /**
  * TechnicalIndicatorsCard
  *
  * Displays comprehensive technical analysis including price charts, trend indicators,
  * momentum metrics, support/resistance levels, and pivot points.
- * Key Support & Resistance and Pivot Points sections are collapsible.
+ *
+ * Gracefully handles missing data:
+ * - Empty price_history → shows "No price history available"
+ * - Zero SMA/RSI/Support/Resistance/Pivot → shows "N/A" or "—"
+ * - No pivot data → shows "Pivot data unavailable"
  *
  * @component
  * @param {Object} props
@@ -65,6 +70,10 @@ const TIMEFRAME_OPTIONS = [
   { value: '3m', label: '3M' },
 ];
 
+// ============================================================================
+// Sub-Components
+// ============================================================================
+
 const TimeframeSelector = ({ timeframe, onChange }) => (
   <div
     className="flex gap-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-800/50"
@@ -97,7 +106,11 @@ TimeframeSelector.propTypes = {
   onChange: PropTypes.func.isRequired,
 };
 
+// ----------------------------------------------------------------------------
+// TrendIndicator – shows N/A when SMAs are zero
+// ----------------------------------------------------------------------------
 const TrendIndicator = ({ isUptrend, sma50, sma200, strength }) => {
+  const hasData = sma50 !== 0 || sma200 !== 0;
   const config = isUptrend ? COLOR_SCHEMES.positive : COLOR_SCHEMES.negative;
   const Icon = isUptrend ? TrendingUp : TrendingDown;
 
@@ -109,41 +122,53 @@ const TrendIndicator = ({ isUptrend, sma50, sma200, strength }) => {
           <span className="text-base font-medium text-gray-600 dark:text-gray-400">Trend</span>
         </div>
         <Badge className={cn('px-3 py-1.5 text-sm font-medium', config.badge)}>
-          <Icon className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          {isUptrend ? 'Uptrend' : 'Downtrend'}
+          {hasData ? (
+            <>
+              <Icon className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              {isUptrend ? 'Uptrend' : 'Downtrend'}
+            </>
+          ) : (
+            'N/A'
+          )}
         </Badge>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
           <div className="mb-2 text-sm text-gray-500 dark:text-gray-400">SMA 50</div>
           <div className="text-xl font-bold text-gray-900 dark:text-gray-50 font-mono">
-            ${sma50.toFixed(2)}
+            {sma50 !== 0 ? `$${sma50.toFixed(2)}` : '—'}
           </div>
         </div>
         <div>
           <div className="mb-2 text-sm text-gray-500 dark:text-gray-400">SMA 200</div>
           <div className="text-xl font-bold text-gray-900 dark:text-gray-50 font-mono">
-            ${sma200.toFixed(2)}
+            {sma200 !== 0 ? `$${sma200.toFixed(2)}` : '—'}
           </div>
         </div>
       </div>
       <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700/50">
         <div className="mb-2 flex justify-between text-sm">
           <span className="text-gray-500 dark:text-gray-400">Trend Strength</span>
-          <span className={config.text}>{strength.toFixed(1)}%</span>
+          <span className={config.text}>
+            {hasData ? `${strength.toFixed(1)}%` : 'N/A'}
+          </span>
         </div>
-        <div
-          className="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
-          role="progressbar"
-          aria-valuenow={Math.min(strength, 100)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
+        {hasData ? (
           <div
-            className={cn('h-full rounded-full transition-all', config.bg.replace('/30', '/50'))}
-            style={{ width: `${Math.min(strength, 100)}%` }}
-          />
-        </div>
+            className="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+            role="progressbar"
+            aria-valuenow={Math.min(strength, 100)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className={cn('h-full rounded-full transition-all', config.bg.replace('/30', '/50'))}
+              style={{ width: `${Math.min(strength, 100)}%` }}
+            />
+          </div>
+        ) : (
+          <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700" />
+        )}
       </div>
     </div>
   );
@@ -156,6 +181,9 @@ TrendIndicator.propTypes = {
   strength: PropTypes.number.isRequired,
 };
 
+// ----------------------------------------------------------------------------
+// MomentumIndicator – unchanged (RSI=0 is handled inside the component)
+// ----------------------------------------------------------------------------
 const MomentumIndicator = ({ rsi, isOversold, isOverbought }) => {
   const config = isOversold ? COLOR_SCHEMES.positive : isOverbought ? COLOR_SCHEMES.negative : COLOR_SCHEMES.neutral;
   const status = isOversold ? 'Oversold' : isOverbought ? 'Overbought' : 'Neutral';
@@ -202,6 +230,9 @@ MomentumIndicator.propTypes = {
   isOverbought: PropTypes.bool.isRequired,
 };
 
+// ----------------------------------------------------------------------------
+// LevelCard – shows "—" and "N/A" for zero values
+// ----------------------------------------------------------------------------
 const LevelCard = ({ label, value, type, distance }) => {
   const config = {
     current: { icon: BarChart3, color: COLOR_SCHEMES.neutral },
@@ -211,6 +242,7 @@ const LevelCard = ({ label, value, type, distance }) => {
 
   const Icon = config.icon;
   const isAbove = distance > 0;
+  const isZero = value === 0;
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-3 sm:p-4 dark:border-gray-700/50 dark:bg-gray-800/50">
@@ -219,14 +251,17 @@ const LevelCard = ({ label, value, type, distance }) => {
           <Icon className={cn('h-4 w-4', config.color.text)} aria-hidden="true" />
           <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
         </div>
-        {type !== 'current' && (
+        {type !== 'current' && !isZero && (
           <Badge className={cn('text-xs font-medium', isAbove ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
             {isAbove ? '+' : ''}{distance.toFixed(1)}%
           </Badge>
         )}
+        {type !== 'current' && isZero && (
+          <Badge variant="outline" className="text-xs text-gray-400">N/A</Badge>
+        )}
       </div>
       <div className="text-lg font-bold text-gray-900 dark:text-gray-50 sm:text-xl font-mono">
-        ${value.toFixed(2)}
+        {isZero ? '—' : `$${value.toFixed(2)}`}
       </div>
     </div>
   );
@@ -239,6 +274,9 @@ LevelCard.propTypes = {
   distance: PropTypes.number.isRequired,
 };
 
+// ----------------------------------------------------------------------------
+// KeyLevels – collapsible section
+// ----------------------------------------------------------------------------
 const KeyLevels = ({ current, support, resistance, distances, isOpen, onToggle }) => (
   <div className="rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700/50 dark:bg-gray-800/30">
     <button
@@ -281,6 +319,9 @@ KeyLevels.propTypes = {
   onToggle: PropTypes.func.isRequired,
 };
 
+// ----------------------------------------------------------------------------
+// PivotPoint – single pivot level (used inside PivotPoints)
+// ----------------------------------------------------------------------------
 const PivotPoint = ({ label, value, current, type, className }) => {
   const config = {
     resistance: COLOR_SCHEMES.negative,
@@ -288,23 +329,29 @@ const PivotPoint = ({ label, value, current, type, className }) => {
     pivot: COLOR_SCHEMES.neutral,
   }[type];
 
-  const distance = value ? ((current - value) / value) * 100 : 0;
+  const isZero = value === 0;
+  const distance = isZero ? 0 : ((current - value) / value) * 100;
   const isAbove = distance > 0;
 
   return (
     <div className={cn('rounded-lg border p-3 sm:p-4', config.bg, config.border, className)}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">{label}</span>
-        <Badge className={cn('px-2 py-1 text-xs font-medium', isAbove ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
-          {isAbove ? 'Above' : 'Below'}
-        </Badge>
+        {!isZero && (
+          <Badge className={cn('px-2 py-1 text-xs font-medium', isAbove ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
+            {isAbove ? 'Above' : 'Below'}
+          </Badge>
+        )}
+        {isZero && <Badge variant="outline" className="text-xs text-gray-400">N/A</Badge>}
       </div>
       <div className="text-base font-bold text-gray-900 dark:text-gray-50 sm:text-lg font-mono">
-        ${value.toFixed(2)}
+        {isZero ? '—' : `$${value.toFixed(2)}`}
       </div>
-      <div className={cn('mt-2 text-xs', config.text)}>
-        {distance >= 0 ? '+' : ''}{distance.toFixed(1)}%
-      </div>
+      {!isZero && (
+        <div className={cn('mt-2 text-xs', config.text)}>
+          {distance >= 0 ? '+' : ''}{distance.toFixed(1)}%
+        </div>
+      )}
     </div>
   );
 };
@@ -317,14 +364,19 @@ PivotPoint.propTypes = {
   className: PropTypes.string,
 };
 
+// ----------------------------------------------------------------------------
+// PivotPoints – collapsible section, shows "Pivot data unavailable" if all zero
+// ----------------------------------------------------------------------------
 const PivotPoints = ({ pivot, support, resistance, current, distance, isOpen, onToggle }) => {
+  const hasData = pivot !== 0 || support !== 0 || resistance !== 0;
   const range = resistance - support;
+  const safeRange = range || 1;
   const levels = [
-    { label: 'R2', value: pivot + range, type: 'resistance' },
-    { label: 'R1', value: pivot + range * 0.5, type: 'resistance' },
+    { label: 'R2', value: pivot + safeRange, type: 'resistance' },
+    { label: 'R1', value: pivot + safeRange * 0.5, type: 'resistance' },
     { label: 'Pivot', value: pivot, type: 'pivot' },
-    { label: 'S1', value: pivot - range * 0.5, type: 'support' },
-    { label: 'S2', value: pivot - range, type: 'support' },
+    { label: 'S1', value: pivot - safeRange * 0.5, type: 'support' },
+    { label: 'S2', value: pivot - safeRange, type: 'support' },
   ];
 
   return (
@@ -347,25 +399,33 @@ const PivotPoints = ({ pivot, support, resistance, current, distance, isOpen, on
       </button>
       {isOpen && (
         <div id="pivot-points-content" className="p-4 pt-0 sm:p-5 sm:pt-0">
-          <div className="grid grid-cols-1 gap-3 sm:gap-4">
-            {levels.map((level) => (
-              <PivotPoint
-                key={level.label}
-                label={level.label}
-                value={level.value}
-                current={current}
-                type={level.type}
-              />
-            ))}
-          </div>
-          <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700/50">
-            <div className="flex items-center justify-between text-xs sm:text-sm">
-              <span className="text-gray-500 dark:text-gray-400">Current Position</span>
-              <Badge className={cn('px-3 py-1.5 text-xs font-medium sm:text-sm', distance >= 0 ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
-                {distance >= 0 ? '+' : ''}{distance.toFixed(1)}% from pivot
-              </Badge>
+          {hasData ? (
+            <>
+              <div className="grid grid-cols-1 gap-3 sm:gap-4">
+                {levels.map((level) => (
+                  <PivotPoint
+                    key={level.label}
+                    label={level.label}
+                    value={level.value}
+                    current={current}
+                    type={level.type}
+                  />
+                ))}
+              </div>
+              <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700/50">
+                <div className="flex items-center justify-between text-xs sm:text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Current Position</span>
+                  <Badge className={cn('px-3 py-1.5 text-xs font-medium sm:text-sm', distance >= 0 ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
+                    {distance >= 0 ? '+' : ''}{distance.toFixed(1)}% from pivot
+                  </Badge>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+              Pivot data unavailable
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>
@@ -381,6 +441,10 @@ PivotPoints.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onToggle: PropTypes.func.isRequired,
 };
+
+// ============================================================================
+// Main Component
+// ============================================================================
 
 const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
   const [timeframe, setTimeframe] = useState('1d');
@@ -405,25 +469,33 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
 
   const { data, isLoading, error, refetch } = useTechnicalIndicatorsQuery(symbol, timeframe);
 
+  // --------------------------------------------------------------------------
+  // Derive indicators, with safety checks for zero data
+  // --------------------------------------------------------------------------
   const indicators = useMemo(() => {
     if (!data?.technical) return null;
     const tech = data.technical;
+
+    const hasSmaData = tech.sma_50 !== 0 || tech.sma_200 !== 0;
     const safeSma200 = tech.sma_200 || 1;
 
     return {
-      isUptrend: tech.sma_50 > safeSma200,
+      isUptrend: hasSmaData ? tech.sma_50 > safeSma200 : false,
       isOversold: tech.rsi < 30,
       isOverbought: tech.rsi > 70,
       distanceToSupport: tech.support ? ((tech.current_price - tech.support) / tech.support) * 100 : 0,
       distanceToResistance: tech.current_price ? ((tech.resistance - tech.current_price) / tech.current_price) * 100 : 0,
       distanceToPivot: tech.pivot ? ((tech.current_price - tech.pivot) / tech.pivot) * 100 : 0,
-      trendStrength: Math.abs(tech.sma_50 - safeSma200) / safeSma200 * 100,
+      trendStrength: hasSmaData ? Math.abs(tech.sma_50 - safeSma200) / safeSma200 * 100 : 0,
       volatilityLevel: tech.volatility > 0.2 ? 'high' : tech.volatility > 0.1 ? 'medium' : 'low',
     };
   }, [data]);
 
+  // --------------------------------------------------------------------------
+  // Chart data – returns null if price_history is empty
+  // --------------------------------------------------------------------------
   const chartData = useMemo(() => {
-    if (!data?.technical?.price_history) return null;
+    if (!data?.technical?.price_history || data.technical.price_history.length === 0) return null;
     const history = data.technical.price_history;
     const isMobile = chartDimensions.width < 640;
 
@@ -470,6 +542,9 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
 
   useEffect(handleError, [handleError]);
 
+  // ==========================================================================
+  // Loading State
+  // ==========================================================================
   if (isLoading) {
     return (
       <CardSkeleton className={className}>
@@ -500,15 +575,37 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
     );
   }
 
+  // ==========================================================================
+  // Error State
+  // ==========================================================================
   if (error) {
     return <CardError error={error} onRetry={refetch} className={className} title="Technical Analysis Error" />;
   }
 
-  if (!data || !indicators) return null;
+  // ==========================================================================
+  // No Data State
+  // ==========================================================================
+  if (!data || !indicators) {
+    return (
+      <CardWrapper className={className}>
+        <CardHeader>
+          <CardTitle>Technical Analysis</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="py-8 text-center text-gray-500 dark:text-gray-400">
+            No technical data available for {symbol}
+          </div>
+        </CardContent>
+      </CardWrapper>
+    );
+  }
 
   const tech = data.technical;
   const rsiStatus = getRSIStatus(tech.rsi);
 
+  // ==========================================================================
+  // Render
+  // ==========================================================================
   return (
     <CardWrapper className={className}>
       <CardHeader className="relative pb-3 sm:pb-4">
@@ -535,8 +632,6 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
           </div>
           <TimeframeSelector timeframe={timeframe} onChange={setTimeframe} />
         </div>
-
-        {/* Badges - Stack on mobile, row on larger screens */}
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
           <Badge variant="outline" className="border-gray-200 bg-gray-50 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
             <TrendingUp className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -544,24 +639,27 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
           </Badge>
           <Badge variant="outline" className="border-gray-200 bg-gray-50 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
             <Zap className="mr-2 h-4 w-4" aria-hidden="true" />
-            Trend Strength: {indicators.trendStrength.toFixed(1)}%
+            Trend Strength: {indicators.trendStrength > 0 ? `${indicators.trendStrength.toFixed(1)}%` : 'N/A'}
           </Badge>
           <Badge variant="outline" className={cn('border', rsiStatus.color.border)}>
-            RSI: {tech.rsi.toFixed(1)} ({rsiStatus.label})
+            RSI: {tech.rsi > 0 ? `${tech.rsi.toFixed(1)} (${rsiStatus.label})` : 'N/A'}
           </Badge>
         </div>
       </CardHeader>
 
       <CardContent className="relative space-y-4 p-4 sm:space-y-6 sm:p-4">
-        {chartData && (
+        {chartData ? (
           <div ref={chartContainerRef} className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700/50 dark:bg-gray-800/30 sm:rounded-2xl sm:p-4">
             <div className="h-[200px] sm:h-[250px] lg:h-[300px]">
               <Line key={chartDimensions.width} data={chartData} options={getChartOptions(chartDimensions.width)} />
             </div>
           </div>
+        ) : (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500 dark:border-gray-700/50 dark:bg-gray-800/30 dark:text-gray-400">
+            No price history available for {symbol}
+          </div>
         )}
 
-        {/* Vertical Stack: Trend and Momentum */}
         <div className="grid grid-cols-1 gap-3 sm:gap-4">
           <TrendIndicator
             isUptrend={indicators.isUptrend}
@@ -576,7 +674,6 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
           />
         </div>
 
-        {/* Key Levels - Collapsible */}
         <KeyLevels
           current={tech.current_price}
           support={tech.support}
@@ -586,7 +683,6 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
           onToggle={() => setIsKeyLevelsOpen((prev) => !prev)}
         />
 
-        {/* Pivot Points - Collapsible */}
         <PivotPoints
           pivot={tech.pivot}
           support={tech.support}
@@ -600,6 +696,8 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
     </CardWrapper>
   );
 };
+
+TechnicalIndicatorsCard.displayName = 'TechnicalIndicatorsCard';
 
 TechnicalIndicatorsCard.propTypes = {
   symbol: PropTypes.string.isRequired,
