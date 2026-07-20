@@ -483,3 +483,6 @@ if SENTRY_DSN:
         import logging
         logger = logging.getLogger(__name__)
         logger.error(f"Sentry initialization failed: {e}")
+
+
+APPEND_SLASH = True

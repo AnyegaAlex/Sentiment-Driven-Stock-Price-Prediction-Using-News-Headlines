@@ -26,11 +26,11 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     
     # Version 1 APIs - Main endpoints
+    path('api/v1/auth/', include('authentication.urls')),
     path('api/v1/', include('stocks.urls')),
     path('api/v1/news/', include('news.urls')),
     
     # Swagger / OpenAPI documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    path('api/v1/auth/', include('authentication.urls')),
 ]
