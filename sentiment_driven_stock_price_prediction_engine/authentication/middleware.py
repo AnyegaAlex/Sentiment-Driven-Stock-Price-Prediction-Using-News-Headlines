@@ -52,6 +52,13 @@ class APIKeyMiddleware:
         
         # ----- Newsletter (Optional – can be public) -----
         '/api/v1/subscribe/',
+        
+        # ----- Stock Analysis (Public – No Auth Required) -----
+        '/api/v1/stock-analysis/',
+        '/api/v1/technical-indicators/',
+        '/api/v1/sentiment-analysis/',
+        '/api/v1/lstm-predict/',
+        '/api/v1/symbols/',
     ]
 
     def __init__(self, get_response):
@@ -203,9 +210,13 @@ class RequestLoggingMiddleware:
             'duration_ms': round(duration * 1000, 2),
             'request_id': getattr(request, 'request_id', None),
         }
-        if hasattr(request, 'user') and request.user and request.user.is_authenticated:
-            log_data['user_id'] = request.user.id
-            log_data['username'] = request.user.username
+        
+        # ✅ SAFE user ID extraction
+        user = getattr(request, 'user', None)
+        if user and hasattr(user, 'is_authenticated') and user.is_authenticated:
+            if hasattr(user, 'id'):
+                log_data['user_id'] = user.id
+                log_data['username'] = getattr(user, 'username', 'Unknown')
 
         if response.status_code >= 500:
             logger.error(f"Request failed: {log_data}")
@@ -220,16 +231,14 @@ class RequestLoggingMiddleware:
         # ---- 2. Usage Tracking (API key) ----
         if hasattr(request, 'api_key_obj') and request.api_key_obj:
             try:
-                # Update last_used timestamp
                 UserAPIKey.objects.filter(pk=request.api_key_obj.pk).update(
                     last_used=timezone.now()
                 )
-                # Daily counter
                 date_str = timezone.now().date().isoformat()
                 key_id = request.api_key_obj.pk
                 cache_key = f"usage_daily_{key_id}_{date_str}"
                 count = cache.get(cache_key, 0) + 1
-                cache.set(cache_key, count, timeout=86400 * 2)  # 2 days
+                cache.set(cache_key, count, timeout=86400 * 2)
             except Exception as e:
                 logger.warning(f"Could not track API key usage: {e}")
 
@@ -237,12 +246,16 @@ class RequestLoggingMiddleware:
         if 'symbol' in request.GET:
             symbol = request.GET['symbol'].upper()
             try:
-                if request.user and request.user.is_authenticated:
-                    cache_key = f"symbol_usage_{request.user.id}_{symbol}"
+                # ✅ SAFE: Only track if user is authenticated and has id
+                if user and hasattr(user, 'is_authenticated') and user.is_authenticated:
+                    if hasattr(user, 'id'):
+                        cache_key = f"symbol_usage_{user.id}_{symbol}"
+                    else:
+                        cache_key = f"symbol_usage_anon_{symbol}"
                 else:
                     cache_key = f"symbol_usage_anon_{symbol}"
                 count = cache.get(cache_key, 0) + 1
-                cache.set(cache_key, count, timeout=86400 * 7)  # 7 days
+                cache.set(cache_key, count, timeout=86400 * 7)
             except Exception as e:
                 logger.warning(f"Could not track symbol usage: {e}")
 
