@@ -10,6 +10,8 @@ import os
 import secrets
 import logging
 from datetime import datetime
+import threading
+from django.conf import settings
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
@@ -162,68 +164,54 @@ def verify_password_reset_token(uid, token):
 # ============================================================================
 
 def send_verification_email(user, request):
-    """
-    Send an email verification link and a 6‑digit code to the user.
+    """Send verification email asynchronously in a background thread."""
+    def _send():
+        try:
+            token = default_token_generator.make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            code = generate_verification_code()
 
-    Features:
-        - HTML + plain text email.
-        - Link points to the frontend verification page.
-        - 6‑digit code (for mobile / copy‑paste).
-        - Code stored in cache with 10‑minute expiry.
+            cache_key = f"email_verification_{user.id}"
+            cache.set(cache_key, code, timeout=600)
 
-    Args:
-        user (User): The user to verify.
-        request (HttpRequest): The current request, used to build absolute URLs.
+            # ✅ Use settings.FRONTEND_URL
+            frontend_url = settings.FRONTEND_URL
+            verification_link = f"{frontend_url}/verify-email?token={token}&uid={uid}"
 
-    Returns:
-        bool: True if the email was sent successfully, False otherwise.
-    """
-    try:
-        token = default_token_generator.make_token(user)
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        code = generate_verification_code()
+            subject = 'Verify your email for Tickflow Sentiment'
 
-        # Store code for 10 minutes
-        cache_key = f"email_verification_{user.id}"
-        cache.set(cache_key, code, timeout=600)
+            html_message = render_to_string('email/verify_email.html', {
+                'user': user,
+                'verification_link': verification_link,
+                'code': code,
+                'expires_in': 10,
+            })
 
-        # Build frontend verification URL (not the backend API)
-        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
-        verification_link = f"{frontend_url}/verify-email?token={token}&uid={uid}"
+            plain_message = render_to_string('email/verify_email.txt', {
+                'user': user,
+                'verification_link': verification_link,
+                'code': code,
+                'expires_in': 10,
+            })
 
-        subject = 'Verify your email for Tickflow Sentiment'
+            send_mail(
+                subject,
+                plain_message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                html_message=html_message,
+                fail_silently=False,
+            )
+            logger.info(f"Verification email sent to {user.email}")
+        except Exception as e:
+            logger.error(f"Failed to send verification email: {e}")
 
-        # HTML email
-        html_message = render_to_string('email/verify_email.html', {
-            'user': user,
-            'verification_link': verification_link,
-            'code': code,
-            'expires_in': 10,
-        })
+    # Start the email in a background thread
+    thread = threading.Thread(target=_send)
+    thread.daemon = True
+    thread.start()
+    logger.info(f"Verification email queued for {user.email}")
 
-        # Plain text fallback
-        plain_message = render_to_string('email/verify_email.txt', {
-            'user': user,
-            'verification_link': verification_link,
-            'code': code,
-            'expires_in': 10,
-        })
-
-        send_mail(
-            subject,
-            plain_message,
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email],
-            html_message=html_message,
-            fail_silently=False,
-        )
-
-        logger.info(f"Verification email sent to {user.email}")
-        return True
-
-    except Exception as e:
-        logger.error(f"Failed to send verification email to {user.email}: {e}")
-        return False
 
 def send_password_reset_email(user, request):
     """

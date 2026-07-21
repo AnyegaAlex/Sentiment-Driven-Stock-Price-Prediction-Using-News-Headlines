@@ -4,6 +4,9 @@ from decimal import Decimal
 from django.db import IntegrityError
 from django.db.models import Q, Count, Sum, Avg
 from .models import Prediction
+import time
+from django.core.cache import cache
+from functools import wraps
 
 # Optional imports for performance metrics
 try:
@@ -97,6 +100,59 @@ def save_prediction(
         # If still not found, re-raise the exception
         raise
 
+# ============================================================
+# – HELPER: Caching & Rate Limit Handling
+# ============================================================
+
+def retry_on_rate_limit(max_retries=3, delay=2):
+    """Decorator to retry on 'Too Many Requests' with exponential backoff."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if "Too Many Requests" in str(e) and attempt < max_retries - 1:
+                        wait = delay * (2 ** attempt)
+                        logger.warning(f"Rate limit hit, retrying in {wait}s...")
+                        time.sleep(wait)
+                    else:
+                        raise
+            return None
+        return wrapper
+    return decorator
+
+
+def get_cached_price(symbol, date):
+    """Get price from cache."""
+    cache_key = f"price_{symbol}_{date.strftime('%Y%m%d')}"
+    return cache.get(cache_key)
+
+
+def set_cached_price(symbol, date, price):
+    """Store price in cache for 7 days."""
+    cache_key = f"price_{symbol}_{date.strftime('%Y%m%d')}"
+    cache.set(cache_key, price, timeout=60*60*24*7)
+
+
+@retry_on_rate_limit(max_retries=3, delay=2)
+def fetch_yfinance_price(symbol, target_date):
+    """Fetch closing price for a symbol on target_date using yfinance."""
+    ticker = yf.Ticker(symbol)
+    start = target_date - timedelta(days=2)
+    end = target_date + timedelta(days=2)
+    hist = ticker.history(start=start, end=end)
+    if hist.empty:
+        return None
+    hist.index = hist.index.normalize()
+    available_dates = hist.index.date
+    valid_dates = [d for d in available_dates if d <= target_date]
+    if not valid_dates:
+        return None
+    closest_date = max(valid_dates)
+    price = float(hist.loc[hist.index.date == closest_date, 'Close'].iloc[0])
+    return price
 
 # ============================================================
 # – PREDICTION RESOLUTION & METRICS
@@ -104,78 +160,73 @@ def save_prediction(
 
 def resolve_prediction(prediction, resolution_days=7):
     """
-    Resolve a prediction after resolution_days.
-    
-    Fetches actual price data and determines if the prediction was correct.
-    Updates the prediction record with actual outcome.
-    
-    Args:
-        prediction: Prediction instance
-        resolution_days: Number of days to wait before checking outcome
-        
-    Returns:
-        bool: True if resolved successfully, False otherwise
+    Resolve a prediction after resolution_days with caching and rate limit handling.
     """
-    if not SKLEARN_AVAILABLE:
-        logger.warning("yfinance not available – cannot resolve prediction")
-        return False
-    
     try:
-        # Get price at resolution date
         resolution_date = prediction.date + timedelta(days=resolution_days)
-        ticker = yf.Ticker(prediction.stock_symbol)
-        hist = ticker.history(start=resolution_date - timedelta(days=2), 
-                              end=resolution_date + timedelta(days=2))
-        if hist.empty:
+
+        # Get price at prediction time (cached)
+        pred_price = get_cached_price(prediction.stock_symbol, prediction.date)
+        if pred_price is None:
+            pred_price = fetch_yfinance_price(prediction.stock_symbol, prediction.date)
+            if pred_price is not None:
+                set_cached_price(prediction.stock_symbol, prediction.date, pred_price)
+        if pred_price is None:
+            if prediction.price_at_prediction:
+                pred_price = float(prediction.price_at_prediction)
+            else:
+                logger.warning(f"No price data for {prediction.stock_symbol} on {prediction.date}")
+                return False
+        prediction.price_at_prediction = Decimal(str(pred_price))
+
+        # Get price at resolution date (cached)
+        res_price = get_cached_price(prediction.stock_symbol, resolution_date)
+        if res_price is None:
+            res_price = fetch_yfinance_price(prediction.stock_symbol, resolution_date)
+            if res_price is not None:
+                set_cached_price(prediction.stock_symbol, resolution_date, res_price)
+        if res_price is None:
             logger.warning(f"No price data for {prediction.stock_symbol} on {resolution_date}")
             return False
-        
-        actual_price = Decimal(str(hist['Close'].iloc[-1]))
-        
-        # Get price at prediction time (if not already stored)
-        if not prediction.price_at_prediction:
-            pred_hist = ticker.history(start=prediction.date - timedelta(days=1),
-                                        end=prediction.date + timedelta(days=1))
-            if not pred_hist.empty:
-                prediction.price_at_prediction = Decimal(str(pred_hist['Close'].iloc[-1]))
-            else:
-                prediction.price_at_prediction = Decimal('0.0')
-        
-        prediction.price_at_resolution = actual_price
-        
-        # Determine actual direction
-        if actual_price > prediction.price_at_prediction:
+        prediction.price_at_resolution = Decimal(str(res_price))
+
+        # Determine direction
+        if res_price > pred_price:
             prediction.actual_direction = 'up'
-        elif actual_price < prediction.price_at_prediction:
+        elif res_price < pred_price:
             prediction.actual_direction = 'down'
         else:
             prediction.actual_direction = 'neutral'
-        
-        # Check correctness
+
         prediction.is_correct = (prediction.actual_direction == prediction.predicted_movement)
-        
-        # Calculate percent change
-        if prediction.price_at_prediction:
-            change = ((actual_price - prediction.price_at_prediction) / prediction.price_at_prediction) * 100
+
+        # Percent change
+        if pred_price:
+            change = ((res_price - pred_price) / pred_price) * 100
             prediction.price_change_percent = Decimal(str(round(change, 2)))
-        
+
+        # Add SPY context (cached)
+        spy_cache_key = f"spy_price_{resolution_date.strftime('%Y%m%d')}"
+        spy_data = cache.get(spy_cache_key)
+        if spy_data is None:
+            spy = yf.Ticker("SPY")
+            spy_hist = spy.history(start=prediction.date, end=resolution_date)
+            if not spy_hist.empty:
+                spy_return = (spy_hist['Close'].iloc[-1] / spy_hist['Close'].iloc[0] - 1) * 100
+                spy_data = {
+                    'spy_return': round(spy_return, 2),
+                    'spy_price_start': float(spy_hist['Close'].iloc[0]),
+                    'spy_price_end': float(spy_hist['Close'].iloc[-1]),
+                }
+                cache.set(spy_cache_key, spy_data, timeout=60*60*24*7)
+        prediction.market_context = spy_data or {}
+
         prediction.resolution_date = datetime.now()
         prediction.time_to_resolution = prediction.resolution_date - prediction.date
-        
-        # Add market context (SPY performance)
-        spy = yf.Ticker("SPY")
-        spy_hist = spy.history(start=prediction.date, end=prediction.resolution_date)
-        if not spy_hist.empty:
-            spy_return = (spy_hist['Close'].iloc[-1] / spy_hist['Close'].iloc[0] - 1) * 100
-            prediction.market_context = {
-                'spy_return': round(spy_return, 2),
-                'spy_price_start': float(spy_hist['Close'].iloc[0]),
-                'spy_price_end': float(spy_hist['Close'].iloc[-1]),
-            }
-        
         prediction.save()
         logger.info(f"Resolved prediction {prediction.id} for {prediction.stock_symbol}: {prediction.is_correct}")
         return True
+
     except Exception as e:
         logger.error(f"Error resolving prediction {prediction.id}: {e}")
         return False
@@ -321,118 +372,21 @@ def detect_drift(recent_period_days=30, baseline_period_days=90):
 
 def resolve_all_pending_predictions(resolution_days=7):
     """
-    Resolve all pending predictions older than resolution_days.
-    
-    Args:
-        resolution_days: Number of days to wait before checking outcome
-        
-    Returns:
-        dict: Summary of results
+    Resolve all pending predictions with a 1.5s delay between each to avoid rate limits.
     """
     cutoff_date = datetime.now() - timedelta(days=resolution_days)
     pending = Prediction.objects.filter(
         is_correct__isnull=True,
         date__lte=cutoff_date
     )
-    
-    results = {
-        'total': pending.count(),
-        'resolved': 0,
-        'failed': 0
-    }
-    
-    for pred in pending:
+    results = {'total': pending.count(), 'resolved': 0, 'failed': 0}
+    for idx, pred in enumerate(pending):
+        if idx > 0:
+            time.sleep(1.5)  # delay between calls
         success = resolve_prediction(pred, resolution_days)
         if success:
             results['resolved'] += 1
         else:
             results['failed'] += 1
-    
-    logger.info(f"Resolved {results['resolved']} predictions, {results['failed']} failed")
-    return results
-
-# ============================================================
-# Resolve FUNCTIONS
-# ============================================================
-
-def resolve_prediction(prediction, resolution_days=7):
-    """Resolve a prediction after resolution_days."""
-    try:
-        resolution_date = prediction.date + timedelta(days=resolution_days)
-        ticker = yf.Ticker(prediction.stock_symbol)
-        hist = ticker.history(start=resolution_date - timedelta(days=2), 
-                              end=resolution_date + timedelta(days=2))
-        if hist.empty:
-            logger.warning(f"No price data for {prediction.stock_symbol} on {resolution_date}")
-            return False
-        
-        actual_price = Decimal(str(hist['Close'].iloc[-1]))
-        
-        if not prediction.price_at_prediction:
-            pred_hist = ticker.history(start=prediction.date - timedelta(days=1),
-                                        end=prediction.date + timedelta(days=1))
-            if not pred_hist.empty:
-                prediction.price_at_prediction = Decimal(str(pred_hist['Close'].iloc[-1]))
-            else:
-                prediction.price_at_prediction = Decimal('0.0')
-        
-        prediction.price_at_resolution = actual_price
-        
-        if actual_price > prediction.price_at_prediction:
-            prediction.actual_direction = 'up'
-        elif actual_price < prediction.price_at_prediction:
-            prediction.actual_direction = 'down'
-        else:
-            prediction.actual_direction = 'neutral'
-        
-        prediction.is_correct = (prediction.actual_direction == prediction.predicted_movement)
-        
-        if prediction.price_at_prediction:
-            change = ((actual_price - prediction.price_at_prediction) / prediction.price_at_prediction) * 100
-            prediction.price_change_percent = Decimal(str(round(change, 2)))
-        
-        prediction.resolution_date = datetime.now()
-        prediction.time_to_resolution = prediction.resolution_date - prediction.date
-        
-        spy = yf.Ticker("SPY")
-        spy_hist = spy.history(start=prediction.date, end=prediction.resolution_date)
-        if not spy_hist.empty:
-            spy_return = (spy_hist['Close'].iloc[-1] / spy_hist['Close'].iloc[0] - 1) * 100
-            prediction.market_context = {
-                'spy_return': round(spy_return, 2),
-                'spy_price_start': float(spy_hist['Close'].iloc[0]),
-                'spy_price_end': float(spy_hist['Close'].iloc[-1]),
-            }
-        
-        prediction.save()
-        return True
-    except Exception as e:
-        logger.error(f"Error resolving prediction {prediction.id}: {e}")
-        return False
-
-
-def resolve_all_pending_predictions(resolution_days=7):
-    """Resolve all pending predictions older than resolution_days."""
-    from django.utils import timezone
-    
-    cutoff_date = datetime.now() - timedelta(days=resolution_days)
-    pending = Prediction.objects.filter(
-        is_correct__isnull=True,
-        date__lte=cutoff_date
-    )
-    
-    results = {
-        'total': pending.count(),
-        'resolved': 0,
-        'failed': 0
-    }
-    
-    for pred in pending:
-        success = resolve_prediction(pred, resolution_days)
-        if success:
-            results['resolved'] += 1
-        else:
-            results['failed'] += 1
-    
     logger.info(f"Resolved {results['resolved']} predictions, {results['failed']} failed")
     return results

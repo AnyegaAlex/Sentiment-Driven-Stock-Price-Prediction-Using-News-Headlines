@@ -274,6 +274,7 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://sentiment-driven-stock-price-p
 # localhost for development
 CORS_ALLOWED_ORIGINS = [
     FRONTEND_URL,
+    "https://sentiment-driven-stock-price-predic.vercel.app",
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'http://localhost:3000',
@@ -282,7 +283,7 @@ CORS_ALLOWED_ORIGINS = [
 
 # Allow all origins in development (optional, simpler)
 # Uncomment this if you want to allow all origins during development
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOW_METHODS = [
     'GET',

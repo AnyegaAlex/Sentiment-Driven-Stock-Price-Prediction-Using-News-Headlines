@@ -25,7 +25,7 @@ def init_sentry():
     sentry_sdk.init(
         dsn=sentry_dsn,
         integrations=[
-            DjangoIntegration(),
+            DjangoIntegration(request_bodies='small'),
             RedisIntegration(),
             LoggingIntegration(
                 level=logging.INFO,  # Capture info and above as breadcrumbs
@@ -45,8 +45,6 @@ def init_sentry():
         enable_tracing=True,
         # Breadcrumbs for Django
         attach_stacktrace=True,
-        # Request body for POST requests
-        request_bodies='small',
     )
     
     # Set user context for all events if authenticated
