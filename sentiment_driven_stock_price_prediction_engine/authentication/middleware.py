@@ -31,21 +31,27 @@ class APIKeyMiddleware:
     Supports both legacy APIKey model and new UserAPIKey model (Phase 2).
     """
     EXEMPT_PATHS = [
+        # ----- Admin & Monitoring -----
         '/admin/',
         '/health/',
         '/api/v1/health/',
+        '/sentry-debug/',
+        
+        # ----- API Documentation -----
         '/api/docs/',
         '/api/schema/',
-        '/generate-key/',
-        '/auth/',
-        '/api/v1/auth/',
-        '/sentry-debug/',
+        
+        # ----- Authentication (Public) -----
+        '/api/v1/auth/register/',
+        '/api/v1/auth/login/',
+        '/api/v1/auth/verify-email/',
+        '/api/v1/auth/resend-verification/',
+        '/api/v1/auth/password-reset/',
+        '/api/v1/auth/password-reset/confirm/',
+        '/api/v1/auth/refresh/',
+        
+        # ----- Newsletter (Optional – can be public) -----
         '/api/v1/subscribe/',
-        '/api/v1/news/symbol-search/',
-        '/api/v1/symbols/',
-        '/api/v1/news/get-news/',
-        '/api/v1/sentiment-analysis/',
-        '/api/v1/stock-analysis/',
     ]
 
     def __init__(self, get_response):
