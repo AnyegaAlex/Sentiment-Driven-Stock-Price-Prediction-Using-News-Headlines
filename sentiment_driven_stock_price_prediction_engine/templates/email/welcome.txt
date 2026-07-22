@@ -1,0 +1,23 @@
+Tickflow Sentiment - Welcome
+============================
+
+Hi {{ user.username }},
+
+Thanks for verifying your email. Your account is active.
+
+Get started at:
+{{ dashboard_link }}
+
+Complete your onboarding:
+{{ onboarding_url }}
+
+With Tickflow Sentiment, you can:
+- Get real-time stock predictions based on news sentiment
+- Track your past predictions and review accuracy
+- Set up alerts for price moves and news events
+
+Thanks,
+The Tickflow Capital Team
+
+============================
+(c) {{ year }} Tickflow Capital. All rights reserved.

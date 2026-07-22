@@ -1,0 +1,22 @@
+Tickflow Sentiment - Account Deletion
+=====================================
+
+Hi {{ user.username }},
+
+You requested to delete your Tickflow Sentiment account.
+
+Your account is scheduled for deletion on {{ scheduled_for }}.
+
+If you did not request this, click the link below to cancel:
+
+{{ cancellation_link }}
+
+This link expires in {{ days_left }} days.
+
+If you have any questions, contact support at support@tickflow.com.
+
+Thanks,
+The Tickflow Capital Team
+
+=====================================
+(c) {{ year }} Tickflow Capital. All rights reserved.

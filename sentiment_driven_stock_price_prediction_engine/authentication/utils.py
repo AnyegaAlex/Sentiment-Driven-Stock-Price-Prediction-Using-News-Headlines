@@ -79,7 +79,7 @@ __all__ = [
 # RESPONSE HELPERS
 # ============================================================================
 
-def error_response(message, code=None, details=None, status_code=400):
+def error_response(message, code=None, details=None, status_code=400, request_id=None):
     """
     Standard error response format for all endpoints.
     
@@ -88,6 +88,7 @@ def error_response(message, code=None, details=None, status_code=400):
         code (str): Application-specific error code (e.g., 'AUTH_001').
         details (dict): Additional error details (field-level errors).
         status_code (int): HTTP status code.
+        request_id (str): Request ID for tracking.
     
     Returns:
         dict: Standardised error payload.
@@ -101,10 +102,12 @@ def error_response(message, code=None, details=None, status_code=400):
         response['code'] = code
     if details:
         response['details'] = details
+    if request_id:
+        response['request_id'] = request_id
     return response
 
 
-def success_response(data=None, message=None, code='SUCCESS'):
+def success_response(data=None, message=None, code='SUCCESS', request_id=None):
     """
     Standard success response format.
     
@@ -112,6 +115,7 @@ def success_response(data=None, message=None, code='SUCCESS'):
         data (any): Payload to return.
         message (str): Success message.
         code (str): Application-specific success code.
+        request_id (str): Request ID for tracking.
     
     Returns:
         dict: Standardised success payload.
@@ -125,6 +129,8 @@ def success_response(data=None, message=None, code='SUCCESS'):
         response['data'] = data
     if message is not None:
         response['message'] = message
+    if request_id:
+        response['request_id'] = request_id
     return response
 
 
@@ -323,18 +329,7 @@ def verify_password_reset_token(uid, token):
 def send_email_async(subject, to_email, html_content, plain_content=None, retry_count=3):
     """
     Send email asynchronously using SendGrid Web API with SMTP fallback.
-    
-    Args:
-        subject (str): Email subject.
-        to_email (str): Recipient email address.
-        html_content (str): HTML email content.
-        plain_content (str, optional): Plain text fallback.
-        retry_count (int): Number of retry attempts.
-    
-    Returns:
-        bool: True if email was queued successfully.
     """
-    # Validate email before sending
     if not validate_email(to_email):
         logger.error(f"Invalid email address: {to_email}")
         return False
@@ -347,15 +342,26 @@ def send_email_async(subject, to_email, html_content, plain_content=None, retry_
                 # Try SendGrid Web API first
                 try:
                     from sendgrid import SendGridAPIClient
-                    from sendgrid.helpers.mail import Mail
+                    from sendgrid.helpers.mail import Mail, Content, Email, Personalization
                     
+                    # Create from and to email objects
+                    from_email = Email(settings.DEFAULT_FROM_EMAIL)
+                    to_email_obj = Email(to_email)
+                    
+                    # Create content objects
+                    html_content_obj = Content("text/html", html_content)
+                    plain_content_obj = Content("text/plain", plain_content or html_content)
+                    
+                    # Create mail with both content types
                     message = Mail(
-                        from_email=settings.DEFAULT_FROM_EMAIL,
-                        to_emails=to_email,
+                        from_email=from_email,
                         subject=subject,
-                        html_content=html_content,
-                        plain_text_content=plain_content or html_content
+                        to_emails=to_email_obj,
                     )
+                    
+                    # Add both content types
+                    message.add_content(html_content_obj)
+                    message.add_content(plain_content_obj)
                     
                     sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
                     response = sg.send(message)
@@ -398,7 +404,6 @@ def send_email_async(subject, to_email, html_content, plain_content=None, retry_
         logger.error(f"Email failed after {retry_count} attempts for {to_email}: {last_error}")
         return False
     
-    # Start email in background thread
     thread = threading.Thread(target=_send_with_retry, daemon=True)
     thread.start()
     logger.info(f"Email queued for {to_email}")
@@ -443,14 +448,16 @@ def send_verification_email(user, request):
             'user': user,
             'verification_link': verification_link,
             'code': code,
-            'expires_in': 10,
+            'expires_hours': 24, 
+            'year': timezone.now().year,
         })
         
         plain_content = render_to_string('email/verify_email.txt', {
             'user': user,
             'verification_link': verification_link,
             'code': code,
-            'expires_in': 10,
+            'expires_hours': 24,
+            'year': timezone.now().year,
         })
         
         # Sanitize content
@@ -548,6 +555,8 @@ def send_password_reset_email(user, request):
         html_content = render_to_string('email/reset_password.html', {
             'user': user,
             'reset_link': reset_link,
+            'reset_expires_hours': 24,
+            'year': timezone.now().year,
         })
         
         plain_content = render_to_string('email/reset_password.txt', {
@@ -682,6 +691,7 @@ def send_account_deletion_confirmation(user, request):
             'cancellation_link': cancellation_link,
             'scheduled_for': user.deletion_scheduled_for.strftime('%B %d, %Y'),
             'days_left': 30,
+            'year': timezone.now().year,
         })
         
         plain_content = f"""

@@ -7,7 +7,6 @@ Includes:
 - RateLimitHeadersMiddleware: Informs clients about rate limit usage.
 - RequestLoggingMiddleware: Logs all requests with timing and request ID.
 """
-
 import time
 import uuid
 import hashlib
@@ -16,6 +15,7 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.core.cache import cache
 from django.utils import timezone
+from rest_framework.settings import api_settings
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 

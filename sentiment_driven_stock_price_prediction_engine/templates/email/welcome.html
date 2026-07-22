@@ -1,72 +1,56 @@
-<!--
-    templates/email/welcome.html
-    Welcome email sent after a user successfully verifies their email address.
-    Rendered with context: user (User object), onboarding_url (string), year (int).
--->
-<!DOCTYPE html>
-<html>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Welcome to Tickflow Sentiment">
     <title>Welcome to Tickflow Sentiment</title>
     <style>
-        /* Reset and base styles – unchanged to preserve design */
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #1a1a2e;
             max-width: 600px;
             margin: 0 auto;
             padding: 20px;
             background-color: #f9fafb;
-            color: #111827;
         }
         .container {
-            background-color: white;
-            border-radius: 12px;
+            background-color: #ffffff;
+            border-radius: 8px;
             padding: 40px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         .header {
             text-align: center;
-            border-bottom: 2px solid #f3f4f6;
-            padding-bottom: 20px;
-            margin-bottom: 30px;
+            padding: 20px 0;
+            border-bottom: 1px solid #e5e7eb;
         }
         .logo {
-            font-size: 28px;
-            font-weight: bold;
-            color: #2563eb;
-        }
-        h1 {
             font-size: 24px;
-            color: #111827;
-            margin-bottom: 16px;
+            font-weight: bold;
+            color: #1a1a2e;
         }
-        .btn {
+        .logo span {
+            color: #4f46e5;
+        }
+        .content {
+            padding: 30px 0;
+        }
+        .button {
             display: inline-block;
-            background-color: #2563eb;
-            color: white !important; /* fallback */
             padding: 14px 32px;
+            background: #4f46e5;
+            color: #ffffff;
             text-decoration: none;
-            border-radius: 8px;
-            font-weight: 600;
-            margin-top: 24px;
-        }
-        .btn:hover {
-            background-color: #1d4ed8;
-        }
-        .footer {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #e5e7eb;
-            font-size: 14px;
-            color: #6b7280;
-            text-align: center;
+            border-radius: 6px;
+            font-weight: 500;
         }
         .highlight {
             background-color: #eff6ff;
             padding: 16px;
             border-radius: 8px;
-            border-left: 4px solid #2563eb;
+            border-left: 4px solid #4f46e5;
             margin: 20px 0;
         }
         .highlight p {
@@ -74,10 +58,10 @@
             color: #1e40af;
         }
         .tip-box {
-            margin: 24px 0;
             background-color: #f3f4f6;
             padding: 16px;
             border-radius: 8px;
+            margin: 20px 0;
         }
         .tip-box p {
             margin: 0;
@@ -85,76 +69,66 @@
             color: #6b7280;
             text-align: center;
         }
-        @media (max-width: 480px) {
-            .container {
-                padding: 20px;
-            }
+        .footer {
+            text-align: center;
+            padding: 20px 0 0 0;
+            font-size: 12px;
+            color: #6b7280;
+            border-top: 1px solid #e5e7eb;
+        }
+        .text-center {
+            text-align: center;
+        }
+        .mt-20 {
+            margin-top: 20px;
+        }
+        .mb-20 {
+            margin-bottom: 20px;
+        }
+        ul {
+            padding-left: 20px;
+            margin: 16px 0;
+        }
+        .preheader {
+            display: none;
+            font-size: 0;
+            max-height: 0;
+            line-height: 0;
+            mso-hide: all;
+            visibility: hidden;
         }
     </style>
 </head>
 <body>
+    <span class="preheader">Welcome to Tickflow Sentiment. Your account is ready to use.</span>
     <div class="container">
         <div class="header">
-            <div class="logo">Tickflow Sentiment</div>
+            <div class="logo">Tickflow <span>Sentiment</span></div>
         </div>
-
-        <h1>Your account is ready</h1>
-
-        <p>Hi {{ user.username }},</p>
-
-        <p>
-            Thanks for verifying your email. Your account is active – you can now
-            start using our tools to analyse stocks, track sentiment, and make
-            more informed trading decisions.
-        </p>
-
-        <div class="highlight">
-            <p>
-                Before you dive in, we recommend completing your onboarding.
-                It takes two minutes and sets up your watchlist and preferences,
-                so we can tailor the experience to you.
-            </p>
+        <div class="content">
+            <h1>Your account is ready</h1>
+            <p>Hi {{ user.username }},</p>
+            <p>Thanks for verifying your email. Your account is active and you can now start using our tools to analyze stocks, track sentiment, and make more informed trading decisions.</p>
+            <p>Get started at: <a href="{{ dashboard_link }}">{{ dashboard_link }}</a></p>
+            <div class="highlight">
+                <p>Complete your onboarding in two minutes to set up your watchlist and preferences. This tailors the experience to your needs.</p>
+            </div>
+            <p>With Tickflow Sentiment, you can:</p>
+            <ul>
+                <li>Get real-time stock predictions based on news sentiment</li>
+                <li>Track your past predictions and review accuracy</li>
+                <li>Set up alerts for price moves and news events</li>
+            </ul>
+            <div class="text-center mt-20 mb-20">
+                <a href="{{ onboarding_url }}" class="button" style="display:inline-block;padding:14px 32px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:500;">Complete onboarding</a>
+            </div>
+            <div class="tip-box">
+                <p><strong>Tip:</strong> Add your favorite stocks to your watchlist during onboarding. We will surface news and predictions for them first.</p>
+            </div>
         </div>
-
-        <p>With Tickflow Sentiment, you can:</p>
-        <ul style="padding-left: 20px; margin: 16px 0;">
-            <li>Get real‑time stock predictions based on news sentiment</li>
-            <li>Track your past predictions and see how accurate they were</li>
-            <li>Set up alerts for price moves and news events</li>
-        </ul>
-
-        <!-- ✅ FIX: Inline styles with !important for maximum readability -->
-        <div style="text-align: center;">
-            <a href="{{ onboarding_url }}" 
-               style="display: inline-block; 
-                      background-color: #2563eb; 
-                      color: #ffffff !important; 
-                      padding: 14px 32px; 
-                      text-decoration: none; 
-                      border-radius: 8px; 
-                      font-weight: 600; 
-                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-                      font-size: 16px;
-                      border: none;
-                      text-align: center;">
-                Complete onboarding
-            </a>
-        </div>
-
-        <div class="tip-box">
-            <p>
-                <strong>Tip:</strong> Add your favourite stocks to your watchlist
-                during onboarding – we’ll surface news and predictions for them first.
-            </p>
-        </div>
-
         <div class="footer">
-            <p style="margin: 0;">
-                &copy; {{ year }} Tickflow Capital. All rights reserved.
-            </p>
-            <p style="margin: 8px 0 0 0; font-size: 12px;">
-                You received this email because you created an account on Tickflow Sentiment.
-            </p>
+            <p>&copy; {{ year }} Tickflow Capital. All rights reserved.</p>
+            <p>You received this email because you created an account on Tickflow Sentiment.</p>
         </div>
     </div>
 </body>

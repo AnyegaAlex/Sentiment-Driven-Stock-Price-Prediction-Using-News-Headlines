@@ -478,6 +478,14 @@ SENTRY_TRACES_SAMPLE_RATE = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
 SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.1"))
 SENTRY_ENVIRONMENT = os.getenv("SENTRY_ENVIRONMENT", "production")
 SENTRY_RELEASE = os.getenv("SENTRY_RELEASE", None)
+SENTRY_SEND_PII = os.getenv("SENTRY_SEND_PII", "true").lower() == "true"
+SENTRY_ATTACH_STACKTRACE = os.getenv("SENTRY_ATTACH_STACKTRACE", "true").lower() == "true"
+SENTRY_ENABLE_TRACING = os.getenv("SENTRY_ENABLE_TRACING", "true").lower() == "true"
+SENTRY_ENABLE_PROFILING = os.getenv("SENTRY_ENABLE_PROFILING", "true").lower() == "true"
+
+# Application version
+APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
+
 
 # Initialize Sentry if DSN is configured
 if SENTRY_DSN:
