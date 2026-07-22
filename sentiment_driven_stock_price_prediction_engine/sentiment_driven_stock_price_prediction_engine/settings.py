@@ -84,11 +84,11 @@ INSTALLED_APPS = [
 AUTH_USER_MODEL = 'authentication.User'
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'authentication.middleware.RequestLoggingMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -267,23 +267,26 @@ SPECTACULAR_SETTINGS = {
     'COMPONENT_SPLIT_REQUEST': True,
 }
 
-# --- CORS ---
-# Get frontend URL from environment (default to Vercel URL)
+# ============================================================
+# CORS CONFIGURATION (Production-Ready)
+# ============================================================
+
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://sentiment-driven-stock-price-predic.vercel.app')
 
-# localhost for development
+# Allow our frontend domains
 CORS_ALLOWED_ORIGINS = [
     FRONTEND_URL,
     "https://sentiment-driven-stock-price-predic.vercel.app",
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
-# Allow all origins in development (optional, simpler)
-# Uncomment this if you want to allow all origins during development
 CORS_ALLOW_ALL_ORIGINS = False
+
+# ✅ Allow credentials (JWT tokens in Authorization header)
+CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_METHODS = [
     'GET',
@@ -295,7 +298,6 @@ CORS_ALLOW_METHODS = [
     'HEAD',
 ]
 
-# Add 'x-api-key' to allowed headers
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -306,13 +308,25 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
-    'x-api-key',  
+    'x-api-key',
+    'x-request-id',
 ]
 
+# Expose headers to frontend
+CORS_EXPOSE_HEADERS = [
+    'content-disposition',
+    'x-request-id',
+]
+
+# Cache preflight requests for 1 day
+CORS_PREFLIGHT_MAX_AGE = 86400
+
+# CSRF Trusted Origins (same as CORS)
 CSRF_TRUSTED_ORIGINS = [
     FRONTEND_URL,
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
+    "https://sentiment-driven-stock-price-predic.vercel.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 
 # --- Default primary key ---
@@ -453,12 +467,6 @@ RATE_LIMIT_MAX_REQUESTS = 100  # Max requests per minute
 
 ENABLE_LSTM = True
 LSTM_MODEL_PATH = os.path.join(BASE_DIR, 'models', 'stock_prediction_model.pth')
-
-# Security Headers
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-SECURE_HSTS_SECONDS = 31536000
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 
 
 # ============================================================
