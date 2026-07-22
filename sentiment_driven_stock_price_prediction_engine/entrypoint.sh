@@ -12,14 +12,12 @@ echo "=========================================="
 # Wait for database to be ready
 if [ -n "$DATABASE_URL" ]; then
     echo "Waiting for database..."
-    python manage.py wait_for_db 2>/dev/null || echo "Database wait skipped"
+    sleep 5  # Give database time to initialize
 fi
 
-# Run migrations
+# ✅ RUN MIGRATIONS FIRST
 echo "Running migrations..."
-python manage.py migrate --noinput || {
-    echo "⚠️ Migration failed – continuing anyway..."
-}
+python manage.py migrate --noinput
 
 # Create superuser if environment variables are set
 if [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ -n "$DJANGO_SUPERUSER_EMAIL" ] && [ -n "$DJANGO_SUPERUSER_PASSWORD" ]; then
@@ -29,7 +27,7 @@ if [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ -n "$DJANGO_SUPERUSER_EMAIL" ] && [ 
         --email "$DJANGO_SUPERUSER_EMAIL" 2>/dev/null || echo "Superuser already exists"
 fi
 
-# Generate API key using UserAPIKey model
+# ✅ Generate API key AFTER migrations
 echo "Checking for API key..."
 python manage.py shell << 'EOF'
 import os
