@@ -45,8 +45,10 @@ EMAIL_SUBJECTS = {
     'security_alert': 'Security Alert: {action} for Tickflow Sentiment',
 }
 
-EMAIL_RATE_LIMIT = 3  # Max emails per window
-EMAIL_RATE_WINDOW = 60  # Window in seconds
+EMAIL_RATE_LIMIT = 3
+EMAIL_RATE_WINDOW = 60
+EMAIL_MAX_RETRIES = 3
+EMAIL_RETRY_DELAY = 1
 
 
 # ============================================================================
@@ -71,7 +73,7 @@ __all__ = [
     'validate_email',
     'check_email_rate_limit',
     'get_request_context',
-    'sanitize_html',
+    'check_email_service_health',
 ]
 
 
@@ -154,21 +156,25 @@ def validate_email(email):
     return re.match(pattern, email) is not None
 
 
-def sanitize_html(content):
+def strip_html_tags(html):
     """
-    Sanitize HTML content to prevent XSS.
+    Strip HTML tags from content for plain text version.
     
     Args:
-        content (str): HTML content to sanitize.
+        html (str): HTML content to strip.
     
     Returns:
-        str: Sanitized HTML content.
+        str: Plain text version.
     """
-    if not content:
+    if not html:
         return ''
-    # Basic sanitization - escape HTML special characters
-    # For production, consider using a library like bleach
-    return content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    # Remove HTML tags
+    text = re.sub(r'<[^>]+>', '', html)
+    # Replace common HTML entities
+    text = text.replace('&nbsp;', ' ').replace('&amp;', '&')
+    # Clean up extra whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
 
 def get_request_context(request):
@@ -210,40 +216,6 @@ def check_email_rate_limit(user_id, action, limit=EMAIL_RATE_LIMIT, window=EMAIL
     
     cache.set(cache_key, count + 1, timeout=window)
     return True
-
-
-def retry_on_failure(max_retries=3, delay=1, backoff=2):
-    """
-    Decorator for retrying failed operations with exponential backoff.
-    
-    Args:
-        max_retries (int): Maximum number of retry attempts.
-        delay (int): Initial delay between retries in seconds.
-        backoff (int): Multiplier for exponential backoff.
-    
-    Returns:
-        Decorated function.
-    """
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            last_exception = None
-            for attempt in range(max_retries):
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    last_exception = e
-                    if attempt < max_retries - 1:
-                        wait = delay * (backoff ** attempt)
-                        logger.warning(
-                            f"Attempt {attempt + 1} failed for {func.__name__}, "
-                            f"retrying in {wait}s: {e}"
-                        )
-                        time.sleep(wait)
-            logger.error(f"All {max_retries} attempts failed for {func.__name__}: {last_exception}")
-            raise last_exception
-        return wrapper
-    return decorator
 
 
 # ============================================================================
@@ -326,87 +298,110 @@ def verify_password_reset_token(uid, token):
 # CORE EMAIL SENDING (Async with SendGrid Web API + SMTP Fallback)
 # ============================================================================
 
-def send_email_async(subject, to_email, html_content, plain_content=None, retry_count=3):
+def send_email_async(subject, to_email, html_content, plain_content=None, retry_count=EMAIL_MAX_RETRIES):
     """
     Send email asynchronously using SendGrid Web API with SMTP fallback.
+    
+    Features:
+    - Uses SendGrid Web API (primary)
+    - Falls back to Django SMTP if SendGrid fails
+    - Sends both HTML and plain text versions
+    - Retries on failure with exponential backoff
+    - Runs in background thread (non-blocking)
+    
+    Args:
+        subject (str): Email subject
+        to_email (str): Recipient email address
+        html_content (str): HTML version of email
+        plain_content (str, optional): Plain text version (auto-generated if not provided)
+        retry_count (int): Number of retry attempts
+    
+    Returns:
+        bool: True if email was queued successfully, False otherwise
     """
     if not validate_email(to_email):
         logger.error(f"Invalid email address: {to_email}")
         return False
-    
+
     def _send_with_retry():
         last_error = None
         
         for attempt in range(retry_count):
             try:
-                # Try SendGrid Web API first
+                # --- Primary: SendGrid Web API ---
                 try:
                     from sendgrid import SendGridAPIClient
-                    from sendgrid.helpers.mail import Mail, Content, Email, Personalization
-                    
-                    # Create from and to email objects
-                    from_email = Email(settings.DEFAULT_FROM_EMAIL)
-                    to_email_obj = Email(to_email)
-                    
-                    # Create content objects
-                    html_content_obj = Content("text/html", html_content)
-                    plain_content_obj = Content("text/plain", plain_content or html_content)
-                    
-                    # Create mail with both content types
+                    from sendgrid.helpers.mail import Mail
+
+                    # Generate plain text if not provided
+                    if plain_content is None:
+                        plain_content = strip_html_tags(html_content)
+
+                    # Create mail with both HTML and plain text
                     message = Mail(
-                        from_email=from_email,
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        to_emails=to_email,
                         subject=subject,
-                        to_emails=to_email_obj,
+                        html_content=html_content,
+                        plain_text_content=plain_content,
                     )
-                    
-                    # Add both content types
-                    message.add_content(html_content_obj)
-                    message.add_content(plain_content_obj)
-                    
+
                     sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
                     response = sg.send(message)
-                    
+
                     if 200 <= response.status_code < 300:
-                        logger.info(f"Email sent via SendGrid to {to_email}")
+                        logger.info(f"[SendGrid] Email sent to {to_email} (status: {response.status_code})")
                         return True
                     else:
-                        logger.error(f"SendGrid returned {response.status_code}: {response.body}")
+                        logger.error(f"[SendGrid] Failed for {to_email}: {response.status_code}")
                         last_error = f"SendGrid error: {response.status_code}"
                         
+                        # Don't retry on client errors (4xx) except rate limiting
+                        if 400 <= response.status_code < 500 and response.status_code != 429:
+                            raise Exception(f"SendGrid client error: {response.status_code}")
+
                 except ImportError as e:
-                    logger.warning(f"SendGrid not installed: {e}, falling back to SMTP")
+                    logger.warning(f"[Email] SendGrid not installed: {e}, falling back to SMTP")
                     last_error = "SendGrid not installed"
                 except Exception as e:
-                    logger.warning(f"SendGrid failed: {e}, falling back to SMTP")
+                    logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {e}")
                     last_error = str(e)
-                
-                # Fallback: Django SMTP
-                send_mail(
-                    subject,
-                    plain_content or html_content,
-                    settings.DEFAULT_FROM_EMAIL,
-                    [to_email],
-                    html_message=html_content,
-                    fail_silently=False,
-                )
-                logger.info(f"Email sent via SMTP to {to_email}")
-                return True
-                
+
+                # --- Fallback: Django SMTP ---
+                try:
+                    if plain_content is None:
+                        plain_content = strip_html_tags(html_content)
+
+                    send_mail(
+                        subject=subject,
+                        message=plain_content,
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=[to_email],
+                        html_message=html_content,
+                        fail_silently=False,
+                    )
+                    logger.info(f"[SMTP] Email sent to {to_email}")
+                    return True
+                except Exception as e:
+                    logger.error(f"[SMTP] Fallback failed for {to_email}: {e}")
+                    last_error = str(e)
+
             except Exception as e:
                 last_error = str(e)
                 if attempt < retry_count - 1:
-                    wait = 2 ** attempt
-                    logger.warning(f"Email attempt {attempt + 1} failed, retrying in {wait}s: {e}")
+                    wait = (2 ** attempt) * EMAIL_RETRY_DELAY
+                    logger.warning(f"[Email] Retry {attempt + 1}/{retry_count} in {wait}s")
                     time.sleep(wait)
                 else:
-                    logger.error(f"All email attempts failed for {to_email}: {e}")
-        
-        logger.error(f"Email failed after {retry_count} attempts for {to_email}: {last_error}")
+                    logger.error(f"[Email] All retries failed for {to_email}: {e}")
+
+        logger.error(f"[Email] Failed after {retry_count} attempts for {to_email}: {last_error}")
         return False
-    
+
+    # Start in background thread
     thread = threading.Thread(target=_send_with_retry, daemon=True)
     thread.start()
-    logger.info(f"Email queued for {to_email}")
+    logger.info(f"[Email] Queued for {to_email}: {subject}")
     return True
 
 
@@ -459,9 +454,6 @@ def send_verification_email(user, request):
             'expires_hours': 24,
             'year': timezone.now().year,
         })
-        
-        # Sanitize content
-        html_content = sanitize_html(html_content)
         
         return send_email_async(subject, user.email, html_content, plain_content)
         
@@ -517,9 +509,6 @@ Thanks,
 The Tickflow Capital Team
 """
         
-        # Sanitize content
-        html_content = sanitize_html(html_content)
-        
         return send_email_async(subject, user.email, html_content, plain_content)
         
     except Exception as e:
@@ -547,7 +536,7 @@ def send_password_reset_email(user, request):
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         
-        # ✅ Use frontend URL for reset link
+        # Use frontend URL for reset link
         reset_link = f"{settings.FRONTEND_URL}/reset-password?token={token}&uid={uid}"
         
         subject = EMAIL_SUBJECTS['password_reset']
@@ -563,9 +552,6 @@ def send_password_reset_email(user, request):
             'user': user,
             'reset_link': reset_link,
         })
-        
-        # Sanitize content
-        html_content = sanitize_html(html_content)
         
         return send_email_async(subject, user.email, html_content, plain_content)
         
@@ -610,9 +596,6 @@ This code expires in 10 minutes.
 If you did not request this change, please ignore this email.
 """
         
-        # Sanitize content
-        html_content = sanitize_html(html_content)
-        
         return send_email_async(subject, new_email, html_content, plain_content)
         
     except Exception as e:
@@ -655,9 +638,6 @@ If you made this change, no action is required.
 If you did NOT make this change, please contact support immediately at support@tickflow.com
 """
         
-        # Sanitize content
-        html_content = sanitize_html(html_content)
-        
         # Send to both old and new email addresses
         success_old = send_email_async(subject, old_email, html_content, plain_content)
         success_new = send_email_async(subject, new_email, html_content, plain_content)
@@ -681,7 +661,7 @@ def send_account_deletion_confirmation(user, request):
         bool: True if email was queued, False otherwise.
     """
     try:
-        # ✅ Use frontend URL for cancellation link
+        # Use frontend URL for cancellation link
         cancellation_link = f"{settings.FRONTEND_URL}/cancel-deletion"
         
         subject = EMAIL_SUBJECTS['account_deletion']
@@ -712,9 +692,6 @@ This link expires in 30 days.
 Thanks,
 The Tickflow Capital Team
 """
-        
-        # Sanitize content
-        html_content = sanitize_html(html_content)
         
         return send_email_async(subject, user.email, html_content, plain_content)
         
@@ -748,17 +725,49 @@ def send_security_alert_email(user, action, ip_address, user_agent):
         subject = EMAIL_SUBJECTS['security_alert'].format(action=action_description)
         
         html_content = f"""
-        <h2>Security Alert</h2>
-        <p>Hi {user.username},</p>
-        <p>We detected a security event on your Tickflow Sentiment account:</p>
-        <ul>
-            <li><strong>Action:</strong> {action_description}</li>
-            <li><strong>IP Address:</strong> {ip_address}</li>
-            <li><strong>Device:</strong> {user_agent}</li>
-            <li><strong>Time:</strong> {timezone.now().strftime('%B %d, %Y at %I:%M %p UTC')}</li>
-        </ul>
-        <p>If you performed this action, no further action is required.</p>
-        <p>If you did NOT perform this action, please contact support immediately at support@tickflow.com</p>
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a2e; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ border-bottom: 1px solid #e5e7eb; padding-bottom: 20px; }}
+                .logo {{ font-size: 24px; font-weight: bold; color: #1a1a2e; }}
+                .logo span {{ color: #4f46e5; }}
+                .content {{ padding: 20px 0; }}
+                .footer {{ border-top: 1px solid #e5e7eb; padding-top: 20px; font-size: 12px; color: #6b7280; text-align: center; }}
+                .alert-box {{ background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 16px 0; border-radius: 4px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="logo">Tickflow <span>Sentiment</span></div>
+                </div>
+                <div class="content">
+                    <h2>Security Alert</h2>
+                    <p>Hi {user.username},</p>
+                    <p>We detected a security event on your Tickflow Sentiment account:</p>
+                    <div class="alert-box">
+                        <ul style="margin: 0; padding-left: 20px;">
+                            <li><strong>Action:</strong> {action_description}</li>
+                            <li><strong>IP Address:</strong> {ip_address}</li>
+                            <li><strong>Device:</strong> {user_agent}</li>
+                            <li><strong>Time:</strong> {timezone.now().strftime('%B %d, %Y at %I:%M %p UTC')}</li>
+                        </ul>
+                    </div>
+                    <p>If you performed this action, no further action is required.</p>
+                    <p>If you did NOT perform this action, please contact support immediately at <a href="mailto:support@tickflow.com">support@tickflow.com</a></p>
+                </div>
+                <div class="footer">
+                    <p>&copy; 2026 Tickflow Capital. All rights reserved.</p>
+                    <p>Sent to {user.email}</p>
+                </div>
+            </div>
+        </body>
+        </html>
         """
         
         plain_content = f"""
@@ -776,10 +785,10 @@ Time: {timezone.now().strftime('%B %d, %Y at %I:%M %p UTC')}
 If you performed this action, no further action is required.
 
 If you did NOT perform this action, please contact support immediately at support@tickflow.com
+
+---
+Tickflow Capital
 """
-        
-        # Sanitize content
-        html_content = sanitize_html(html_content)
         
         return send_email_async(subject, user.email, html_content, plain_content)
         

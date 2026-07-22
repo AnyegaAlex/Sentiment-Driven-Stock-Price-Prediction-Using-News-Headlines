@@ -222,7 +222,7 @@ def resolve_prediction(prediction, resolution_days=7):
         prediction.market_context = spy_data or {}
 
         prediction.resolution_date = datetime.now()
-        prediction.time_to_resolution = prediction.resolution_date - prediction.date
+        prediction.time_to_resolution = prediction.resolution_date - datetime.combine(prediction.date, datetime.min.time())
         prediction.save()
         logger.info(f"Resolved prediction {prediction.id} for {prediction.stock_symbol}: {prediction.is_correct}")
         return True

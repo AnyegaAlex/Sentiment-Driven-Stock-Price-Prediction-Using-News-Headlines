@@ -1,45 +1,65 @@
-import React, { useEffect } from "react";
+/**
+ * Production-Ready App Component
+ * 
+ * Features:
+ * - Lazy loading with Suspense for code splitting
+ * - Proper route protection with tier-based access
+ * - Clean layout management
+ * - Theme and analytics integration
+ * - Error boundaries
+ * - Optimized bundle size
+ * 
+ * @version 2.0.0
+ * @author Tickflow Capital
+ */
+
+import React, { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import ReactGA from 'react-ga4';
 
-// Existing components
+// ============================================================================
+// Lazy Load Components
+// ============================================================================
+
+// Layout components (eager)
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import Breadcrumbs from "./components/Breadcrumbs";
 import ErrorBoundary from "./components/ErrorBoundary";
+import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import ProtectedRoute from "./components/auth/ProtectedRoute";
 
-// Authentication & onboarding
+// Context providers
 import { AuthProvider } from "./context/AuthContext";
 import { OnboardingProvider } from "./context/OnboardingContext";
-import { ProtectedRoute } from "./components/auth/ProtectedRoute";
-
-// Public pages
-import LandingPage from "./pages/LandingPage";
-import Signup from "./pages/Signup";
-import Login from "./pages/Login";
-import CheckEmail from "./pages/CheckEmail";
-import VerifyEmail from "./pages/VerifyEmail";
-import ResetPassword from "./pages/ResetPassword";
-import Privacy from "./pages/Privacy";
-import Terms from "./pages/Terms";
-
-// Protected pages
-import Onboarding from "./pages/Onboarding";
-import Dashboard from "./pages/Dashboard";
-import NewsAnalysis from "./pages/NewsAnalysis";
-import PredictionHistory from "./pages/PredictionHistory";
-import Profile from "./pages/Profile";
-import Settings from "./pages/Settings";
-
-// Existing context (for stock symbol)
 import { DashboardProvider, useDashboard } from "./context/DashboardContext";
 import { PersistGate } from "./context/PersistGate";
 
+// Lazy load pages for code splitting
+const LandingPage = lazy(() => import("./pages/LandingPage"));
+const Signup = lazy(() => import("./pages/Signup"));
+const Login = lazy(() => import("./pages/Login"));
+const CheckEmail = lazy(() => import("./pages/CheckEmail"));
+const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResendVerification = lazy(() => import("./pages/ResendVerification"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const NewsAnalysis = lazy(() => import("./pages/NewsAnalysis"));
+const PredictionHistory = lazy(() => import("./pages/PredictionHistory"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Settings = lazy(() => import("./pages/Settings"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Unauthorized = lazy(() => import("./pages/Unauthorized"));
+
 // ============================================================================
-// Query Client
+// Query Client Configuration
 // ============================================================================
 
 const queryClient = new QueryClient({
@@ -48,40 +68,68 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       retry: 1,
       staleTime: 5 * 60 * 1000,
-      cacheTime: 10 * 60 * 1000,
+      gcTime: 10 * 60 * 1000,
       placeholderData: (previousData) => previousData,
+    },
+    mutations: {
+      retry: 1,
     },
   },
 });
 
 // ============================================================================
-// Theme & Analytics
+// Loading Fallback
+// ============================================================================
+
+const PageLoader = () => <LoadingSpinner fullScreen label="Loading page..." />;
+
+// ============================================================================
+// Theme Hook
 // ============================================================================
 
 function useDeviceThemeClass() {
-  React.useEffect(() => {
+  useEffect(() => {
     const root = document.documentElement;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = (isDark) => root.classList.toggle("dark", Boolean(isDark));
+    
+    const apply = (isDark) => {
+      root.classList.toggle("dark", Boolean(isDark));
+    };
+    
     apply(mq.matches);
 
     const handler = (e) => apply(e.matches);
-    if (mq.addEventListener) mq.addEventListener("change", handler);
-    else mq.addListener(handler);
+    
+    if (mq.addEventListener) {
+      mq.addEventListener("change", handler);
+    } else {
+      mq.addListener(handler);
+    }
 
     return () => {
-      if (mq.removeEventListener) mq.removeEventListener("change", handler);
-      else mq.removeListener(handler);
+      if (mq.removeEventListener) {
+        mq.removeEventListener("change", handler);
+      } else {
+        mq.removeListener(handler);
+      }
     };
   }, []);
 }
 
-const PageTracker = () => {
+// ============================================================================
+// Analytics
+// ============================================================================
+
+const AnalyticsTracker = () => {
   const location = useLocation();
 
   useEffect(() => {
     if (import.meta.env.PROD) {
-      ReactGA.send({ hitType: 'pageview', page: location.pathname + location.search });
+      ReactGA.send({
+        hitType: 'pageview',
+        page: location.pathname + location.search,
+        title: document.title,
+      });
     }
   }, [location]);
 
@@ -89,7 +137,7 @@ const PageTracker = () => {
 };
 
 // ============================================================================
-// Layout Helper – Check if route is auth page (no header/footer)
+// Auth Route Check
 // ============================================================================
 
 const isAuthRoute = (pathname) => {
@@ -99,12 +147,15 @@ const isAuthRoute = (pathname) => {
     '/verify-email',
     '/check-email',
     '/reset-password',
+    '/forgot-password',
     '/resend-verification',
     '/privacy',
     '/terms',
-    '/onboarding',   // <-- Added onboarding – clean layout
+    '/onboarding',
+    '/unauthorized',
   ];
-  return authRoutes.some(route =>
+  
+  return authRoutes.some(route => 
     pathname === route || pathname.startsWith(route + '/')
   );
 };
@@ -125,53 +176,58 @@ const AppContent = () => {
     }
   };
 
-  // If we're on an auth page or onboarding, show clean layout without Header/Footer
+  // ✅ Auth routes (no header/footer)
   if (isAuthRoute(location.pathname)) {
     return (
       <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
-        <main className="flex-grow flex items-center justify-center px-4">
-          <ErrorBoundary>
-            <PageTracker />
-            <Routes>
-              <Route path="/signup" element={<Signup />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/check-email" element={<CheckEmail />} />
-              <Route path="/verify-email" element={<VerifyEmail />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/terms" element={<Terms />} />
-              {/* Onboarding – protected, no header/footer */}
-              <Route
-                path="/onboarding"
-                element={
-                  <ProtectedRoute>
-                    <Onboarding />
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
-          </ErrorBoundary>
-        </main>
+        <Suspense fallback={<PageLoader />}>
+          <main className="flex-grow flex items-center justify-center px-4">
+            <ErrorBoundary>
+              <AnalyticsTracker />
+              <Routes>
+                <Route path="/signup" element={<Signup />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/check-email" element={<CheckEmail />} />
+                <Route path="/verify-email" element={<VerifyEmail />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/resend-verification" element={<ResendVerification />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
+                <Route path="/unauthorized" element={<Unauthorized />} />
+                <Route
+                  path="/onboarding"
+                  element={
+                    <ProtectedRoute requireVerified={false}>
+                      <Onboarding />
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
+            </ErrorBoundary>
+          </main>
+        </Suspense>
       </div>
     );
   }
 
-  // If we're on the landing page, show Navbar (not the main Header with search)
+  // ✅ Landing page
   if (location.pathname === '/') {
     return (
       <div className="min-h-screen flex flex-col">
         <ErrorBoundary>
-          <PageTracker />
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-          </Routes>
+          <Suspense fallback={<PageLoader />}>
+            <AnalyticsTracker />
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+            </Routes>
+          </Suspense>
         </ErrorBoundary>
       </div>
     );
   }
 
-  // All other routes (dashboard, news, history, profile, settings) – show full layout with Header/Footer
-  // Note: Onboarding is now excluded from this block because it's handled above.
+  // ✅ Protected routes (full layout)
   return (
     <div className="min-h-screen flex flex-col">
       <Header onSymbolSelect={handleSymbolSelect} />
@@ -184,58 +240,83 @@ const AppContent = () => {
       >
         <Breadcrumbs />
         <ErrorBoundary>
-          <PageTracker />
-          <Routes>
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/dashboard/:symbol"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/news-analysis"
-              element={
-                <ProtectedRoute>
-                  <NewsAnalysis />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/prediction-history"
-              element={
-                <ProtectedRoute>
-                  <PredictionHistory />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <Profile />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/settings"
-              element={
-                <ProtectedRoute>
-                  <Settings />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <Suspense fallback={<PageLoader />}>
+            <AnalyticsTracker />
+            <Routes>
+              {/* Free tier routes */}
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute requiredTiers={['free', 'pro', 'enterprise']}>
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dashboard/:symbol"
+                element={
+                  <ProtectedRoute requiredTiers={['free', 'pro', 'enterprise']}>
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/news-analysis"
+                element={
+                  <ProtectedRoute requiredTiers={['free', 'pro', 'enterprise']}>
+                    <NewsAnalysis />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/prediction-history"
+                element={
+                  <ProtectedRoute requiredTiers={['free', 'pro', 'enterprise']}>
+                    <PredictionHistory />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute requiredTiers={['free', 'pro', 'enterprise']}>
+                    <Profile />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute requiredTiers={['free', 'pro', 'enterprise']}>
+                    <Settings />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Pro+ tier routes */}
+              <Route
+                path="/advanced-analytics"
+                element={
+                  <ProtectedRoute requiredTiers={['pro', 'enterprise']}>
+                    <NewsAnalysis />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Enterprise tier routes */}
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute requiredTiers={['enterprise']}>
+                    <Settings />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* 404 Not Found */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
         </ErrorBoundary>
       </main>
       <Footer />
@@ -244,11 +325,18 @@ const AppContent = () => {
 };
 
 // ============================================================================
-// App
+// Main App
 // ============================================================================
 
 const App = () => {
   useDeviceThemeClass();
+
+  // Initialize Google Analytics
+  useEffect(() => {
+    if (import.meta.env.PROD && import.meta.env.VITE_GA_MEASUREMENT_ID) {
+      ReactGA.initialize(import.meta.env.VITE_GA_MEASUREMENT_ID);
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -264,7 +352,7 @@ const App = () => {
             </OnboardingProvider>
           </AuthProvider>
         </Router>
-        <ReactQueryDevtools initialIsOpen={false} />
+        {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
       </TooltipProvider>
     </QueryClientProvider>
   );

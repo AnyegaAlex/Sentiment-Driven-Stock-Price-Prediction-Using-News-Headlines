@@ -23,7 +23,6 @@ from drf_spectacular.utils import (
 )
 
 # Project imports
-from .opinion_generator import generate_stock_opinion, format_investment_analysis
 from .models import Prediction, Subscription
 from .serializers import (
     PredictionSerializer,
@@ -394,6 +393,9 @@ class StockOpinionView(APIView):
         detail_level = request.query_params.get("detail_level", "summary")
         
         try:
+            # ✅ Lazy import 
+            from .opinion_generator import generate_stock_opinion, format_investment_analysis
+            
             opinion = generate_stock_opinion(symbol=symbol, risk_type=risk_type)
             if "error" in opinion:
                 return Response(opinion, status=status.HTTP_400_BAD_REQUEST)
@@ -587,6 +589,9 @@ class StockAnalysisView(APIView):
 
         # ---------- TRY REAL DATA ----------
         try:
+            # ✅ Lazy import
+            from .opinion_generator import generate_stock_opinion, format_investment_analysis
+            
             opinion = generate_stock_opinion(symbol=symbol, risk_type=risk_type, news_text="")
             if "error" in opinion:
                 raise ValueError(opinion["error"])
@@ -1431,3 +1436,49 @@ class SHAPExplanationView(APIView):
                 {'error': 'Prediction not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
+        
+
+# stocks/views.py (add this near the bottom)
+import os
+from django.http import JsonResponse
+from django.core.management import call_command
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.permissions import AllowAny
+import logging
+
+logger = logging.getLogger(__name__)
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+@api_view(['GET', 'POST'])
+@authentication_classes([])   # No DRF authentication – we use our own secret token
+@permission_classes([AllowAny])
+def cron_resolve_predictions(request):
+    """
+    Endpoint for cron-job.org to trigger prediction resolution.
+    Protected by a secret token passed as 'secret' query parameter.
+    """
+    # Get the secret from request (query string or POST body)
+    secret = request.query_params.get('secret') or request.data.get('secret')
+    expected_secret = os.environ.get('CRON_SECRET')
+    
+    # If CRON_SECRET is not set, reject all requests (fail-safe)
+    if not expected_secret:
+        logger.error("CRON_SECRET environment variable not set – cron endpoint disabled")
+        return JsonResponse({'error': 'Cron endpoint not configured'}, status=500)
+    
+    # Validate the token
+    if secret != expected_secret:
+        logger.warning(f"Cron trigger rejected – invalid secret from {request.META.get('REMOTE_ADDR')}")
+        return JsonResponse({'error': 'Unauthorized'}, status=403)
+    
+    # Run the management command
+    try:
+        call_command('resolve_predictions', days=7)
+        logger.info("Cron trigger: resolve_predictions completed successfully")
+        return JsonResponse({'status': 'ok', 'message': 'Predictions resolved'})
+    except Exception as e:
+        logger.error(f"Cron trigger failed: {e}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)

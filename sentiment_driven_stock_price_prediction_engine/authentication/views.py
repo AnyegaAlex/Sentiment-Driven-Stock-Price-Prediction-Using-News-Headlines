@@ -16,6 +16,7 @@ rate limiting, audit trails, and security alerts where appropriate.
 import logging
 import time
 import uuid
+import threading 
 from datetime import timedelta
 
 from django.conf import settings
@@ -241,13 +242,17 @@ class LoginView(APIView):
                 }
             )
             
-            # Security alert (async)
-            send_security_alert_email(
-                user,
-                'login',
-                request_context['ip'],
-                request_context['user_agent']
-            )
+            # ============================================================
+            # ✅ SECURITY ALERT – SENT ASYNCHRONOUSLY
+            # ============================================================
+            # Fire security alert email in background thread
+            # This prevents login delay (saves ~500ms-2s)
+            import threading
+            threading.Thread(
+                target=send_security_alert_email,
+                args=(user, 'login', request_context['ip'], request_context['user_agent']),
+                daemon=True
+            ).start()
             
             duration = (time.time() - start_time) * 1000
             logger.info(f"User logged in: {user.email} (ID: {user.id}) in {duration:.2f}ms")
@@ -275,7 +280,6 @@ class LoginView(APIView):
                 ),
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 class VerifyEmailView(APIView):
     """
@@ -331,7 +335,11 @@ class VerifyEmailView(APIView):
             cache.delete(f"email_failed_{user.id}")
             
             # Send welcome email (async)
-            send_welcome_email(user, request)
+            threading.Thread(
+                target=send_welcome_email,
+                args=(user, request),
+                daemon=True
+            ).start()
             
             # Audit log
             request_context = get_request_context(request)
@@ -839,13 +847,17 @@ class ChangePasswordView(APIView):
             
             request_context = get_request_context(request)
             
-            # Security alert (async)
-            send_security_alert_email(
-                user,
-                'password_change',
-                request_context['ip'],
-                request_context['user_agent']
-            )
+            # ============================================================
+            # ✅ SECURITY ALERT – SENT ASYNCHRONOUSLY
+            # ============================================================
+            # Fire security alert email in background thread
+            # This prevents blocking the response (saves ~500ms-2s)
+            import threading
+            threading.Thread(
+                target=send_security_alert_email,
+                args=(user, 'password_change', request_context['ip'], request_context['user_agent']),
+                daemon=True
+            ).start()
             
             AuditLog.objects.create(
                 user=user,
@@ -1034,8 +1046,12 @@ class ChangeEmailView(APIView):
                 user.last_email_change = timezone.now()
                 user.save()
             
-            # Send notifications (async)
-            send_email_change_notification(user, old_email, new_email)
+            # Send notifications asynchronously
+            threading.Thread(
+                target=send_email_change_notification,
+                args=(user, old_email, new_email),
+                daemon=True
+            ).start()
             
             # Clean up cache
             cache.delete(f"email_change_{user.id}")
@@ -1762,8 +1778,12 @@ class DeleteAccountView(APIView):
                 except Exception as e:
                     logger.warning(f"Token blacklist skipped: {e}")
             
-            # Send confirmation (async)
-            send_account_deletion_confirmation(user, request)
+            # Send confirmation asynchronously
+            threading.Thread(
+                target=send_account_deletion_confirmation,
+                args=(user, request),
+                daemon=True
+            ).start()
             
             request_context = get_request_context(request)
             AuditLog.objects.create(

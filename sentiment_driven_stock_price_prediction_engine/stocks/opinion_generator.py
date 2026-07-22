@@ -31,7 +31,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import requests
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 # Suppress warnings for production
 import warnings
@@ -165,7 +165,7 @@ class TechnicalMetrics(BaseModel):
     class Config:
         arbitrary_types_allowed = True
     
-    @validator('rsi')
+    @field_validator('rsi')
     def validate_rsi(cls, v):
         if v < 0 or v > 100:
             raise ValueError('RSI must be between 0 and 100')
@@ -199,9 +199,11 @@ class MarketRegimeDetector:
         self._spy_cache = None
         self._spy_cache_timestamp = None
         self._cache_duration = datetime.timedelta(minutes=15)
+        self._initialized = False  # ✅ Track initialization
     
     def get_current_regime(self, force_refresh: bool = False) -> MarketRegimeResult:
         """Get current market regime with Redis caching."""
+        self._ensure_initialized()  # ✅ Lazy init
         if not force_refresh:
             cached = get_cached_data("market_regime")
             if cached is not None:
@@ -296,6 +298,7 @@ class TechnicalAnalyzer:
     """
     
     def __init__(self):
+        self.regime_detector = None  # ✅ Lazy init
         self.regime_detector = MarketRegimeDetector()
         self._min_data_points = Config.MIN_DATA_POINTS
         
@@ -304,6 +307,20 @@ class TechnicalAnalyzer:
         self.twelvedata_key = os.getenv('TWELVEDATA_API_KEY', '')
         self.alpha_vantage_key = os.getenv('ALPHA_VANTAGE_KEY', '')
         
+        def _ensure_initialized(self):
+            """Lazy initialize – only create heavy objects when needed."""
+            if self._initialized:
+                return
+            
+            # ✅ Create regime detector only when first needed
+            self.regime_detector = MarketRegimeDetector()
+            self._initialized = True
+            logger.info("TechnicalAnalyzer initialized")
+        
+        def analyze(self, symbol: str) -> TechnicalMetrics:
+            """Perform technical analysis on a given symbol."""
+            self._ensure_initialized()  # ✅ Lazy init
+
         if not self.finnhub_key:
             logger.warning("FINNHUB_API_KEY not set – Finnhub data will be unavailable")
         if not self.twelvedata_key:
@@ -1054,4 +1071,4 @@ def clear_shared_cache():
 # Module Initialization
 # ============================================================================
 
-logger.info("Institutional Analysis Engine v5.3 initialized")
+logger.debug("Institutional Analysis Engine v5.3 loaded (lazy initialization)")

@@ -58,6 +58,8 @@ PUBLIC_PATHS = [
     '/api/v1/sentiment-analysis/',
     '/api/v1/lstm-predict/',
     '/api/v1/symbols/',
+
+    '/stocks/cron/',
 ]
 
 # Deprecated endpoints

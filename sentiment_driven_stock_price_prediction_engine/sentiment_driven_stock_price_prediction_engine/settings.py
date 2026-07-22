@@ -248,6 +248,8 @@ EMAIL_HOST_USER = "apikey"  # Literally the string "apikey" - this is required
 EMAIL_HOST_PASSWORD = os.getenv("SENDGRID_API_KEY")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "info@tickflowcapital.com")
 DEFAULT_FROM_NAME = os.getenv("DEFAULT_FROM_NAME", "Tickflow Sentiment")
+# Email API Key (for SendGrid Web API)
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +312,8 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
     'x-api-key',
     'x-request-id',
+    'idempotency-key',
+    'x-client-version',
 ]
 
 # Expose headers to frontend

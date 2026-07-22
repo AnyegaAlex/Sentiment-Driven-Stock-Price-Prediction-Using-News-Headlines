@@ -5,12 +5,20 @@ import { Radar } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import apiClient from '@/services/client';
 import { cn } from '@/lib/utils';
+import PropTypes from 'prop-types';
 
 const CURRENT_YEAR = new Date().getFullYear();
+const CONTACT_EMAIL = import.meta.env.VITE_CONTACT_EMAIL || 'anyega.alex.kamau@gmail.com';
 
-const Footer = () => {
+const propTypes = {
+  /** Additional CSS classes */
+  className: PropTypes.string,
+};
+
+const Footer = ({ className = '' }) => {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState(null);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const mutation = useMutation({
     mutationFn: async (email) => {
@@ -23,19 +31,38 @@ const Footer = () => {
       setTimeout(() => setStatus(null), 5000);
     },
     onError: (error) => {
+      const message = error.response?.data?.message || error.message || 'Subscription failed. Please try again.';
       setStatus('error');
+      setErrorMessage(message);
       setTimeout(() => setStatus(null), 5000);
     },
   });
 
   const handleSubscribe = (e) => {
     e.preventDefault();
-    if (!email) return;
-    mutation.mutate(email);
+    
+    // ✅ Validate email
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setStatus('error');
+      setErrorMessage('Please enter your email address.');
+      setTimeout(() => setStatus(null), 3000);
+      return;
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setStatus('error');
+      setErrorMessage('Please enter a valid email address.');
+      setTimeout(() => setStatus(null), 3000);
+      return;
+    }
+
+    mutation.mutate(trimmedEmail);
   };
 
   return (
-    <footer className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800">
+    <footer className={cn('bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800', className)}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Brand */}
@@ -100,7 +127,10 @@ const Footer = () => {
                 </Link>
               </li>
               <li>
-                <a href="mailto:anyega.alex.kamau@gmail.com" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                <a
+                  href={`mailto:${CONTACT_EMAIL}`}
+                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                >
                   Contact
                 </a>
               </li>
@@ -115,8 +145,12 @@ const Footer = () => {
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
               Get notified about new releases.
             </p>
-            <form onSubmit={handleSubscribe} className="space-y-2">
+            <form onSubmit={handleSubscribe} className="space-y-2" noValidate>
+              <label htmlFor="subscribe-email" className="sr-only">
+                Email address for newsletter
+              </label>
               <input
+                id="subscribe-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -124,10 +158,11 @@ const Footer = () => {
                 className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 required
                 disabled={mutation.isPending}
+                aria-label="Email address for newsletter"
               />
               <button
                 type="submit"
-                disabled={mutation.isPending}
+                disabled={mutation.isPending || !email.trim()}
                 className={cn(
                   'w-full px-4 py-2 rounded-md font-medium text-sm',
                   'bg-blue-600 text-white hover:bg-blue-700',
@@ -139,16 +174,20 @@ const Footer = () => {
                 {mutation.isPending ? 'Subscribing…' : 'Subscribe'}
               </button>
               {status === 'success' && (
-                <p className="text-xs text-green-600 dark:text-green-400">✓ Subscribed!</p>
+                <p className="text-xs text-green-600 dark:text-green-400" role="status" aria-live="polite">
+                  ✓ Subscribed!
+                </p>
               )}
               {status === 'error' && (
-                <p className="text-xs text-red-600 dark:text-red-400">Something went wrong. Try again.</p>
+                <p className="text-xs text-red-600 dark:text-red-400" role="alert" aria-live="polite">
+                  {errorMessage}
+                </p>
               )}
             </form>
           </div>
         </div>
 
-        {/* Bottom bar – minimal */}
+        {/* Bottom bar */}
         <div className="border-t border-gray-200 dark:border-gray-800 mt-10 pt-6 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-gray-500 dark:text-gray-500">
           <span>MIT License</span>
           <span>
@@ -159,5 +198,7 @@ const Footer = () => {
     </footer>
   );
 };
+
+Footer.propTypes = propTypes;
 
 export default Footer;

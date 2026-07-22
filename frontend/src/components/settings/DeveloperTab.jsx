@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/services/api';
+import apiClient from '@/services/client'; // ✅ Fixed import
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert } from '@/components/ui/alert';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Key, Plus, Trash2, RefreshCw, Clock, AlertCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const DeveloperTab = () => {
   const [newKeyName, setNewKeyName] = useState('');
@@ -16,48 +17,57 @@ const DeveloperTab = () => {
   const [error, setError] = useState(null);
   const queryClient = useQueryClient();
 
-  // Fetch API keys
-  const { data: keys, isLoading: keysLoading } = useQuery({
+  // ---- Fetch API Keys ----
+  const { data: keys = [], isLoading: keysLoading, refetch: refetchKeys } = useQuery({
     queryKey: ['api-keys'],
     queryFn: async () => {
-      const res = await api.get('/auth/api-keys/');
+      const res = await apiClient.get('/auth/api-keys/');
       return res.data || [];
     },
   });
 
-  // Fetch usage stats
-  const { data: usage, isLoading: usageLoading } = useQuery({
+  // ---- Fetch Usage Stats ----
+  const { data: usageData, isLoading: usageLoading } = useQuery({
     queryKey: ['usage'],
     queryFn: async () => {
-      const res = await api.get('/auth/usage/');
+      const res = await apiClient.get('/auth/usage/');
       return res.data || [];
     },
   });
 
-  // Fetch top symbols – we'll replace with real tracking later, but keep as placeholder
-  // For now, we'll show a message that it's coming soon.
-  const { data: topSymbols, isLoading: symbolsLoading } = useQuery({
+  // ---- Fetch Top Symbols ----
+  const { data: topSymbols = [], isLoading: symbolsLoading } = useQuery({
     queryKey: ['top-symbols'],
     queryFn: async () => {
-      const res = await api.get('/auth/top-symbols/');
+      const res = await apiClient.get('/auth/top-symbols/');
       return res.data || [];
     },
-    // We'll keep it for now
+    // ✅ Gracefully handle missing endpoint
+    retry: false,
+    onError: () => {
+      // Silently fail if endpoint doesn't exist
+      console.warn('[DeveloperTab] Top symbols endpoint not available');
+    },
   });
 
-  // Fetch activity log
-  const { data: activities, isLoading: activityLoading } = useQuery({
+  // ---- Fetch Activity Log ----
+  const { data: activitiesData, isLoading: activityLoading } = useQuery({
     queryKey: ['activity'],
     queryFn: async () => {
-      const res = await api.get('/auth/activity/');
+      const res = await apiClient.get('/auth/activity/');
       return res.data || [];
     },
   });
 
-  // Generate new key
+  // ✅ Ensure data is always an array
+  const usage = Array.isArray(usageData) ? usageData : [];
+  const activities = Array.isArray(activitiesData) ? activitiesData : [];
+  const keysList = Array.isArray(keys) ? keys : [];
+
+  // ---- Generate New Key ----
   const generateMutation = useMutation({
     mutationFn: async (name) => {
-      const res = await api.post('/auth/api-keys/', { name });
+      const res = await apiClient.post('/auth/api-keys/', { name });
       return res.data;
     },
     onSuccess: (data) => {
@@ -65,19 +75,19 @@ const DeveloperTab = () => {
       setNewKeyName('');
       setError(null);
       queryClient.invalidateQueries(['api-keys']);
+      // Auto-clear raw key after 10 seconds
       setTimeout(() => setShowRawKey(null), 10000);
     },
     onError: (err) => {
       setError(err.response?.data?.error || 'Failed to generate key');
-      // Auto-clear error after 5 seconds
       setTimeout(() => setError(null), 5000);
     },
   });
 
-  // Revoke key
+  // ---- Revoke Key ----
   const revokeMutation = useMutation({
     mutationFn: async (id) => {
-      await api.delete(`/auth/api-keys/${id}/`);
+      await apiClient.delete(`/auth/api-keys/${id}/`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['api-keys']);
@@ -97,10 +107,14 @@ const DeveloperTab = () => {
     generateMutation.mutate(newKeyName.trim());
   };
 
-  const handleRevoke = (id) => {
-    if (window.confirm('Revoke this API key? It will stop working immediately.')) {
+  const handleRevoke = (id, name) => {
+    if (window.confirm(`Revoke API key "${name}"? It will stop working immediately.`)) {
       revokeMutation.mutate(id);
     }
+  };
+
+  const handleRefresh = () => {
+    refetchKeys();
   };
 
   return (
@@ -108,7 +122,20 @@ const DeveloperTab = () => {
       {/* Generate Key */}
       <Card>
         <CardHeader>
-          <CardTitle>API Keys</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>API Keys</CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={keysLoading}
+            >
+              <RefreshCw className={cn(
+                "h-4 w-4",
+                keysLoading && "animate-spin"
+              )} />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
@@ -117,18 +144,26 @@ const DeveloperTab = () => {
               value={newKeyName}
               onChange={(e) => setNewKeyName(e.target.value)}
               className="max-w-sm"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleGenerate();
+              }}
             />
-            <Button onClick={handleGenerate} disabled={generateMutation.isPending}>
+            <Button 
+              onClick={handleGenerate} 
+              disabled={generateMutation.isPending}
+            >
               <Plus className="h-4 w-4 mr-2" />
               {generateMutation.isPending ? 'Generating...' : 'Generate'}
             </Button>
           </div>
+
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertCircle className="h-4 w-4" />
               <span className="ml-2">{error}</span>
             </Alert>
           )}
+
           {showRawKey && (
             <Alert className="bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800 mb-4">
               <Key className="h-4 w-4 text-yellow-700 dark:text-yellow-400" />
@@ -138,10 +173,11 @@ const DeveloperTab = () => {
               </span>
             </Alert>
           )}
+
           {keysLoading ? (
             <div className="text-sm text-gray-500">Loading keys...</div>
-          ) : keys?.length === 0 ? (
-            <div className="text-sm text-gray-500">No API keys yet.</div>
+          ) : keysList.length === 0 ? (
+            <div className="text-sm text-gray-500">No API keys yet. Generate one to get started.</div>
           ) : (
             <Table>
               <TableHeader>
@@ -151,28 +187,30 @@ const DeveloperTab = () => {
                   <TableHead>Created</TableHead>
                   <TableHead>Last Used</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead></TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {keys?.map((key) => (
+                {keysList.map((key) => (
                   <TableRow key={key.id}>
-                    <TableCell>{key.name}</TableCell>
+                    <TableCell className="font-medium">{key.name}</TableCell>
                     <TableCell className="font-mono text-sm">…{key.key_preview}</TableCell>
                     <TableCell>{new Date(key.created_at).toLocaleDateString()}</TableCell>
-                    <TableCell>{key.last_used ? new Date(key.last_used).toLocaleString() : 'Never'}</TableCell>
+                    <TableCell>
+                      {key.last_used ? new Date(key.last_used).toLocaleString() : 'Never'}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={key.is_active ? 'default' : 'destructive'}>
                         {key.is_active ? 'Active' : 'Revoked'}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-right">
                       {key.is_active && (
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRevoke(key.id)}
-                          className="text-red-500 hover:text-red-700"
+                          onClick={() => handleRevoke(key.id, key.name)}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -197,7 +235,7 @@ const DeveloperTab = () => {
         <CardContent>
           {usageLoading ? (
             <div className="text-sm text-gray-500">Loading usage data...</div>
-          ) : usage?.length === 0 ? (
+          ) : usage.length === 0 ? (
             <div className="text-sm text-gray-500">No usage data yet.</div>
           ) : (
             <div className="h-64">
@@ -224,11 +262,11 @@ const DeveloperTab = () => {
           <CardContent>
             {symbolsLoading ? (
               <div className="text-sm text-gray-500">Loading...</div>
-            ) : topSymbols?.length === 0 ? (
+            ) : topSymbols.length === 0 ? (
               <div className="text-sm text-gray-500">No symbol data yet.</div>
             ) : (
               <ul className="space-y-2">
-                {topSymbols?.slice(0, 5).map((item) => (
+                {topSymbols.slice(0, 5).map((item) => (
                   <li key={item.symbol} className="flex justify-between items-center">
                     <span className="font-medium">{item.symbol}</span>
                     <span className="text-sm text-gray-500">{item.count} requests</span>
@@ -246,20 +284,24 @@ const DeveloperTab = () => {
           <CardContent className="max-h-72 overflow-y-auto">
             {activityLoading ? (
               <div className="text-sm text-gray-500">Loading...</div>
-            ) : activities?.length === 0 ? (
+            ) : activities.length === 0 ? (
               <div className="text-sm text-gray-500">No activity yet.</div>
             ) : (
               <ul className="space-y-3">
-                {activities?.map((act, idx) => (
-                  <li key={idx} className="text-sm border-b border-gray-100 dark:border-gray-800 pb-2">
+                {activities.map((act, idx) => (
+                  <li key={idx} className="text-sm border-b border-gray-100 dark:border-gray-800 pb-2 last:border-0">
                     <div className="flex justify-between">
                       <span className="font-medium">{act.action}</span>
-                      <span className="text-xs text-gray-400">{new Date(act.timestamp).toLocaleString()}</span>
+                      <span className="text-xs text-gray-400">
+                        {act.timestamp ? new Date(act.timestamp).toLocaleString() : 'N/A'}
+                      </span>
                     </div>
                     {act.details && Object.keys(act.details).length > 0 && (
                       <div className="text-xs text-gray-500 mt-1">
                         {Object.entries(act.details).map(([k, v]) => (
-                          <span key={k} className="mr-2">{k}: {JSON.stringify(v)}</span>
+                          <span key={k} className="mr-2">
+                            {k}: {typeof v === 'string' ? v : JSON.stringify(v)}
+                          </span>
                         ))}
                       </div>
                     )}

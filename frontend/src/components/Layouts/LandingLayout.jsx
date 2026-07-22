@@ -1,4 +1,4 @@
-// layouts/PublicLayout.jsx
+// layouts/LandingLayout.jsx
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -9,25 +9,22 @@ const propTypes = {
   className: PropTypes.string,
 };
 
-export const PublicLayout = ({ className = '' }) => {
+export const LandingLayout = ({ className = '' }) => {
   return (
     <div 
       className={cn(
         'min-h-screen flex flex-col',
+        'bg-gradient-to-br from-white via-gray-50 to-gray-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950',
         className
       )}
     >
-      <main 
-        className="flex-grow"
-        role="main"
-        aria-label="Public content"
-      >
+      <main className="flex-grow" role="main" aria-label="Landing page content">
         <Outlet />
       </main>
     </div>
   );
 };
 
-PublicLayout.propTypes = propTypes;
+LandingLayout.propTypes = propTypes;
 
-export default PublicLayout;
+export default LandingLayout;

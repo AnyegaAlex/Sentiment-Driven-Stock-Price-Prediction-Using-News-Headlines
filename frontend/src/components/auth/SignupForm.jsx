@@ -1,7 +1,7 @@
 // components/auth/SignupForm.jsx
 import React, { useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { Link } from 'react-router-dom';
+import AuthService from '@/services/authService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
@@ -20,11 +20,16 @@ const PASSWORD_REQUIREMENTS = [
   { id: 'special', label: 'Contains a special character', test: (p) => /[^a-zA-Z0-9]/.test(p) },
 ];
 
+const DISPOSABLE_DOMAINS = [
+  'tempmail.com', '10minutemail.com', 'guerrillamail.com',
+  'throwaway.com', 'mailinator.com', 'trashmail.com',
+];
+
 // ============================================================================
 // Sub-Components
 // ============================================================================
 
-const PasswordRequirement = ({ label, met }) => (
+const PasswordRequirement = React.memo(({ label, met }) => (
   <div className="flex items-center gap-2 text-sm" role="listitem">
     {met ? (
       <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
@@ -35,11 +40,11 @@ const PasswordRequirement = ({ label, met }) => (
       {label}
     </span>
   </div>
-);
+));
 
 PasswordRequirement.displayName = 'PasswordRequirement';
 
-const FieldError = ({ error }) => {
+const FieldError = React.memo(({ error }) => {
   if (!error) return null;
   return (
     <div className="flex items-start gap-1.5 mt-1 text-red-500 text-sm animate-slide-down" role="alert">
@@ -47,11 +52,11 @@ const FieldError = ({ error }) => {
       <span>{error}</span>
     </div>
   );
-};
+});
 
 FieldError.displayName = 'FieldError';
 
-const PasswordStrength = ({ password }) => {
+const PasswordStrength = React.memo(({ password }) => {
   const strength = useMemo(() => {
     if (!password) return { score: 0, label: '', color: '' };
     let score = 0;
@@ -94,7 +99,7 @@ const PasswordStrength = ({ password }) => {
       </div>
     </div>
   );
-};
+});
 
 PasswordStrength.displayName = 'PasswordStrength';
 
@@ -102,24 +107,7 @@ PasswordStrength.displayName = 'PasswordStrength';
 // Main Component
 // ============================================================================
 
-/**
- * SignupForm – Production-ready registration form.
- *
- * Features:
- * - Real-time validation with visual feedback
- * - Password strength indicator and requirements checklist
- * - Show/hide password toggles
- * - Field-level and general error handling (dismissible)
- * - Fully accessible (ARIA, keyboard, focus management)
- * - Responsive and dark mode ready
- * - Loading state with spinner
- *
- * @component
- */
-export const SignupForm = () => {
-  const { register } = useAuth();
-  const navigate = useNavigate();
-
+export const SignupForm = ({ onSuccess, onError }) => {
   // ---- State ----
   const [form, setForm] = useState({ username: '', email: '', password: '', password2: '' });
   const [fieldErrors, setFieldErrors] = useState({});
@@ -129,11 +117,41 @@ export const SignupForm = () => {
   const [loading, setLoading] = useState(false);
   const [generalError, setGeneralError] = useState('');
 
+  // ---- Validation Helpers ----
+  const isEmailValid = useMemo(() => {
+    if (!form.email) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
+  }, [form.email]);
+
+  const isDisposableEmail = useMemo(() => {
+    if (!form.email) return false;
+    const domain = form.email.split('@')[1]?.toLowerCase();
+    return DISPOSABLE_DOMAINS.includes(domain);
+  }, [form.email]);
+
+  const passwordMeetsRequirements = useMemo(() => {
+    return PASSWORD_REQUIREMENTS.every((req) => req.test(form.password));
+  }, [form.password]);
+
+  const passwordsMatch = useMemo(() => {
+    return form.password && form.password2 && form.password === form.password2;
+  }, [form.password, form.password2]);
+
+  const isFormValid = useMemo(() => {
+    return (
+      form.username.trim().length >= 3 &&
+      form.username.trim().length <= 30 &&
+      isEmailValid &&
+      !isDisposableEmail &&
+      passwordMeetsRequirements &&
+      passwordsMatch
+    );
+  }, [form.username, isEmailValid, isDisposableEmail, passwordMeetsRequirements, passwordsMatch]);
+
   // ---- Handlers ----
   const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
-    // Clear field-specific errors and general error when typing
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: null }));
     }
@@ -147,29 +165,34 @@ export const SignupForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isFormValid) return;
+
     setLoading(true);
     setGeneralError('');
     setFieldErrors({});
 
     try {
-      await register(form.username, form.email, form.password, form.password2);
-      navigate('/check-email');
-    } catch (err) {
-      const data = err.response?.data;
-      if (data && typeof data === 'object') {
-        const fieldErrors = {};
-        let firstError = '';
-        Object.entries(data).forEach(([key, value]) => {
-          if (Array.isArray(value) && value.length > 0) {
-            fieldErrors[key] = value[0];
-            if (!firstError) firstError = value[0];
-          }
-        });
-        setFieldErrors(fieldErrors);
-        if (firstError) setGeneralError(firstError);
+      const result = await AuthService.register({
+        username: form.username.trim(),
+        email: form.email.trim().toLowerCase(),
+        password: form.password,
+        password2: form.password2,
+      });
+
+      if (result.success) {
+        onSuccess?.(form.email);
       } else {
-        setGeneralError(data?.message || 'Registration failed. Please try again.');
+        if (result.details) {
+          setFieldErrors(result.details);
+        }
+        const errorMsg = result.error || 'Registration failed. Please try again.';
+        setGeneralError(errorMsg);
+        onError?.(result);
       }
+    } catch (err) {
+      const errorMsg = err.message || 'Registration failed. Please try again.';
+      setGeneralError(errorMsg);
+      onError?.(err);
     } finally {
       setLoading(false);
     }
@@ -177,25 +200,6 @@ export const SignupForm = () => {
 
   const getFieldError = useCallback((field) => fieldErrors[field] || null, [fieldErrors]);
   const isFieldTouched = useCallback((field) => touched[field] || false, [touched]);
-
-  // ---- Password validation ----
-  const password = form.password;
-  const passwordMeetsRequirements = useMemo(() => {
-    return PASSWORD_REQUIREMENTS.every((req) => req.test(password));
-  }, [password]);
-
-  const passwordsMatch = useMemo(() => {
-    return form.password && form.password2 && form.password === form.password2;
-  }, [form.password, form.password2]);
-
-  const isFormValid = useMemo(() => {
-    return (
-      form.username.trim().length >= 3 &&
-      form.email.includes('@') &&
-      passwordMeetsRequirements &&
-      passwordsMatch
-    );
-  }, [form, passwordMeetsRequirements, passwordsMatch]);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5" noValidate>
@@ -210,6 +214,7 @@ export const SignupForm = () => {
           value={form.username}
           onChange={handleChange}
           onBlur={handleBlur}
+          maxLength={30}
           className={cn(
             'h-11 transition-all duration-200',
             getFieldError('username') && isFieldTouched('username')
@@ -238,13 +243,14 @@ export const SignupForm = () => {
           value={form.email}
           onChange={handleChange}
           onBlur={handleBlur}
+          maxLength={100}
           className={cn(
             'h-11 transition-all duration-200',
             getFieldError('email') && isFieldTouched('email')
               ? 'border-red-500 focus:ring-red-500'
               : 'focus:ring-blue-500'
           )}
-          aria-invalid={!!getFieldError('email')}
+          aria-invalid={!!getFieldError('email') || isDisposableEmail}
           aria-describedby={getFieldError('email') ? 'email-error' : undefined}
           required
           disabled={loading}
@@ -252,6 +258,11 @@ export const SignupForm = () => {
         />
         {getFieldError('email') && (
           <FieldError error={getFieldError('email')} id="email-error" />
+        )}
+        {isDisposableEmail && isFieldTouched('email') && (
+          <div className="text-sm text-yellow-500 mt-1">
+            Please use a permanent email address
+          </div>
         )}
       </div>
 
@@ -378,7 +389,7 @@ export const SignupForm = () => {
         )}
       </div>
 
-      {/* General Error – Dismissible */}
+      {/* General Error */}
       {generalError && (
         <Alert variant="destructive" className="animate-slide-down" role="alert">
           <AlertCircle className="h-4 w-4" />
@@ -413,13 +424,13 @@ export const SignupForm = () => {
       {/* Form Footer */}
       <p className="text-center text-sm text-gray-500 dark:text-gray-400">
         By creating an account, you agree to our{' '}
-        <a href="/terms" className="text-blue-600 hover:underline dark:text-blue-400">
+        <Link to="/terms" className="text-blue-600 hover:underline dark:text-blue-400">
           Terms of Service
-        </a>{' '}
+        </Link>{' '}
         and{' '}
-        <a href="/privacy" className="text-blue-600 hover:underline dark:text-blue-400">
+        <Link to="/privacy" className="text-blue-600 hover:underline dark:text-blue-400">
           Privacy Policy
-        </a>
+        </Link>
       </p>
     </form>
   );

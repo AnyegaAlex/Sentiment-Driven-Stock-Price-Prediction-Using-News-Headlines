@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/services/api';
+import apiClient from '@/services/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -14,16 +14,15 @@ import {
   AlertCircle, CheckCircle 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { trackEvent } from '@/utils/analytics';
 import GeneralTab from '@/components/settings/GeneralTab';
 import NotificationsTab from '@/components/settings/NotificationsTab';
 import DisplayTab from '@/components/settings/DisplayTab';
 import SecurityTab from '@/components/settings/SecurityTab';
 import AccountTab from '@/components/settings/AccountTab';
-import DeveloperTab from '@/components/settings/DeveloperTab'; // ✅ added
+import DeveloperTab from '@/components/settings/DeveloperTab';
 
 const Settings = () => {
-  const { user, refreshProfile } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('general');
   const [saveStatus, setSaveStatus] = useState(null);
@@ -33,28 +32,28 @@ const Settings = () => {
   const { data: preferences, isLoading, error, refetch } = useQuery({
     queryKey: ['preferences'],
     queryFn: async () => {
-      const response = await api.get('/auth/preferences/');
+      const response = await apiClient.get('/auth/preferences/');
       return response.data || {};
     },
     staleTime: 5 * 60 * 1000,
     enabled: !!user,
   });
 
-  // ---- Profile Update (for General Tab) ----
+  // ---- Profile Update ----
   const profileMutation = useMutation({
     mutationFn: async (data) => {
-      const response = await api.patch('/auth/profile/update/', data);
+      const response = await apiClient.patch('/auth/profile/update/', data);
       return response.data;
     },
     onSuccess: () => {
-      refreshProfile();
+      queryClient.invalidateQueries(['user']);
     },
   });
 
   // ---- Preferences Update ----
   const preferencesMutation = useMutation({
     mutationFn: async (data) => {
-      const response = await api.patch('/auth/preferences/', data);
+      const response = await apiClient.patch('/auth/preferences/', data);
       return response.data;
     },
     onSuccess: () => {
@@ -62,31 +61,42 @@ const Settings = () => {
     },
   });
 
-  // ---- Combined Save Handler ----
-  const handleSave = async (formData, tab = 'general') => {
+  // ---- Save Handlers ----
+  const handleGeneralSave = async (formData) => {
     setSaveStatus({ type: 'saving', message: 'Saving...' });
 
     try {
-      if (tab === 'general') {
-        await profileMutation.mutateAsync({
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-        });
-        await preferencesMutation.mutateAsync({
-          language: formData.language,
-          timezone: formData.timezone,
-          theme: formData.theme,
-        });
-      } else {
-        await preferencesMutation.mutateAsync(formData);
-      }
+      await profileMutation.mutateAsync({
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+      });
+      await preferencesMutation.mutateAsync({
+        language: formData.language,
+        timezone: formData.timezone,
+        theme: formData.theme,
+      });
 
       setSaveStatus({ type: 'success', message: 'Settings saved successfully!' });
-      trackEvent('settings_saved', { tab });
     } catch (error) {
       setSaveStatus({
         type: 'error',
         message: error.response?.data?.message || 'Failed to save settings',
+      });
+    } finally {
+      setTimeout(() => setSaveStatus(null), 3000);
+    }
+  };
+
+  const handlePreferencesSave = async (formData, tab) => {
+    setSaveStatus({ type: 'saving', message: 'Saving...' });
+
+    try {
+      await preferencesMutation.mutateAsync(formData);
+      setSaveStatus({ type: 'success', message: 'Preferences saved successfully!' });
+    } catch (error) {
+      setSaveStatus({
+        type: 'error',
+        message: error.response?.data?.message || 'Failed to save preferences',
       });
     } finally {
       setTimeout(() => setSaveStatus(null), 3000);
@@ -115,7 +125,7 @@ const Settings = () => {
               Failed to Load Settings
             </h3>
             <p className="text-gray-500 dark:text-gray-400 mt-2">
-              {error.message}
+              {error.message || 'Unable to load your preferences'}
             </p>
             <Button onClick={() => refetch()} variant="outline" className="mt-4">
               Retry
@@ -131,7 +141,7 @@ const Settings = () => {
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'display', label: 'Display', icon: Monitor },
     { id: 'security', label: 'Security', icon: Shield },
-    { id: 'developer', label: 'Developer', icon: Code }, // ✅ new tab
+    { id: 'developer', label: 'Developer', icon: Code },
     { id: 'account', label: 'Account', icon: Trash2 },
   ];
 
@@ -196,7 +206,7 @@ const Settings = () => {
         <TabsContent value="general">
           <GeneralTab 
             preferences={preferences} 
-            onSave={(data) => handleSave(data, 'general')}
+            onSave={handleGeneralSave}
             isSaving={saveStatus?.type === 'saving'}
           />
         </TabsContent>
@@ -204,7 +214,7 @@ const Settings = () => {
         <TabsContent value="notifications">
           <NotificationsTab 
             preferences={preferences} 
-            onSave={(data) => handleSave(data, 'notifications')}
+            onSave={(data) => handlePreferencesSave(data, 'notifications')}
             isSaving={saveStatus?.type === 'saving'}
           />
         </TabsContent>
@@ -212,7 +222,7 @@ const Settings = () => {
         <TabsContent value="display">
           <DisplayTab 
             preferences={preferences} 
-            onSave={(data) => handleSave(data, 'display')}
+            onSave={(data) => handlePreferencesSave(data, 'display')}
             isSaving={saveStatus?.type === 'saving'}
           />
         </TabsContent>
@@ -221,7 +231,6 @@ const Settings = () => {
           <SecurityTab user={user} />
         </TabsContent>
 
-        {/* ✅ Developer Tab – Phase 2 */}
         <TabsContent value="developer">
           <DeveloperTab />
         </TabsContent>

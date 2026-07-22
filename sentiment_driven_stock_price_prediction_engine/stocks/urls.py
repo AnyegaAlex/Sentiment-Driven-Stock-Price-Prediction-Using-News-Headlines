@@ -13,7 +13,7 @@ from .views import (
     DriftDetectionView,
     SHAPExplanationView,
 )
-
+from . import views
 urlpatterns = [
     # Legacy stock opinion
     path('stock-opinion/', StockOpinionView.as_view(), name='stock-opinion'),
@@ -56,4 +56,6 @@ urlpatterns = [
     
     # SHAP explanation for a specific prediction
     path('shap/<int:prediction_id>/', SHAPExplanationView.as_view(), name='shap'),
+
+    path('cron/resolve-predictions/', views.cron_resolve_predictions, name='cron_resolve'),
 ]

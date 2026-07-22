@@ -16,14 +16,17 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { api } from '@/services/api';
+import apiClient from '@/services/client'; // ✅ Fixed import
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { AlertCircle, Trash2, AlertTriangle } from 'lucide-react';
+import { AlertCircle, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
+
+// Constants
+const CONFIRM_TEXT = 'DELETE';
 
 const AccountTab = () => {
   const { logout } = useAuth();
@@ -34,9 +37,23 @@ const AccountTab = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // ---- Helper: Redirect to Login ----
+  const redirectToLogin = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
+  // ---- Handle Account Deletion ----
   const handleDeleteAccount = async () => {
-    if (confirmText !== 'DELETE') {
-      setError('Please type "DELETE" to confirm');
+    // ✅ Validate password
+    if (!password) {
+      setError('Please enter your password to confirm');
+      return;
+    }
+
+    // ✅ Validate confirmation text
+    if (confirmText !== CONFIRM_TEXT) {
+      setError(`Please type "${CONFIRM_TEXT}" to confirm`);
       return;
     }
 
@@ -44,28 +61,37 @@ const AccountTab = () => {
     setError('');
 
     try {
-      const response = await api.post('/auth/delete-account/', { password, confirm: confirmText });
-      // If we get a response with logout flag
-      if (response.data?.logout) {
-          logout();
-          navigate('/login');
-      } else {
-          // Fallback
-          logout();
-          navigate('/login');
-      }
-  } catch (err) {
-      // If 401, the account was deleted and token is invalid – treat as success
+      const response = await apiClient.post('/auth/delete-account/', {
+        password,
+        confirm: confirmText,
+      });
+
+      // ✅ Success – redirect to login
+      redirectToLogin();
+    } catch (err) {
+      // ✅ If 401, the account was deleted and token is invalid – treat as success
       if (err.response?.status === 401) {
-          logout();
-          navigate('/login');
-      } else {
-          setError(err.response?.data?.error || 'Failed to delete account');
+        redirectToLogin();
+        return;
       }
-  } finally {
+
+      // ✅ Handle other errors
+      setError(err.response?.data?.error || err.message || 'Failed to delete account');
+    } finally {
       setLoading(false);
-  }
-};
+    }
+  };
+
+  // ---- Reset Dialog State ----
+  const handleDialogOpenChange = (open) => {
+    if (!open) {
+      // Reset state when dialog closes
+      setConfirmText('');
+      setPassword('');
+      setError('');
+    }
+    setIsDeleteDialogOpen(open);
+  };
 
   return (
     <Card>
@@ -108,7 +134,7 @@ const AccountTab = () => {
         </div>
 
         {/* Delete Confirmation Dialog */}
-        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <Dialog open={isDeleteDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="text-red-600 dark:text-red-400 flex items-center gap-2">
@@ -128,30 +154,42 @@ const AccountTab = () => {
                 </AlertDescription>
               </Alert>
 
+              {/* Password Input */}
               <div className="space-y-2">
-                <Label htmlFor="delete-password">Enter your password to confirm</Label>
+                <Label htmlFor="delete-password">
+                  Enter your password to confirm
+                  <span className="text-red-500 ml-1">*</span>
+                </Label>
                 <Input
                   id="delete-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
+                  autoComplete="current-password"
+                  disabled={loading}
+                  required
                 />
               </div>
 
+              {/* Confirmation Input */}
               <div className="space-y-2">
                 <Label htmlFor="delete-confirm">
-                  Type <span className="font-mono font-bold">DELETE</span> to confirm
+                  Type <span className="font-mono font-bold">{CONFIRM_TEXT}</span> to confirm
+                  <span className="text-red-500 ml-1">*</span>
                 </Label>
                 <Input
                   id="delete-confirm"
                   value={confirmText}
-                  onChange={(e) => setConfirmText(e.target.value)}
-                  placeholder="Type DELETE"
+                  onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
+                  placeholder={`Type ${CONFIRM_TEXT}`}
                   className="font-mono"
+                  disabled={loading}
+                  required
                 />
               </div>
 
+              {/* Error Message */}
               {error && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -163,7 +201,8 @@ const AccountTab = () => {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsDeleteDialogOpen(false)}
+                  onClick={() => handleDialogOpenChange(false)}
+                  disabled={loading}
                   className="w-full sm:w-auto"
                 >
                   Cancel
@@ -172,10 +211,21 @@ const AccountTab = () => {
                   type="button"
                   variant="destructive"
                   onClick={handleDeleteAccount}
-                  disabled={loading || confirmText !== 'DELETE'}
+                  disabled={
+                    loading ||
+                    confirmText !== CONFIRM_TEXT ||
+                    !password
+                  }
                   className="w-full sm:w-auto"
                 >
-                  {loading ? 'Deleting...' : 'Delete Account'}
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete Account'
+                  )}
                 </Button>
               </DialogFooter>
             </div>

@@ -1,5 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
-import PropTypes from "prop-types";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import {
   Select,
   SelectContent,
@@ -16,54 +15,136 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Info, Loader2, ExternalLink, Newspaper } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Info, Loader2, ExternalLink, Newspaper, RefreshCw } from "lucide-react";
 import { AiFillSmile, AiFillMeh, AiFillFrown } from "react-icons/ai";
 import KeyPhraseChip from "@/components/KeyPhraseChip";
 import { useSymbolsQuery } from "@/hooks/queries/useSymbolsQuery";
 import { useNewsQuery } from "@/hooks/queries/useNewsQuery";
 import { useDashboard } from "@/context/DashboardContext";
+import { cn } from "@/lib/utils";
+
+// Constants
+const SENTIMENT_FILTERS = [
+  { value: 'all', label: 'All Sentiments' },
+  { value: 'positive', label: 'Positive' },
+  { value: 'neutral', label: 'Neutral' },
+  { value: 'negative', label: 'Negative' },
+];
+
+const SENTIMENT_ICONS = {
+  positive: <AiFillSmile className="w-5 h-5 text-green-600 dark:text-green-400" />,
+  neutral: <AiFillMeh className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />,
+  negative: <AiFillFrown className="w-5 h-5 text-red-600 dark:text-red-400" />,
+};
+
+const PLACEHOLDER_IMAGE = "/placeholder-news.jpg";
+
+// Helper: Format date
+const formatDate = (dateString) => {
+  if (!dateString) return 'Unknown date';
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString('en-US', { 
+    month: 'short', 
+    day: 'numeric',
+    year: diffDays > 365 ? 'numeric' : undefined,
+  });
+};
+
+// Helper: Truncate text
+const truncateText = (text, maxLength = 150) => {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + '...';
+};
 
 const NewsAnalysis = () => {
   const { stockSymbol, setStockSymbol } = useDashboard();
 
-  // Local state: start from global symbol, allow dropdown to change
+  // Local state
   const [selectedSymbol, setSelectedSymbol] = useState(stockSymbol || "");
   const [sentimentFilter, setSentimentFilter] = useState('all');
   const [expandedPhrases, setExpandedPhrases] = useState({});
 
-  // Sync with global symbol when it changes
+  // Queries
+  const { 
+    data: availableSymbols = [], 
+    isLoading: symbolsLoading,
+    error: symbolsError,
+    refetch: refetchSymbols,
+  } = useSymbolsQuery();
+
+  const { 
+    data: news = [], 
+    isLoading: newsLoading, 
+    error: newsError,
+    refetch: refetchNews,
+  } = useNewsQuery(selectedSymbol, {
+    enabled: !!selectedSymbol,
+  });
+
+  // Find symbol name
+  const getSymbolName = useCallback((symbol) => {
+    if (!symbol) return "Stocks";
+    const found = availableSymbols.find(s => 
+      s.symbol === symbol || s === symbol
+    );
+    if (typeof found === 'string') return found;
+    return found?.name || symbol;
+  }, [availableSymbols]);
+
+  // Get symbol display
+  const symbolDisplayName = useMemo(() => {
+    return getSymbolName(selectedSymbol);
+  }, [selectedSymbol, getSymbolName]);
+
+  // Sync with global symbol
   useEffect(() => {
     if (stockSymbol) {
       setSelectedSymbol(stockSymbol);
     }
   }, [stockSymbol]);
 
-  // When user changes dropdown, update global context
-  const handleSymbolChange = (symbol) => {
+  // Handle symbol change
+  const handleSymbolChange = useCallback((symbol) => {
     setSelectedSymbol(symbol);
     if (symbol) {
       setStockSymbol(symbol);
     }
-  };
+  }, [setStockSymbol]);
 
-  // React Query – symbols and news
-  const { data: availableSymbols = [], isLoading: symbolsLoading } = useSymbolsQuery();
-  const { data: news = [], isLoading: newsLoading, error: newsError } = useNewsQuery(selectedSymbol);
+  // Handle retry
+  const handleRetry = useCallback(() => {
+    if (newsError) {
+      refetchNews();
+    }
+    if (symbolsError) {
+      refetchSymbols();
+    }
+  }, [newsError, symbolsError, refetchNews, refetchSymbols]);
 
-  const filteredNews = sentimentFilter === "all"
-    ? news
-    : news.filter(item => item.sentiment === sentimentFilter);
+  // Filter news
+  const filteredNews = useMemo(() => {
+    if (sentimentFilter === "all") return news;
+    return news.filter(item => item.sentiment === sentimentFilter);
+  }, [news, sentimentFilter]);
 
-  const sentimentIcons = {
-    positive: <AiFillSmile className="w-5 h-5 text-green-600 dark:text-green-400" />,
-    neutral: <AiFillMeh className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />,
-    negative: <AiFillFrown className="w-5 h-5 text-red-600 dark:text-red-400" />,
-  };
-
+  // Toggle key phrases
   const toggleExpandPhrases = useCallback((index) => {
     setExpandedPhrases(prev => ({ ...prev, [index]: !prev[index] }));
   }, []);
 
+  // Render key phrases
   const renderKeyPhrases = useCallback((item, index) => {
     if (!item.key_phrases) return null;
 
@@ -71,17 +152,24 @@ const NewsAnalysis = () => {
       ? item.key_phrases
       : item.key_phrases.split(",").map(p => p.trim()).filter(Boolean);
 
+    if (phrases.length === 0) return null;
+
     const isExpanded = expandedPhrases[index];
     const visiblePhrases = isExpanded ? phrases : phrases.slice(0, 5);
 
     return (
       <div className="mt-2 flex flex-col gap-2">
         <div className="flex flex-wrap gap-2">
-          {visiblePhrases.map(phrase => (
+          {visiblePhrases.map((phrase) => (
             <KeyPhraseChip
               key={`${phrase}-${index}`}
               phrase={phrase}
-              onClick={() => console.log("Clicked phrase:", phrase)}
+              onClick={() => {
+                // Track phrase click (replace with actual analytics)
+                if (window.gtag) {
+                  window.gtag('event', 'phrase_click', { phrase });
+                }
+              }}
             />
           ))}
         </div>
@@ -89,21 +177,24 @@ const NewsAnalysis = () => {
           <button
             className="text-primary hover:underline font-medium text-sm self-start"
             onClick={() => toggleExpandPhrases(index)}
+            aria-expanded={isExpanded}
           >
-            {isExpanded ? "Show Less" : "Show More..."}
+            {isExpanded ? "Show Less" : `Show More (${phrases.length - 5})`}
           </button>
         )}
       </div>
     );
   }, [expandedPhrases, toggleExpandPhrases]);
 
+  // Get badge class
   const getBadgeClass = useCallback((type, value) => {
     const base = "dark:bg-opacity-20 dark:text-opacity-90";
     if (type === "sentiment") {
       if (value === "positive") return `${base} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`;
       if (value === "negative") return `${base} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`;
       return `${base} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`;
-    } else if (type === "reliability") {
+    }
+    if (type === "reliability") {
       if (value >= 80) return `${base} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`;
       if (value >= 50) return `${base} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`;
       return `${base} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`;
@@ -111,37 +202,55 @@ const NewsAnalysis = () => {
     return "";
   }, []);
 
+  // Combined loading state
   const isLoading = symbolsLoading || newsLoading;
-  const error = newsError;
+  const hasError = newsError || symbolsError;
+
+  // Empty state
+  const showEmptyState = !isLoading && !hasError && filteredNews.length === 0;
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6 text-center dark:text-white">
-        News Analysis for {selectedSymbol || "Stocks"}
-      </h1>
+      {/* Header */}
+      <div className="text-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          News Analysis for {symbolDisplayName}
+        </h1>
+        {selectedSymbol && (
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Latest news and sentiment for {symbolDisplayName}
+          </p>
+        )}
+      </div>
 
       {/* Filters */}
-      <div className="mb-8 flex flex-col sm:flex-row justify-center gap-4">
+      <div className="mb-8 flex flex-col sm:flex-row justify-center items-center gap-4">
         <Select
           value={selectedSymbol}
           onValueChange={handleSymbolChange}
           disabled={isLoading || availableSymbols.length === 0}
         >
-          <SelectTrigger className="w-full sm:w-[200px] dark:bg-gray-800 dark:border-gray-700">
-            <SelectValue placeholder={availableSymbols.length ? "Select Symbol" : "Loading symbols..."} />
+          <SelectTrigger className="w-full sm:w-[220px] dark:bg-gray-800 dark:border-gray-700">
+            <SelectValue placeholder={
+              symbolsLoading ? "Loading symbols..." : 
+              availableSymbols.length ? "Select Symbol" : "No symbols available"
+            } />
           </SelectTrigger>
-          <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
+          <SelectContent className="dark:bg-gray-800 dark:border-gray-700 max-h-60">
             {availableSymbols.map((sym) => {
-              // sym is an object { symbol, name, region }
-              const symbolValue = sym.symbol;
-              const displayName = sym.name || symbolValue;
+              const symbolValue = typeof sym === 'string' ? sym : sym.symbol;
+              const symbolName = typeof sym === 'string' ? sym : (sym.name || sym.symbol);
+              
               return (
                 <SelectItem
                   key={symbolValue}
                   value={symbolValue}
                   className="dark:hover:bg-gray-700"
                 >
-                  {symbolValue} – {displayName}
+                  <span className="font-medium">{symbolValue}</span>
+                  {symbolName !== symbolValue && (
+                    <span className="text-gray-400 ml-2">– {symbolName}</span>
+                  )}
                 </SelectItem>
               );
             })}
@@ -153,140 +262,187 @@ const NewsAnalysis = () => {
           onValueChange={setSentimentFilter}
           disabled={isLoading}
         >
-          <SelectTrigger className="w-full sm:w-[200px] dark:bg-gray-800 dark:border-gray-700">
+          <SelectTrigger className="w-full sm:w-[180px] dark:bg-gray-800 dark:border-gray-700">
             <SelectValue placeholder="Filter Sentiment" />
           </SelectTrigger>
           <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
-            <SelectItem value="all" className="dark:hover:bg-gray-700">All Sentiments</SelectItem>
-            <SelectItem value="positive" className="dark:hover:bg-gray-700">Positive</SelectItem>
-            <SelectItem value="neutral" className="dark:hover:bg-gray-700">Neutral</SelectItem>
-            <SelectItem value="negative" className="dark:hover:bg-gray-700">Negative</SelectItem>
+            {SENTIMENT_FILTERS.map((filter) => (
+              <SelectItem 
+                key={filter.value} 
+                value={filter.value}
+                className="dark:hover:bg-gray-700"
+              >
+                {filter.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
+
+        {filteredNews.length > 0 && (
+          <Badge variant="outline" className="text-sm">
+            {filteredNews.length} article{filteredNews.length > 1 ? 's' : ''}
+          </Badge>
+        )}
       </div>
 
-      {/* Content */}
-      {isLoading ? (
+      {/* Loading State */}
+      {isLoading && (
         <div className="flex justify-center items-center h-64">
-          <Loader2 className="w-12 h-12 animate-spin text-primary" />
+          <div className="text-center">
+            <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
+            <p className="mt-4 text-gray-500 dark:text-gray-400">
+              {symbolsLoading ? 'Loading symbols...' : 'Loading news...'}
+            </p>
+          </div>
         </div>
-      ) : error ? (
-        <Alert variant="destructive" className="mb-8">
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error.message || "Failed to fetch news."}</AlertDescription>
+      )}
+
+      {/* Error State */}
+      {hasError && !isLoading && (
+        <Alert variant="destructive" className="mb-8 max-w-md mx-auto">
+          <AlertTitle className="flex items-center gap-2">
+            <Info className="h-4 w-4" />
+            Error Loading News
+          </AlertTitle>
+          <AlertDescription className="mt-2">
+            {newsError?.message || symbolsError?.message || 'Failed to fetch news. Please try again.'}
+          </AlertDescription>
+          <Button 
+            variant="outline" 
+            onClick={handleRetry}
+            className="mt-3"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
         </Alert>
-      ) : filteredNews.length === 0 ? (
-        <Alert className="mb-8 dark:bg-gray-800 dark:border-gray-700">
-          <AlertTitle>No News Found</AlertTitle>
-          <AlertDescription className="dark:text-gray-400">
-            Try adjusting filters or check back later.
+      )}
+
+      {/* Empty State */}
+      {showEmptyState && (
+        <Alert className="mb-8 max-w-md mx-auto dark:bg-gray-800 dark:border-gray-700">
+          <Newspaper className="h-5 w-5 text-gray-400 mx-auto mb-2" />
+          <AlertTitle className="text-center">No News Found</AlertTitle>
+          <AlertDescription className="text-center dark:text-gray-400">
+            {selectedSymbol 
+              ? `No news articles found for ${symbolDisplayName}. Try adjusting your filters or check back later.`
+              : 'Select a symbol to view news articles.'}
           </AlertDescription>
         </Alert>
-      ) : (
+      )}
+
+      {/* News Grid */}
+      {!isLoading && !hasError && filteredNews.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredNews.map((item, index) => (
             <Card
               key={`${item.url}-${index}`}
-              className="h-full flex flex-col dark:bg-gray-800 dark:border-gray-700"
+              className="h-full flex flex-col transition-shadow hover:shadow-lg dark:bg-gray-800 dark:border-gray-700"
             >
               {/* Image */}
               {item.banner_image_url ? (
                 <img
                   src={item.banner_image_url}
-                  alt={item.title}
+                  alt={item.title || 'News article image'}
                   className="w-full h-48 object-cover rounded-t-lg"
                   loading="lazy"
                   onError={(e) => {
                     e.target.onerror = null;
-                    e.target.src = "/placeholder-news.jpg";
+                    e.target.src = PLACEHOLDER_IMAGE;
                   }}
                 />
               ) : (
                 <div className="w-full h-48 bg-muted dark:bg-gray-700 flex items-center justify-center rounded-t-lg">
-                  <Newspaper className="w-12 h-12 text-muted-foreground" />
+                  <Newspaper className="w-12 h-12 text-muted-foreground dark:text-gray-500" />
                 </div>
               )}
 
               {/* Card Content */}
               <CardContent className="p-4 flex flex-col gap-4 flex-1">
                 {/* Title */}
-                <CardTitle className="text-base font-semibold dark:text-white">
+                <CardTitle className="text-base font-semibold dark:text-white line-clamp-2">
                   <a
                     href={item.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary hover:underline inline-flex items-center gap-1"
+                    className="hover:underline inline-flex items-start gap-1"
                   >
-                    {item.title}
-                    <ExternalLink className="inline-block w-3 h-3 ml-1" />
+                    {item.title || 'Untitled Article'}
+                    <ExternalLink className="inline-block w-3 h-3 mt-0.5 flex-shrink-0" />
                   </a>
                 </CardTitle>
 
                 {/* Summary */}
                 <CardDescription className="text-sm line-clamp-3 dark:text-gray-400">
-                  {item.summary || "No summary available"}
+                  {truncateText(item.summary, 150)}
                 </CardDescription>
 
                 {/* Metadata Grid */}
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="space-y-0.5">
                     <p className="text-muted-foreground dark:text-gray-500">Source</p>
-                    <p className="font-medium dark:text-gray-300">{item.source || "Unknown"}</p>
+                    <p className="font-medium dark:text-gray-300 truncate">
+                      {item.source || "Unknown"}
+                    </p>
                   </div>
                   <div className="space-y-0.5">
                     <p className="text-muted-foreground dark:text-gray-500">Published</p>
                     <p className="font-medium dark:text-gray-300">
-                      {new Date(item.published_at).toLocaleDateString()}
+                      {formatDate(item.published_at)}
                     </p>
                   </div>
                 </div>
 
                 {/* Reliability */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground dark:text-gray-500">Reliability:</span>
-                  <Badge className={getBadgeClass("reliability", item.source_reliability)}>
-                    {item.source_reliability}%
-                  </Badge>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Info className="w-4 h-4 text-muted-foreground cursor-pointer" />
-                    </TooltipTrigger>
-                    <TooltipContent side="top" sideOffset={4} className="max-w-[200px] dark:bg-gray-900">
-                      Source reliability score based on historical accuracy.
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
+                {item.source_reliability !== undefined && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground dark:text-gray-500">Reliability:</span>
+                    <Badge className={getBadgeClass("reliability", item.source_reliability)}>
+                      {item.source_reliability}%
+                    </Badge>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="w-4 h-4 text-muted-foreground cursor-pointer" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" sideOffset={4} className="max-w-[200px] dark:bg-gray-900">
+                        Source reliability score based on historical accuracy.
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                )}
 
                 {/* Sentiment & Confidence */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground dark:text-gray-500">Sentiment:</span>
-                    {sentimentIcons[item.sentiment] || sentimentIcons.neutral}
+                    {SENTIMENT_ICONS[item.sentiment] || SENTIMENT_ICONS.neutral}
                     <Badge className={getBadgeClass("sentiment", item.sentiment)}>
                       {item.sentiment?.charAt(0)?.toUpperCase() + item.sentiment?.slice(1) || "Unknown"}
                     </Badge>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground dark:text-gray-500">Confidence:</span>
-                    <div className="flex-1 relative h-2 rounded bg-gray-200 dark:bg-gray-700">
-                      <div
-                        className="absolute top-0 left-0 h-full rounded bg-primary transition-all"
-                        style={{ width: `${Math.min(100, Math.round(item.confidence * 100))}%` }}
-                      />
+                  {item.confidence !== undefined && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground dark:text-gray-500">Confidence:</span>
+                      <div className="flex-1 relative h-2 rounded bg-gray-200 dark:bg-gray-700">
+                        <div
+                          className="absolute top-0 left-0 h-full rounded bg-primary transition-all"
+                          style={{ width: `${Math.min(100, Math.round(item.confidence * 100))}%` }}
+                        />
+                      </div>
+                      <span className="text-xs w-12 text-right dark:text-gray-400">
+                        {Math.round(item.confidence * 100)}%
+                      </span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="w-4 h-4 text-muted-foreground cursor-pointer" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" sideOffset={4} className="max-w-[200px] dark:bg-gray-900">
+                          Model confidence in sentiment analysis.
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
-                    <span className="text-xs w-12 text-right dark:text-gray-400">
-                      {Math.round(item.confidence * 100)}%
-                    </span>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="w-4 h-4 text-muted-foreground cursor-pointer" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top" sideOffset={4} className="max-w-[200px] dark:bg-gray-900">
-                        Model confidence in sentiment analysis.
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
+                  )}
                 </div>
 
                 {/* Key Phrases */}
@@ -301,10 +457,6 @@ const NewsAnalysis = () => {
       )}
     </div>
   );
-};
-
-NewsAnalysis.propTypes = {
-  // no symbol prop needed – it uses global context
 };
 
 export default NewsAnalysis;
