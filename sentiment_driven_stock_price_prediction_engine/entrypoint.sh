@@ -1,46 +1,79 @@
 #!/bin/bash
 set -e
 
-# Create logs directory
-mkdir -p /app/logs
+# Create necessary directories
+mkdir -p /app/logs /app/staticfiles /app/media
 touch /app/logs/app.log
 
-echo "Starting entrypoint script..."
+echo "=========================================="
+echo "Tickflow Sentiment - Starting up..."
+echo "=========================================="
 
-# Run migrations (continue even if they fail)
+# Wait for database to be ready
+if [ -n "$DATABASE_URL" ]; then
+    echo "Waiting for database..."
+    python manage.py wait_for_db 2>/dev/null || echo "Database wait skipped"
+fi
+
+# Run migrations
 echo "Running migrations..."
-python manage.py migrate --noinput || echo "⚠️ Migration failed – continuing anyway..."
+python manage.py migrate --noinput || {
+    echo "⚠️ Migration failed – continuing anyway..."
+}
 
-# Generate API key if it doesn't exist
+# Create superuser if environment variables are set
+if [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ -n "$DJANGO_SUPERUSER_EMAIL" ] && [ -n "$DJANGO_SUPERUSER_PASSWORD" ]; then
+    echo "Creating superuser..."
+    python manage.py createsuperuser --noinput \
+        --username "$DJANGO_SUPERUSER_USERNAME" \
+        --email "$DJANGO_SUPERUSER_EMAIL" 2>/dev/null || echo "Superuser already exists"
+fi
+
+# Generate API key using UserAPIKey model
 echo "Checking for API key..."
-python manage.py shell << EOF
-from authentication.models import APIKey
-if not APIKey.objects.filter(name="Production Frontend").exists():
-    key = APIKey.objects.create(name="Production Frontend")
-    print(f"✅ Generated API Key: {key.key}")
+python manage.py shell << 'EOF'
+import os
+from django.contrib.auth import get_user_model
+from authentication.models import UserAPIKey
+
+User = get_user_model()
+
+# Get or create admin user
+admin_user = User.objects.filter(is_superuser=True).first()
+if not admin_user:
+    print("No admin user found. Creating default admin...")
+    admin_user = User.objects.create_superuser(
+        username=os.environ.get('ADMIN_USERNAME', 'admin'),
+        email=os.environ.get('ADMIN_EMAIL', 'admin@tickflow.com'),
+        password=os.environ.get('ADMIN_PASSWORD', 'changeme123')
+    )
+    print(f"✅ Default admin user created: {admin_user.username}")
+
+# Check if API key exists
+existing_key = UserAPIKey.objects.filter(user=admin_user, is_active=True).first()
+if existing_key:
+    print(f"✅ Existing API Key: {existing_key.name}")
 else:
-    key = APIKey.objects.get(name="Production Frontend")
-    print(f"✅ Existing API Key: {key.key}")
+    key_obj, raw_key = UserAPIKey.create_key(admin_user, "Production Frontend")
+    print("=" * 60)
+    print("🔑 NEW API KEY GENERATED")
+    print("=" * 60)
+    print(f"   Name: {key_obj.name}")
+    print(f"   Key:  {raw_key}")
+    print("=" * 60)
+    print("⚠️  IMPORTANT: Save this key now.")
+    print("   Add to environment: API_KEY=" + raw_key)
+    print("=" * 60)
 EOF
 
 # Collect static files
 echo "Collecting static files..."
-python manage.py collectstatic --noinput
+python manage.py collectstatic --noinput || echo "Static files collection skipped"
 
-# Start Celery only if enabled and Celery is installed
-if [ "$ENABLE_CELERY" = "true" ] && command -v celery &> /dev/null && [ -n "$REDIS_URL" ]; then
-    echo "Starting Celery worker..."
-    celery -A sentiment_driven_stock_price_prediction_engine worker \
-        --loglevel=info \
-        --pool=solo \
-        --concurrency=1 \
-        --max-tasks-per-child=50 &
-else
-    echo "Celery not enabled or not installed – skipping."
-fi
-
-# Start Gunicorn on Render's PORT (default 10000)
+# Start Gunicorn
+echo "=========================================="
 echo "Starting Gunicorn on port ${PORT:-10000}..."
+echo "=========================================="
 exec gunicorn \
     --workers=1 \
     --threads=2 \
