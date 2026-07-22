@@ -20,7 +20,7 @@ from typing import Dict, Any, Optional
 
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
-from django.core.validators import EmailValidator, ValidationError
+from django.core.validators import EmailValidator, ValidationError, RegexValidator
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -128,7 +128,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             'username': {
                 'help_text': USERNAME_HELP_TEXT,
                 'validators': [
-                    serializers.RegexValidator(
+                    RegexValidator(  
                         regex=USERNAME_REGEX,
                         message=USERNAME_HELP_TEXT
                     )
@@ -219,7 +219,7 @@ class EmailVerificationCodeSerializer(serializers.Serializer):
         min_length=6,
         max_length=6,
         validators=[
-            serializers.RegexValidator(
+            RegexValidator(  
                 regex=r'^[0-9]{6}$',
                 message="Verification code must be exactly 6 digits."
             )
@@ -323,7 +323,7 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(
         required=False,
         validators=[
-            serializers.RegexValidator(
+            RegexValidator(  
                 regex=USERNAME_REGEX,
                 message=USERNAME_HELP_TEXT
             )
@@ -430,7 +430,7 @@ class ChangeUsernameSerializer(serializers.Serializer):
         min_length=3,
         max_length=30,
         validators=[
-            serializers.RegexValidator(
+            RegexValidator(  
                 regex=USERNAME_REGEX,
                 message=USERNAME_HELP_TEXT
             )

@@ -35,7 +35,6 @@ from .views import (
     ChangePasswordView,
     ChangeEmailView,
     ChangeUsernameView,
-    GenerateAPIKeyView,
 
     # Preferences & Watchlist
     UserPreferencesView,
@@ -78,9 +77,6 @@ urlpatterns = [
     path('profile/change-email/', ChangeEmailView.as_view(), name='change-email'),
     path('profile/change-username/', ChangeUsernameView.as_view(), name='change-username'),
     path('change-password/', ChangePasswordView.as_view(), name='change-password-simple'),
-
-    # Legacy API Key (auto‑generated per user)
-    path('api-key/generate/', GenerateAPIKeyView.as_view(), name='generate-api-key'),
 
     # ========================================================================
     # API KEY MANAGEMENT (Phase 2 – multi‑key support)
