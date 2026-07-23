@@ -291,7 +291,7 @@ export const useAuth = () => {
       const response = await apiClient.post('/auth/login/', { username, password });
       const { access, refresh, user: userData } = response.data.data || response.data;
       if (!access || !refresh) throw new Error('Invalid login response');
-
+  
       const storage = rememberMe ? localStorage : sessionStorage;
       storage.setItem(STORAGE_KEYS.ACCESS_TOKEN, access);
       storage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refresh);
@@ -304,22 +304,23 @@ export const useAuth = () => {
       updateUser(userData, rememberMe);
       updateLastActivity();
       startActivityMonitor();
-
+  
       console.info('[Auth] Login successful', {
         userId: userData?.id,
         email_verified: userData?.email_verified,
         onboarded: userData?.onboarded,
         rememberMe,
       });
-
-      // ✅ Only refresh if user is NOT onboarded or email not verified
-      if (!userData.onboarded || !userData.email_verified) {
-        console.info('[Auth] User needs verification, refreshing profile...');
+  
+      // ✅ Only refresh if user is ALREADY onboarded and verified
+      // For new users (onboarded: false), the onboarding flow will handle the refresh
+      if (userData.onboarded && userData.email_verified) {
+        console.info('[Auth] User already onboarded and verified, refreshing profile...');
         await refreshUser();
       } else {
-        console.info('[Auth] User already onboarded and verified, skipping refresh');
+        console.info('[Auth] User needs onboarding or verification, skipping refresh');
       }
-
+  
       return { success: true, user: userData };
     } catch (err) {
       console.error('[Auth] Login error:', err);
