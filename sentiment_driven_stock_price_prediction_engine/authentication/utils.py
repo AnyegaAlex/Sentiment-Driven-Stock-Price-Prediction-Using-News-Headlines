@@ -301,23 +301,6 @@ def verify_password_reset_token(uid, token):
 def send_email_async(subject, to_email, html_content, plain_content=None, retry_count=EMAIL_MAX_RETRIES):
     """
     Send email asynchronously using SendGrid Web API with SMTP fallback.
-    
-    Features:
-    - Uses SendGrid Web API (primary)
-    - Falls back to Django SMTP if SendGrid fails
-    - Sends both HTML and plain text versions
-    - Retries on failure with exponential backoff
-    - Runs in background thread (non-blocking)
-    
-    Args:
-        subject (str): Email subject
-        to_email (str): Recipient email address
-        html_content (str): HTML version of email
-        plain_content (str, optional): Plain text version (auto-generated if not provided)
-        retry_count (int): Number of retry attempts
-    
-    Returns:
-        bool: True if email was queued successfully, False otherwise
     """
     if not validate_email(to_email):
         logger.error(f"Invalid email address: {to_email}")
@@ -328,22 +311,23 @@ def send_email_async(subject, to_email, html_content, plain_content=None, retry_
         
         for attempt in range(retry_count):
             try:
+                # ✅ CRITICAL FIX: Ensure plain_text is always defined
+                if plain_content is None:
+                    plain_text = strip_html_tags(html_content)
+                else:
+                    plain_text = plain_content
+
                 # --- Primary: SendGrid Web API ---
                 try:
                     from sendgrid import SendGridAPIClient
                     from sendgrid.helpers.mail import Mail
 
-                    # Generate plain text if not provided
-                    if plain_content is None:
-                        plain_content = strip_html_tags(html_content)
-
-                    # Create mail with both HTML and plain text
                     message = Mail(
                         from_email=settings.DEFAULT_FROM_EMAIL,
                         to_emails=to_email,
                         subject=subject,
                         html_content=html_content,
-                        plain_text_content=plain_content,
+                        plain_text_content=plain_text,
                     )
 
                     sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
@@ -356,12 +340,11 @@ def send_email_async(subject, to_email, html_content, plain_content=None, retry_
                         logger.error(f"[SendGrid] Failed for {to_email}: {response.status_code}")
                         last_error = f"SendGrid error: {response.status_code}"
                         
-                        # Don't retry on client errors (4xx) except rate limiting
                         if 400 <= response.status_code < 500 and response.status_code != 429:
                             raise Exception(f"SendGrid client error: {response.status_code}")
 
                 except ImportError as e:
-                    logger.warning(f"[Email] SendGrid not installed: {e}, falling back to SMTP")
+                    logger.warning(f"[Email] SendGrid not installed: {e}")
                     last_error = "SendGrid not installed"
                 except Exception as e:
                     logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {e}")
@@ -369,12 +352,9 @@ def send_email_async(subject, to_email, html_content, plain_content=None, retry_
 
                 # --- Fallback: Django SMTP ---
                 try:
-                    if plain_content is None:
-                        plain_content = strip_html_tags(html_content)
-
                     send_mail(
                         subject=subject,
-                        message=plain_content,
+                        message=plain_text,
                         from_email=settings.DEFAULT_FROM_EMAIL,
                         recipient_list=[to_email],
                         html_message=html_content,
@@ -393,12 +373,11 @@ def send_email_async(subject, to_email, html_content, plain_content=None, retry_
                     logger.warning(f"[Email] Retry {attempt + 1}/{retry_count} in {wait}s")
                     time.sleep(wait)
                 else:
-                    logger.error(f"[Email] All retries failed for {to_email}: {e}")
+                    logger.error(f"[Email] All retries failed: {e}")
 
         logger.error(f"[Email] Failed after {retry_count} attempts for {to_email}: {last_error}")
         return False
 
-    # Start in background thread
     thread = threading.Thread(target=_send_with_retry, daemon=True)
     thread.start()
     logger.info(f"[Email] Queued for {to_email}: {subject}")

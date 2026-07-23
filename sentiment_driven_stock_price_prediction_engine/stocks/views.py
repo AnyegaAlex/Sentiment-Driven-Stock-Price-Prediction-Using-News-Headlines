@@ -16,6 +16,9 @@ from datetime import datetime
 from authentication.utils import error_response, success_response
 from datetime import datetime, timedelta
 from django.utils import timezone  
+from django.db.models import F
+from django.contrib.auth import get_user_model
+User = get_user_model()
 
 # drf-spectacular for OpenAPI
 from drf_spectacular.utils import (
@@ -1064,16 +1067,29 @@ class LSTMPredictionView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Save prediction to history
+            # ---------- ✅ Save prediction to history with user association ----------
             try:
-                save_prediction(
+                # Get the authenticated user (or None)
+                user = request.user if request.user.is_authenticated else None
+
+                # Save the prediction using the updated save_prediction function
+                prediction_obj = save_prediction(
                     symbol=symbol,
                     movement=result['prediction'],
                     confidence=result['confidence'] / 100.0,
                     sentiment_score=result.get('sentiment_score', 0.0),
                     headline=news_text,
-                    source='lstm'
+                    source='lstm',
+                    user=user,               # ✅ Pass user
+                    price_at_prediction=result.get('current_price')  # optional
                 )
+
+                # ✅ Increment user's predictions count (if user is authenticated)
+                if user:
+                    User.objects.filter(id=user.id).update(
+                        predictions_count=F('predictions_count') + 1
+                    )
+
             except Exception as e:
                 logger.warning(f"Failed to save prediction record for {symbol}: {e}")
 

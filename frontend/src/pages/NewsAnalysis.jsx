@@ -93,17 +93,32 @@ const NewsAnalysis = () => {
     enabled: !!selectedSymbol,
   });
 
+  // ✅ Build symbol options – includes current selected symbol
+  const symbolOptions = useMemo(() => {
+    const options = availableSymbols.map(sym => ({
+      value: typeof sym === 'string' ? sym : sym.symbol,
+      label: typeof sym === 'string' ? sym : (sym.name || sym.symbol),
+    }));
+    
+    // ✅ If selectedSymbol is not in options, add it
+    if (selectedSymbol && !options.some(opt => opt.value === selectedSymbol)) {
+      options.unshift({
+        value: selectedSymbol,
+        label: selectedSymbol,
+      });
+    }
+    
+    return options;
+  }, [availableSymbols, selectedSymbol]);
+
   // Find symbol name
   const getSymbolName = useCallback((symbol) => {
     if (!symbol) return "Stocks";
-    const found = availableSymbols.find(s => 
-      s.symbol === symbol || s === symbol
-    );
-    if (typeof found === 'string') return found;
-    return found?.name || symbol;
-  }, [availableSymbols]);
+    const found = symbolOptions.find(s => s.value === symbol);
+    return found?.label || symbol;
+  }, [symbolOptions]);
 
-  // Get symbol display
+  // Get symbol display name
   const symbolDisplayName = useMemo(() => {
     return getSymbolName(selectedSymbol);
   }, [selectedSymbol, getSymbolName]);
@@ -165,7 +180,6 @@ const NewsAnalysis = () => {
               key={`${phrase}-${index}`}
               phrase={phrase}
               onClick={() => {
-                // Track phrase click (replace with actual analytics)
                 if (window.gtag) {
                   window.gtag('event', 'phrase_click', { phrase });
                 }
@@ -228,32 +242,27 @@ const NewsAnalysis = () => {
         <Select
           value={selectedSymbol}
           onValueChange={handleSymbolChange}
-          disabled={isLoading || availableSymbols.length === 0}
+          disabled={isLoading}
         >
           <SelectTrigger className="w-full sm:w-[220px] dark:bg-gray-800 dark:border-gray-700">
             <SelectValue placeholder={
               symbolsLoading ? "Loading symbols..." : 
-              availableSymbols.length ? "Select Symbol" : "No symbols available"
+              symbolOptions.length ? "Select Symbol" : "No symbols available"
             } />
           </SelectTrigger>
           <SelectContent className="dark:bg-gray-800 dark:border-gray-700 max-h-60">
-            {availableSymbols.map((sym) => {
-              const symbolValue = typeof sym === 'string' ? sym : sym.symbol;
-              const symbolName = typeof sym === 'string' ? sym : (sym.name || sym.symbol);
-              
-              return (
-                <SelectItem
-                  key={symbolValue}
-                  value={symbolValue}
-                  className="dark:hover:bg-gray-700"
-                >
-                  <span className="font-medium">{symbolValue}</span>
-                  {symbolName !== symbolValue && (
-                    <span className="text-gray-400 ml-2">– {symbolName}</span>
-                  )}
-                </SelectItem>
-              );
-            })}
+            {symbolOptions.map((option) => (
+              <SelectItem
+                key={option.value}
+                value={option.value}
+                className="dark:hover:bg-gray-700"
+              >
+                <span className="font-medium">{option.value}</span>
+                {option.label !== option.value && (
+                  <span className="text-gray-400 ml-2">– {option.label}</span>
+                )}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
@@ -357,9 +366,7 @@ const NewsAnalysis = () => {
                 </div>
               )}
 
-              {/* Card Content */}
               <CardContent className="p-4 flex flex-col gap-4 flex-1">
-                {/* Title */}
                 <CardTitle className="text-base font-semibold dark:text-white line-clamp-2">
                   <a
                     href={item.url}
@@ -372,12 +379,10 @@ const NewsAnalysis = () => {
                   </a>
                 </CardTitle>
 
-                {/* Summary */}
                 <CardDescription className="text-sm line-clamp-3 dark:text-gray-400">
                   {truncateText(item.summary, 150)}
                 </CardDescription>
 
-                {/* Metadata Grid */}
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="space-y-0.5">
                     <p className="text-muted-foreground dark:text-gray-500">Source</p>
@@ -393,7 +398,6 @@ const NewsAnalysis = () => {
                   </div>
                 </div>
 
-                {/* Reliability */}
                 {item.source_reliability !== undefined && (
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground dark:text-gray-500">Reliability:</span>
@@ -411,7 +415,6 @@ const NewsAnalysis = () => {
                   </div>
                 )}
 
-                {/* Sentiment & Confidence */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground dark:text-gray-500">Sentiment:</span>
@@ -445,7 +448,6 @@ const NewsAnalysis = () => {
                   )}
                 </div>
 
-                {/* Key Phrases */}
                 <div className="pt-2 border-t border-border dark:border-gray-700">
                   <h4 className="text-sm font-medium mb-2 dark:text-gray-300">Key Phrases</h4>
                   {renderKeyPhrases(item, index)}
@@ -459,4 +461,4 @@ const NewsAnalysis = () => {
   );
 };
 
-export default NewsAnalysis;
+export default React.memo(NewsAnalysis);

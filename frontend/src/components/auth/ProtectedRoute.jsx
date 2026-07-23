@@ -1,3 +1,4 @@
+// components/auth/ProtectedRoute.jsx
 /**
  * Production-Ready Protected Route Component
  * 
@@ -9,8 +10,9 @@
  * - Role/tier-based access control
  * - Demo mode bypass
  * - Customizable fallback paths
+ * - Skip refresh for onboarded users (prevents redirect loops)
  * 
- * @version 2.0.0
+ * @version 3.0.0
  * @author Tickflow Capital
  */
 
@@ -19,17 +21,6 @@ import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 
-/**
- * Protected Route Component
- * 
- * @param {Object} props
- * @param {React.ReactNode} props.children - Child components to render
- * @param {string[]} [props.requiredTiers=[]] - Required user tiers (free, pro, enterprise)
- * @param {boolean} [props.requireVerified=true] - Require email verification
- * @param {string} [props.fallbackPath='/login'] - Redirect path for unauthenticated
- * @param {string} [props.unauthorizedPath='/unauthorized'] - Redirect path for insufficient permissions
- * @param {boolean} [props.allowDemo=false] - Allow demo mode bypass
- */
 const ProtectedRoute = ({
   children,
   requiredTiers = [],
@@ -41,21 +32,21 @@ const ProtectedRoute = ({
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { user, isAuthenticated, isLoading, hasPermission } = useAuth();
-  
-  // ✅ Check for demo mode
+  // ✅ REMOVED: refreshUser, hasRefreshed, useEffect
+
   const isDemo = searchParams.get('demo') === 'true';
-  
-  // ✅ Show loading state
+
+  // ---- Loading state ----
   if (isLoading) {
     return <LoadingSpinner fullScreen label="Verifying your session..." />;
   }
 
-  // ✅ Allow demo access without login (if enabled)
+  // ---- Demo mode ----
   if (allowDemo && isDemo) {
     return children;
   }
 
-  // ✅ Not authenticated – redirect to login and preserve original URL
+  // ---- Not authenticated ----
   if (!isAuthenticated || !user) {
     return (
       <Navigate 
@@ -66,7 +57,12 @@ const ProtectedRoute = ({
     );
   }
 
-  // ✅ Email verification check
+  // ---- ✅ If user is onboarded, skip verification ----
+  if (user.onboarded) {
+    return children;
+  }
+
+  // ---- Email verification check (only for non-onboarded users) ----
   if (requireVerified && !user.email_verified) {
     return (
       <Navigate 
@@ -77,7 +73,7 @@ const ProtectedRoute = ({
     );
   }
 
-  // ✅ Tier/Role-based access control
+  // ---- Tier/Role-based access control ----
   if (requiredTiers.length > 0) {
     const userTier = user.tier || 'free';
     const hasRequiredTier = requiredTiers.includes(userTier);
@@ -98,16 +94,11 @@ const ProtectedRoute = ({
     }
   }
 
-  // ✅ All checks passed – render children
   return children;
 };
 
 /**
  * HOC for protecting routes with specific tier requirements
- * 
- * @param {React.ComponentType} Component - Component to wrap
- * @param {Object} options - Protection options
- * @returns {React.ComponentType} Wrapped component
  */
 export const withProtection = (Component, options = {}) => {
   return function ProtectedComponent(props) {
@@ -123,34 +114,11 @@ export const withProtection = (Component, options = {}) => {
  * Route protection presets for common use cases
  */
 export const RouteProtection = {
-  /**
-   * Free tier and above (all authenticated users)
-   */
   Free: () => <ProtectedRoute requiredTiers={['free', 'pro', 'enterprise']} />,
-  
-  /**
-   * Pro tier and above
-   */
   Pro: () => <ProtectedRoute requiredTiers={['pro', 'enterprise']} />,
-  
-  /**
-   * Enterprise tier only
-   */
   Enterprise: () => <ProtectedRoute requiredTiers={['enterprise']} />,
-  
-  /**
-   * Requires email verification
-   */
   Verified: () => <ProtectedRoute requireVerified={true} />,
-  
-  /**
-   * Public route (no protection) – for demo/landing pages
-   */
   Public: ({ children }) => children,
-  
-  /**
-   * Demo route (bypasses auth when ?demo=true)
-   */
   Demo: () => <ProtectedRoute allowDemo={true} />,
 };
 

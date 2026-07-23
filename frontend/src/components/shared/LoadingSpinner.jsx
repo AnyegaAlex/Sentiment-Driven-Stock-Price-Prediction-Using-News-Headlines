@@ -43,7 +43,7 @@ const LoadingSpinner = ({
   const borderColor = customColor || colorMap[color] || colorMap.blue;
   const sizeStyle = sizeMap[size] || sizeMap.md;
 
-  // ✅ Inline styles - guaranteed to work
+  // Inline styles - guaranteed to work
   const spinnerStyle = {
     width: sizeStyle.width,
     height: sizeStyle.height,
@@ -104,4 +104,6 @@ const LoadingSpinner = ({
 
 LoadingSpinner.propTypes = propTypes;
 
-export default React.memo(LoadingSpinner);
+// ✅ Export both ways – supports default and named imports
+export default LoadingSpinner;
+export { LoadingSpinner };

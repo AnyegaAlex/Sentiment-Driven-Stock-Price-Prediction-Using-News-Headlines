@@ -25,6 +25,10 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import User, UserPreferences, UserAPIKey
+from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework import serializers
+from .models import User
+from .models import PersonaChoices
 
 logger = logging.getLogger(__name__)
 
@@ -294,12 +298,30 @@ class UserProfileSerializer(serializers.ModelSerializer):
     
     NOTE: api_key is intentionally excluded for security.
     """
+
+    persona = serializers.SerializerMethodField()
+    watchlist = serializers.SerializerMethodField()
+    investment_goal = serializers.SerializerMethodField()
+    risk_tolerance = serializers.SerializerMethodField()
+    experience_level = serializers.SerializerMethodField()
+
+    # ✅ New statistics fields
+    analyses_count = serializers.SerializerMethodField()
+    predictions_count = serializers.SerializerMethodField()
+    news_read_count = serializers.SerializerMethodField()
+    prediction_accuracy = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = (
             'id', 'username', 'email', 'first_name', 'last_name',
+            'nickname', 'bio',
             'persona', 'tier', 'email_verified',
-            'onboarded', 'preferences', 'created_at', 'updated_at'
+            'onboarded', 'preferences', 'created_at', 'updated_at',
+            'watchlist', 'investment_goal', 'risk_tolerance', 'experience_level',
+
+            'analyses_count', 'predictions_count', 'news_read_count',
+            'prediction_accuracy', 
         )
         read_only_fields = (
             'id', 'email', 'email_verified',
@@ -312,18 +334,68 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'onboarded': {'help_text': "Whether the user has completed onboarding"},
         }
 
+    def get_persona(self, obj):
+        if hasattr(obj, 'preferences') and obj.preferences:
+            return obj.preferences.persona
+        return None
+    
+    def get_watchlist(self, obj):
+        if hasattr(obj, 'preferences') and obj.preferences:
+            return obj.preferences.watchlist or []
+        return []
+    
+    def get_investment_goal(self, obj):
+        if hasattr(obj, 'preferences') and obj.preferences:
+            return obj.preferences.investment_goal
+        return None
+    
+    def get_risk_tolerance(self, obj):
+        if hasattr(obj, 'preferences') and obj.preferences:
+            return obj.preferences.risk_tolerance
+        return None
+    
+    def get_experience_level(self, obj):
+        if hasattr(obj, 'preferences') and obj.preferences:
+            return obj.preferences.experience_level
+        return None
+    
+    def get_analyses_count(self, obj):
+        return getattr(obj, 'analyses_count', 0)
+
+    def get_predictions_count(self, obj):
+        return getattr(obj, 'predictions_count', 0)
+
+    def get_news_read_count(self, obj):
+        return getattr(obj, 'news_read_count', 0)
+    
+    def get_prediction_accuracy(self, obj):
+        from stocks.models import Prediction
+        total = obj.predictions.filter(is_correct__isnull=False).count()
+        if total == 0:
+            return 0
+        correct = obj.predictions.filter(is_correct=True).count()
+        return round((correct / total) * 100, 1)
+
 
 class UpdateProfileSerializer(serializers.ModelSerializer):
     """
     Serializer for partial profile updates.
 
-    Allows updating first_name, last_name, persona, preferences, username, and onboarded.
-    All fields are optional.
+    Allows updating the following fields (all optional):
+        - first_name, last_name: User's full name
+        - persona: Investment persona (trader, researcher, etc.)
+        - preferences: JSON object for user preferences (theme, notifications, etc.)
+        - username: Unique username (validated for format and uniqueness)
+        - onboarded: Boolean indicating whether onboarding is complete
+        - nickname: Optional nickname
+        - bio: Short biography (max 500 characters)
+
+    All fields are optional, making this suitable for PATCH requests.
     """
     username = serializers.CharField(
         required=False,
         validators=[
-            RegexValidator(  
+            RegexValidator(
                 regex=USERNAME_REGEX,
                 message=USERNAME_HELP_TEXT
             )
@@ -335,24 +407,53 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = (
             'first_name', 'last_name', 'persona', 'preferences',
-            'username', 'onboarded',
+            'username', 'onboarded', 'nickname', 'bio',
         )
         extra_kwargs = {
             'first_name': {'required': False, 'help_text': "First name (optional)"},
             'last_name': {'required': False, 'help_text': "Last name (optional)"},
-            'persona': {'required': False, 'help_text': "User persona"},
-            'preferences': {'required': False, 'help_text': "User preferences"},
+            'persona': {'required': False, 'help_text': "User investment persona"},
+            'preferences': {'required': False, 'help_text': "User preferences (JSON object)"},
             'username': {'required': False, 'help_text': USERNAME_HELP_TEXT},
             'onboarded': {'required': False, 'help_text': "Onboarding completion status"},
+            'nickname': {'required': False, 'help_text': "Optional nickname"},
+            'bio': {'required': False, 'help_text': "Short biography (max 500 characters)"},
         }
 
+    def validate_persona(self, value):
+        """
+        Ensure the persona value is one of the allowed choices.
+        """
+        if value and value not in dict(PersonaChoices.CHOICES).keys():
+            raise serializers.ValidationError(
+                f"Invalid persona '{value}'. Valid choices are: {', '.join(dict(PersonaChoices.CHOICES).keys())}"
+            )
+        return value
+
+    def validate_bio(self, value):
+        """
+        Limit bio length to 500 characters.
+        """
+        if value and len(value) > 500:
+            raise serializers.ValidationError("Bio must be at most 500 characters.")
+        return value
+
+    def validate_preferences(self, value):
+        """
+        Ensure preferences is a valid JSON object (dict).
+        """
+        if value is not None and not isinstance(value, dict):
+            raise serializers.ValidationError("Preferences must be a JSON object.")
+        return value
+
     def validate_username(self, value: str) -> str:
-        """Validate username is not already taken (case-insensitive)."""
+        """
+        Validate username uniqueness (case‑insensitive).
+        """
         user = self.instance
         if User.objects.filter(username__iexact=value).exclude(id=user.id).exists():
             raise serializers.ValidationError("This username is already taken.")
         return value
-
 
 class ChangePasswordSerializer(serializers.Serializer):
     """

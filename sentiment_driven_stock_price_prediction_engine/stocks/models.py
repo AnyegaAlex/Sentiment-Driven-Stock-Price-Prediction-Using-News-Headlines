@@ -71,6 +71,18 @@ class Prediction(models.Model):
     )
 
     # ============================================================
+    # ✅ User Association
+    # ============================================================
+    user = models.ForeignKey(
+        'authentication.User',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='predictions',
+        help_text="User who requested this prediction"
+    )
+
+    # ============================================================
     #  – Accuracy Tracking
     # ============================================================
     
@@ -161,6 +173,7 @@ class Prediction(models.Model):
             models.Index(fields=['stock_symbol', '-date']),
             models.Index(fields=['is_correct']),
             models.Index(fields=['resolution_date']),
+            models.Index(fields=['user', '-date']),
         ]
 
     def __str__(self):

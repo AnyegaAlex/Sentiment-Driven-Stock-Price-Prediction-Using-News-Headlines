@@ -30,8 +30,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 
 /** Navigation links (primary) */
 const NAV_LINKS = [
-  { label: 'Documentation', url: 'https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/' },
-  { label: 'API', url: 'https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/' },
+  { label: 'API Documentation', url: 'https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/' },
   { label: 'GitHub', url: 'https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines' },
   { label: 'Contact', url: 'mailto:anyega.alex.kamau@gmail.com' },
 ];

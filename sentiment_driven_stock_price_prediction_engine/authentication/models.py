@@ -221,6 +221,42 @@ class User(AbstractUser):
         help_text="Date when the account will be permanently deleted."
     )
 
+    # ============================================================
+    #  Usage Statistics
+    # ============================================================
+    analyses_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Total number of stock analyses performed."
+    )
+    predictions_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Total number of LSTM predictions generated."
+    )
+    news_read_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Total number of news articles viewed."
+    )
+
+    # ============================================================
+    # Cached Prediction Accuracy (new)
+    # ============================================================
+    prediction_accuracy = models.FloatField(
+        default=0.0,
+        help_text="Cached average prediction accuracy as percentage (0-100)."
+    )
+
+    nickname = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="User's preferred nickname (optional)."
+    )
+    bio = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Short biography about the user (optional)."
+    )
+
     class Meta:
         indexes = [
             models.Index(fields=['email']),

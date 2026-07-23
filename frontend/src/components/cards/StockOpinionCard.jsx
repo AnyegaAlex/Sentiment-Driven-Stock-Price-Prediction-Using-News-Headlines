@@ -20,6 +20,7 @@
  */
 
 import React, { useMemo, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { useStockOpinionQuery } from '@/hooks/queries/useStockOpinionQuery';
 import { usePredictionHistoryQuery } from '@/hooks/queries/usePredictionHistoryQuery';
@@ -85,16 +86,53 @@ const RECOMMENDATION_DISPLAY = {
 };
 
 // ============================================================================
-// Sub-Components (with missing‑data fallbacks)
+// Helper Functions
+// ============================================================================
+
+/**
+ * Normalize recommendation string to match RECOMMENDATION_CONFIG keys
+ */
+const normalizeRecommendation = (rec) => {
+  if (!rec) return 'HOLD';
+  const normalized = rec.toUpperCase().replace(/\s+/g, '_');
+  return RECOMMENDATION_CONFIG[normalized] ? normalized : 'HOLD';
+};
+
+/**
+ * Get confidence percentage safely
+ */
+const getConfidencePercent = (confidence) => {
+  if (typeof confidence !== 'number') return 0;
+  return Math.round(confidence * 100);
+};
+
+/**
+ * Format SMA value – handles null/undefined
+ */
+const formatSMA = (value) => {
+  if (value === null || value === undefined) return 'N/A';
+  return `$${value.toFixed(2)}`;
+};
+
+/**
+ * Calculate SMA diff – handles null/undefined
+ */
+const calculateSMADiff = (currentPrice, sma) => {
+  if (sma === null || sma === undefined || sma === 0) return 0;
+  return ((currentPrice - sma) / sma) * 100;
+};
+
+// ============================================================================
+// Sub-Components
 // ============================================================================
 
 const Section = ({ title, icon: Icon, children }) => (
   <div className="space-y-3">
     <div className="flex items-center gap-2">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800/80 text-gray-500 dark:text-gray-400">
+      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800/80 dark:text-gray-400">
         <Icon className="h-4 w-4" aria-hidden="true" />
       </div>
-      <h3 className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 tracking-wide uppercase">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300 sm:text-sm">
         {title}
       </h3>
     </div>
@@ -108,17 +146,14 @@ Section.propTypes = {
   children: PropTypes.node.isRequired,
 };
 
-// ✅ Displays "N/A" for zero SMAs
 const PriceOverviewCard = ({ currentPrice, sma50, sma200 }) => {
-  const sma50Diff = sma50 ? ((currentPrice - sma50) / sma50) * 100 : 0;
-  const sma200Diff = sma200 ? ((currentPrice - sma200) / sma200) * 100 : 0;
-
-  const formatSMA = (value) => (value === 0 ? 'N/A' : `$${value.toFixed(2)}`);
+  const sma50Diff = calculateSMADiff(currentPrice, sma50);
+  const sma200Diff = calculateSMADiff(currentPrice, sma200);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 sm:p-5 dark:border-gray-700/50 dark:bg-gray-800/30">
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/50 dark:bg-gray-800/30 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">Current Price</span>
+        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">Current Price</span>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -130,22 +165,22 @@ const PriceOverviewCard = ({ currentPrice, sma50, sma200 }) => {
               <Info className="h-4 w-4" aria-hidden="true" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="top" className="bg-gray-900 text-gray-100 border-gray-800">
+          <TooltipContent side="top" className="border-gray-800 bg-gray-900 text-gray-100">
             <p className="text-sm">Last traded price</p>
           </TooltipContent>
         </Tooltip>
       </div>
-      <div className="text-2xl font-bold text-gray-900 dark:text-gray-50 sm:text-3xl font-mono">
+      <div className="font-mono text-2xl font-bold text-gray-900 dark:text-gray-50 sm:text-3xl">
         ${currentPrice.toFixed(2)}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4">
         <div className="space-y-1">
           <div className="text-xs text-gray-500 dark:text-gray-400">SMA 50</div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs sm:text-sm font-mono text-gray-700 dark:text-gray-300">
+            <span className="font-mono text-xs text-gray-700 dark:text-gray-300 sm:text-sm">
               {formatSMA(sma50)}
             </span>
-            {sma50 !== 0 && (
+            {sma50 !== null && sma50 !== undefined && sma50 !== 0 && (
               <Badge className={cn('text-xs font-medium', sma50Diff >= 0 ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
                 {formatPercentage(sma50Diff)}
               </Badge>
@@ -155,10 +190,10 @@ const PriceOverviewCard = ({ currentPrice, sma50, sma200 }) => {
         <div className="space-y-1">
           <div className="text-xs text-gray-500 dark:text-gray-400">SMA 200</div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs sm:text-sm font-mono text-gray-700 dark:text-gray-300">
+            <span className="font-mono text-xs text-gray-700 dark:text-gray-300 sm:text-sm">
               {formatSMA(sma200)}
             </span>
-            {sma200 !== 0 && (
+            {sma200 !== null && sma200 !== undefined && sma200 !== 0 && (
               <Badge className={cn('text-xs font-medium', sma200Diff >= 0 ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
                 {formatPercentage(sma200Diff)}
               </Badge>
@@ -172,8 +207,13 @@ const PriceOverviewCard = ({ currentPrice, sma50, sma200 }) => {
 
 PriceOverviewCard.propTypes = {
   currentPrice: PropTypes.number.isRequired,
-  sma50: PropTypes.number.isRequired,
-  sma200: PropTypes.number.isRequired,
+  sma50: PropTypes.number,
+  sma200: PropTypes.number,
+};
+
+PriceOverviewCard.defaultProps = {
+  sma50: null,
+  sma200: null,
 };
 
 const SentimentCard = ({ percentage, direction }) => {
@@ -186,9 +226,9 @@ const SentimentCard = ({ percentage, direction }) => {
   const Icon = config.icon;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 sm:p-5 dark:border-gray-700/50 dark:bg-gray-800/30">
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/50 dark:bg-gray-800/30 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">Market Sentiment</span>
+        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">Market Sentiment</span>
         <Badge className={cn('border font-medium', config.color.badge)}>
           <Icon className="mr-1 h-3 w-3" aria-hidden="true" />
           {config.label}
@@ -219,16 +259,15 @@ SentimentCard.propTypes = {
   direction: PropTypes.oneOf(['up', 'down', 'neutral']).isRequired,
 };
 
-// ✅ Displays "—" when RSI is zero
 const RSIIndicator = ({ value }) => {
-  if (value === 0) {
+  if (value === null || value === undefined || value === 0) {
     return (
       <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/30 dark:bg-gray-800/20">
         <div className="flex items-center justify-between">
           <span className="text-xs text-gray-500 dark:text-gray-400">RSI (14)</span>
           <Badge variant="outline" className="text-xs text-gray-400">N/A</Badge>
         </div>
-        <div className="mt-2 text-2xl font-bold text-gray-400 dark:text-gray-500 font-mono">—</div>
+        <div className="mt-2 font-mono text-2xl font-bold text-gray-400 dark:text-gray-500">—</div>
         <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">Data unavailable</div>
       </div>
     );
@@ -241,7 +280,7 @@ const RSIIndicator = ({ value }) => {
         <span className="text-xs text-gray-500 dark:text-gray-400">RSI (14)</span>
         <Badge className={cn('text-xs font-medium', status.color.badge)}>{status.label}</Badge>
       </div>
-      <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-50 font-mono">
+      <div className="mt-2 font-mono text-2xl font-bold text-gray-900 dark:text-gray-50">
         {value.toFixed(1)}
       </div>
       <div className="mt-1 h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
@@ -254,18 +293,17 @@ const RSIIndicator = ({ value }) => {
   );
 };
 
-RSIIndicator.propTypes = { value: PropTypes.number.isRequired };
+RSIIndicator.propTypes = { value: PropTypes.number };
 
-// ✅ Displays "N/A" when support/resistance is zero
 const SupportResistanceIndicator = ({ type, value, current }) => {
-  if (value === 0) {
+  if (value === null || value === undefined || value === 0) {
     return (
       <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/30 dark:bg-gray-800/20">
         <div className="flex items-center justify-between">
           <span className="text-xs capitalize text-gray-500 dark:text-gray-400">{type}</span>
           <Badge variant="outline" className="text-xs text-gray-400">N/A</Badge>
         </div>
-        <div className="mt-2 text-2xl font-bold text-gray-400 dark:text-gray-500 font-mono">—</div>
+        <div className="mt-2 font-mono text-2xl font-bold text-gray-400 dark:text-gray-500">—</div>
         <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">Data unavailable</div>
       </div>
     );
@@ -289,7 +327,7 @@ const SupportResistanceIndicator = ({ type, value, current }) => {
           {formatPercentage(distance)}
         </Badge>
       </div>
-      <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-50 font-mono">
+      <div className="mt-2 font-mono text-2xl font-bold text-gray-900 dark:text-gray-50">
         ${value.toFixed(2)}
       </div>
       <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{status}</div>
@@ -299,18 +337,17 @@ const SupportResistanceIndicator = ({ type, value, current }) => {
 
 SupportResistanceIndicator.propTypes = {
   type: PropTypes.oneOf(['support', 'resistance']).isRequired,
-  value: PropTypes.number.isRequired,
+  value: PropTypes.number,
   current: PropTypes.number.isRequired,
 };
 
-// ✅ Displays "—" when volume is zero
 const VolumeIndicator = ({ volume }) => (
   <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/30 dark:bg-gray-800/20">
     <div className="flex items-center justify-between">
       <span className="text-xs text-gray-500 dark:text-gray-400">Volume</span>
       <Activity className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
     </div>
-    <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-50 font-mono">
+    <div className="mt-2 font-mono text-2xl font-bold text-gray-900 dark:text-gray-50">
       {volume > 0 ? formatVolume(volume) : '—'}
     </div>
     <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -319,10 +356,10 @@ const VolumeIndicator = ({ volume }) => (
   </div>
 );
 
-VolumeIndicator.propTypes = { volume: PropTypes.number.isRequired };
+VolumeIndicator.propTypes = { volume: PropTypes.number };
 
 const TargetCard = ({ label, value, current, type }) => {
-  const safeCurrent = current || 1;
+  const safeCurrent = current !== null && current !== undefined ? current : 1;
   const diff = ((value - safeCurrent) / safeCurrent) * 100;
   const config = {
     bullish: { color: COLOR_SCHEMES.positive, icon: TrendingUp },
@@ -333,12 +370,12 @@ const TargetCard = ({ label, value, current, type }) => {
   const Icon = config.icon;
 
   return (
-    <div className={cn('rounded-lg border p-3 sm:p-4', config.color.border, config.color.bg)}>
+    <div className={cn('rounded-lg border p-3', config.color.border, config.color.bg, 'sm:p-4')}>
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
         <Icon className={cn('h-4 w-4', config.color.text)} aria-hidden="true" />
       </div>
-      <div className="text-lg font-bold text-gray-900 dark:text-gray-50 sm:text-xl font-mono">
+      <div className="font-mono text-lg font-bold text-gray-900 dark:text-gray-50 sm:text-xl">
         ${value.toFixed(2)}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -372,7 +409,7 @@ const FactorItem = ({ title, description, impact }) => {
       <div className={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg', config.color.bg)}>
         <Icon className={cn('h-3.5 w-3.5', config.color.text)} aria-hidden="true" />
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         <h4 className="mb-1 text-sm font-medium text-gray-800 dark:text-gray-200">{title}</h4>
         <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">{description}</p>
       </div>
@@ -387,7 +424,7 @@ FactorItem.propTypes = {
 };
 
 const RecommendationBadge = ({ recommendation }) => {
-  const normalizedRec = recommendation?.toUpperCase() || 'HOLD';
+  const normalizedRec = normalizeRecommendation(recommendation);
   const config = RECOMMENDATION_CONFIG[normalizedRec] || RECOMMENDATION_CONFIG.HOLD;
   const Icon = config.icon;
   const displayLabel = RECOMMENDATION_DISPLAY[normalizedRec] || normalizedRec;
@@ -401,24 +438,29 @@ const RecommendationBadge = ({ recommendation }) => {
 };
 
 RecommendationBadge.propTypes = {
-  recommendation: PropTypes.oneOf([
-    'BUY', 'STRONG_BUY', 'SELL', 'STRONG_SELL', 'HOLD', 'NEUTRAL'
-  ]),
+  recommendation: PropTypes.string,
 };
 
-const ConfidenceBadge = ({ confidence }) => (
-  <Badge variant="outline" className="flex h-9 items-center border-gray-200 bg-gray-50 px-3 py-1.5 dark:border-gray-700 dark:bg-gray-800/50">
-    <span className="text-sm text-gray-600 dark:text-gray-300">Confidence</span>
-    <span className="ml-2 text-sm font-bold text-gray-900 dark:text-gray-50">
-      {Math.round((confidence || 0) * 100)}%
-    </span>
-  </Badge>
-);
+const ConfidenceBadge = ({ confidence }) => {
+  const confidencePercent = getConfidencePercent(confidence);
+
+  return (
+    <Badge variant="outline" className="flex h-9 items-center border-gray-200 bg-gray-50 px-3 py-1.5 dark:border-gray-700 dark:bg-gray-800/50">
+      <span className="text-sm text-gray-600 dark:text-gray-300">Confidence</span>
+      <span className="ml-2 text-sm font-bold text-gray-900 dark:text-gray-50">
+        {confidencePercent}%
+      </span>
+    </Badge>
+  );
+};
 
 ConfidenceBadge.propTypes = { confidence: PropTypes.number };
 
+/**
+ * LSTMPredictionBadge – Displays LSTM prediction with proper fallback handling
+ */
 const LSTMPredictionBadge = ({ prediction }) => {
-  if (!prediction || prediction.direction === 'UNAVAILABLE') {
+  if (!prediction) {
     return (
       <Badge variant="outline" className="flex h-9 items-center border-gray-400 bg-gray-100 px-3 py-1.5 text-xs text-gray-600 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-400">
         <Zap className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
@@ -427,25 +469,75 @@ const LSTMPredictionBadge = ({ prediction }) => {
     );
   }
 
-  const isUp = prediction.direction === 'UP';
-  const color = isUp ? COLOR_SCHEMES.positive : COLOR_SCHEMES.negative;
-  const Icon = isUp ? TrendingUp : TrendingDown;
+  const direction = prediction.direction || prediction.predicted_movement || prediction.prediction || null;
+
+  const isUnavailable =
+    !direction ||
+    direction === 'UNAVAILABLE' ||
+    prediction.fallback === true ||
+    prediction.error;
+
+  if (isUnavailable) {
+    const fallbackMessage = prediction.fallback ? ' (Fallback)' : '';
+    const displayDirection = direction || 'Unavailable';
+    return (
+      <Badge variant="outline" className="flex h-9 items-center border-yellow-400 bg-yellow-50 px-3 py-1.5 text-xs text-yellow-700 dark:border-yellow-600 dark:bg-yellow-900/20 dark:text-yellow-400">
+        <Zap className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+        LSTM: {displayDirection}{fallbackMessage}
+      </Badge>
+    );
+  }
+
+  const normalizedDirection = direction.toUpperCase();
+  const isUp = normalizedDirection === 'UP' || normalizedDirection === 'BUY' || normalizedDirection === 'BULLISH';
+  const isDown = normalizedDirection === 'DOWN' || normalizedDirection === 'SELL' || normalizedDirection === 'BEARISH';
+  const isHold = normalizedDirection === 'HOLD' || normalizedDirection === 'NEUTRAL';
+
+  let color, Icon, displayText;
+
+  if (isUp) {
+    color = COLOR_SCHEMES.positive;
+    Icon = TrendingUp;
+    displayText = 'BUY';
+  } else if (isDown) {
+    color = COLOR_SCHEMES.negative;
+    Icon = TrendingDown;
+    displayText = 'SELL';
+  } else {
+    color = COLOR_SCHEMES.neutral;
+    Icon = Minus;
+    displayText = 'HOLD';
+  }
+
+  const confidence =
+    prediction.confidence !== undefined ? prediction.confidence :
+    prediction.confidence_percent !== undefined ? prediction.confidence_percent :
+    null;
+
+  const confidenceDisplay = confidence !== null && confidence !== undefined ? `${Math.round(confidence)}%` : '';
 
   return (
     <Badge className={cn('flex h-9 items-center border px-3 py-1.5 text-sm font-semibold', color.badge)}>
       <Icon className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-      LSTM: {prediction.direction}
-      <span className="ml-1.5 text-xs font-normal opacity-75">
-        {prediction.confidence ? `${prediction.confidence}%` : ''}
-      </span>
+      LSTM: {displayText}
+      {confidenceDisplay && (
+        <span className="ml-1.5 text-xs font-normal opacity-75">
+          {confidenceDisplay}
+        </span>
+      )}
     </Badge>
   );
 };
 
 LSTMPredictionBadge.propTypes = {
   prediction: PropTypes.shape({
-    direction: PropTypes.oneOf(['UP', 'DOWN', 'UNAVAILABLE']),
+    direction: PropTypes.string,
+    predicted_movement: PropTypes.string,
+    prediction: PropTypes.string,
     confidence: PropTypes.number,
+    confidence_percent: PropTypes.number,
+    fallback: PropTypes.bool,
+    error: PropTypes.string,
   }),
 };
 
@@ -454,6 +546,7 @@ LSTMPredictionBadge.propTypes = {
 // ============================================================================
 
 const RecentPredictions = ({ symbol }) => {
+  const navigate = useNavigate();
   const { data: historyData, isLoading, error } = usePredictionHistoryQuery({ symbol, limit: 3 });
 
   const history = useMemo(() => {
@@ -493,7 +586,7 @@ const RecentPredictions = ({ symbol }) => {
           variant="link"
           size="sm"
           className="h-auto p-0 text-xs text-blue-600 dark:text-blue-400"
-          onClick={() => (window.location.href = '/prediction-history')}
+          onClick={() => navigate('/prediction-history')}
         >
           View All <ChevronRight className="ml-0.5 h-3 w-3" />
         </Button>
@@ -567,11 +660,11 @@ const StockOpinionCard = ({
       sentimentDirection,
       technicals: {
         currentPrice,
-        rsi: data.technicalIndicators?.rsi || 0,
-        sma50: data.technicalIndicators?.sma50 || 0,
-        sma200: data.technicalIndicators?.sma200 || 0,
-        support: data.technicalIndicators?.support || 0,
-        resistance: data.technicalIndicators?.resistance || 0,
+        rsi: data.technicalIndicators?.rsi || null,
+        sma50: data.technicalIndicators?.sma50 || null,
+        sma200: data.technicalIndicators?.sma200 || null,
+        support: data.technicalIndicators?.support || null,
+        resistance: data.technicalIndicators?.resistance || null,
         volume: data.technicalIndicators?.volume || 0,
       },
       targets: {
@@ -658,8 +751,7 @@ const StockOpinionCard = ({
   const { sentimentPercentage, sentimentDirection, technicals, targets, lstmPrediction } = derived;
   const recommendation = data.recommendation || 'HOLD';
 
-  // Check if key technical data is missing
-  const hasTechnicalData = technicals.sma50 > 0 || technicals.sma200 > 0;
+  const hasTechnicalData = technicals.sma50 !== null || technicals.sma200 !== null;
 
   return (
     <CardWrapper className={cn('relative overflow-hidden', className)}>
@@ -672,10 +764,19 @@ const StockOpinionCard = ({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1.5">
             <CardTitle className="text-lg font-bold tracking-tight text-gray-900 dark:text-gray-50 sm:text-xl lg:text-2xl">
-              {data.company || symbol}
+              Stock Opinion| {data.company || symbol}
             </CardTitle>
             <CardDescription className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400 sm:text-sm">
-              <span className="font-mono text-gray-700 dark:text-gray-300">{data.symbol}</span>
+              <span className="font-mono font-medium text-gray-700 dark:text-gray-300">
+                {data.symbol}
+              </span>
+              <span className="hidden h-1 w-1 rounded-full bg-gray-400 dark:bg-gray-600 sm:inline-block" />
+              <Badge variant="outline" className="text-xs font-normal capitalize">
+                {riskType} Risk
+              </Badge>
+              <Badge variant="outline" className="text-xs font-normal capitalize">
+                {holdTime.replace('-', ' ')}
+              </Badge>
               <span className="hidden h-1 w-1 rounded-full bg-gray-400 dark:bg-gray-600 sm:inline-block" />
               <span className="flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5" aria-hidden="true" />
@@ -693,14 +794,6 @@ const StockOpinionCard = ({
             <ConfidenceBadge confidence={data.confidence} />
             <LSTMPredictionBadge prediction={lstmPrediction} />
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="border-gray-200 bg-gray-50 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
-            Risk: {riskType.toUpperCase()}
-          </Badge>
-          <Badge variant="outline" className="border-gray-200 bg-gray-50 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
-            Horizon: {holdTime.replace('-', ' ')}
-          </Badge>
         </div>
       </CardHeader>
 
@@ -737,7 +830,7 @@ const StockOpinionCard = ({
           <Section title="Investment Thesis" icon={Shield}>
             <div className="space-y-2 sm:space-y-3">
               {data.keyFactors.map((factor, index) => (
-                <FactorItem key={`${factor.title}-${index}`} title={factor.title} description={factor.description} impact={factor.impact} />
+                <FactorItem key={`factor-${index}`} title={factor.title} description={factor.description} impact={factor.impact} />
               ))}
             </div>
           </Section>
@@ -775,5 +868,15 @@ StockOpinionCard.propTypes = {
   onError: PropTypes.func,
   onDataLoaded: PropTypes.func,
 };
+
+StockOpinionCard.defaultProps = {
+  riskType: 'medium',
+  holdTime: 'medium-term',
+  className: '',
+  onError: null,
+  onDataLoaded: null,
+};
+
+StockOpinionCard.displayName = 'StockOpinionCard';
 
 export default StockOpinionCard;

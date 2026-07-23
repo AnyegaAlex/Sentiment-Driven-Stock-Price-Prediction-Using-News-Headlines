@@ -162,7 +162,7 @@ export const AuthService = {
   },
 
   // ==========================================================================
-  // Registration
+  // Registration (✅ FINAL FIX)
   // ==========================================================================
 
   async register({ username, email, password, password2 }) {
@@ -173,15 +173,49 @@ export const AuthService = {
         password,
         password2,
       });
-      
-      const { user } = response.data.data || response.data;
-      return { success: true, user };
+
+      // ✅ Check if response exists
+      if (!response || !response.data) {
+        throw new Error('No response from server');
+      }
+
+      // ✅ The user data is at the root level
+      // Response: { username, email, first_name, last_name }
+      // OR: { success: true, data: { username, email, ... } }
+      const userData = response.data.data?.user || response.data.data || response.data;
+
+      if (!userData || typeof userData !== 'object') {
+        throw new Error('Invalid registration response');
+      }
+
+      console.log('[AuthService] Registration successful:', userData);
+
+      return { success: true, user: userData };
     } catch (error) {
       console.error('[AuthService] Registration failed:', error);
+      
+      // Extract field-specific errors
+      const errorData = error.response?.data;
+      const fieldErrors = {};
+      let generalError = error.message || 'Registration failed';
+      
+      if (errorData && typeof errorData === 'object') {
+        Object.entries(errorData).forEach(([key, value]) => {
+          if (Array.isArray(value) && value.length > 0) {
+            fieldErrors[key] = value[0];
+            if (!generalError) generalError = value[0];
+          } else if (typeof value === 'string') {
+            fieldErrors[key] = value;
+            if (!generalError) generalError = value;
+          }
+        });
+      }
+      
       return {
         success: false,
         user: null,
-        error: error.message || 'Registration failed',
+        error: generalError,
+        details: fieldErrors,
         code: error.code || 500,
       };
     }

@@ -1,90 +1,132 @@
 /**
- * Breadcrumbs Component
+ * Breadcrumbs Component – v2.0.0
  *
  * Displays the current navigation path with clickable links.
  * Uses the global context symbol when on the dashboard page.
  *
  * Features:
- * - Responsive design
+ * - Responsive design with Tailwind
  * - Keyboard accessible
  * - Shows current page as active (non-clickable)
  * - Uses global symbol for dashboard breadcrumb
- * - Clean, minimal styling
+ * - Clean, minimal styling with shadcn/ui
+ * - Clears symbol when navigating to dashboard root
+ * - Memoized for performance
+ *
+ * @component
+ * @returns {JSX.Element}
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronRight, Home } from 'lucide-react';
 import { useDashboard } from '@/context/DashboardContext';
 import { cn } from '@/lib/utils';
 
+// ============================================================================
+// Constants
+// ============================================================================
+
 /**
  * Route name mapping for display
+ * Maps URL segments to user-friendly names
  */
 const ROUTE_NAMES = {
-  'dashboard': 'Dashboard',
+  dashboard: 'Dashboard',
   'news-analysis': 'News Analysis',
   'prediction-history': 'Prediction History',
+  profile: 'Profile',
+  settings: 'Settings',
+  onboarding: 'Onboarding',
+  'verify-email': 'Verify Email',
+  login: 'Login',
+  register: 'Register',
 };
+
+// ============================================================================
+// Main Component
+// ============================================================================
 
 const Breadcrumbs = () => {
   const location = useLocation();
   const { stockSymbol, setStockSymbol } = useDashboard();
 
   // Split path into segments (e.g., '/dashboard/AAPL' → ['dashboard', 'AAPL'])
-  const pathSegments = location.pathname.split('/').filter((segment) => segment !== '');
+  const pathSegments = useMemo(
+    () => location.pathname.split('/').filter((segment) => segment !== ''),
+    [location.pathname]
+  );
 
-  // If we're at the root, show nothing (or just a home icon)
+  // Build breadcrumb items
+  const items = useMemo(() => {
+    const result = [];
+    let currentPath = '';
+
+    // Always include home as the first item
+    result.push({
+      label: <Home className="h-4 w-4" aria-hidden="true" />,
+      path: '/',
+      isHome: true,
+      isLast: pathSegments.length === 0,
+    });
+
+    // Build the rest of the path
+    pathSegments.forEach((segment, index) => {
+      currentPath += `/${segment}`;
+      const isLast = index === pathSegments.length - 1;
+      let displayName = ROUTE_NAMES[segment] || segment;
+
+      // Special handling for dashboard
+      if (segment === 'dashboard') {
+        if (stockSymbol && isLast) {
+          displayName = stockSymbol.toUpperCase();
+        } else {
+          displayName = 'Dashboard';
+        }
+      }
+
+      result.push({
+        label: displayName,
+        path: currentPath,
+        isLast,
+      });
+    });
+
+    return result;
+  }, [pathSegments, stockSymbol]);
+
+  // If we're at the root, show only the home icon
   if (pathSegments.length === 0) {
     return (
-      <nav className="flex items-center gap-1 text-sm text-gray-400 py-2" aria-label="Breadcrumbs">
-        <Home className="h-4 w-4" />
+      <nav
+        className="flex items-center gap-1 py-2 text-sm text-muted-foreground"
+        aria-label="Breadcrumbs"
+      >
+        <Home className="h-4 w-4" aria-hidden="true" />
+        <span className="sr-only">Home</span>
       </nav>
     );
   }
 
-  // Build the breadcrumb items
-  const items = [];
-  let currentPath = '';
-
-  // Always include home as the first item
-  items.push({
-    label: <Home className="h-4 w-4" />,
-    path: '/',
-    isHome: true,
-  });
-
-  pathSegments.forEach((segment, index) => {
-    currentPath += `/${segment}`;
-    const isLast = index === pathSegments.length - 1;
-    let displayName = ROUTE_NAMES[segment] || segment;
-
-    // Special handling for dashboard: show the symbol if available
-    if (segment === 'dashboard' && stockSymbol && index === pathSegments.length - 1) {
-      displayName = stockSymbol.toUpperCase();
-    } else if (segment === 'dashboard' && !stockSymbol) {
-      displayName = 'Dashboard';
-    }
-
-    items.push({
-      label: displayName,
-      path: currentPath,
-      isLast,
-    });
-  });
-
   return (
-    <nav className="flex items-center gap-1 text-sm text-gray-400 py-2" aria-label="Breadcrumbs">
+    <nav
+      className="flex items-center gap-1 py-2 text-sm text-muted-foreground"
+      aria-label="Breadcrumbs"
+    >
       {items.map((item, index) => {
         const isLast = item.isLast;
-        const isHome = item.isHome;
 
         return (
           <React.Fragment key={item.path || 'home'}>
-            {index > 0 && <ChevronRight className="h-3 w-3 text-gray-600" aria-hidden="true" />}
+            {index > 0 && (
+              <ChevronRight
+                className="h-3 w-3 text-muted-foreground/50"
+                aria-hidden="true"
+              />
+            )}
             {isLast ? (
               <span
-                className="text-gray-200 font-medium"
+                className="font-medium text-foreground"
                 aria-current="page"
               >
                 {item.label}
@@ -93,17 +135,14 @@ const Breadcrumbs = () => {
               <Link
                 to={item.path}
                 className={cn(
-                  'hover:text-gray-200 transition-colors',
-                  isHome ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-200'
+                  'transition-colors hover:text-foreground',
+                  'text-muted-foreground hover:text-foreground'
                 )}
-                // ashboard link, clear symbol on click
                 onClick={
                   item.path === '/dashboard'
-                    ? (e) => {
-                        // Only clear if we're actually navigating to /dashboard
-                        if (item.path === '/dashboard') {
-                          setStockSymbol(null);
-                        }
+                    ? () => {
+                        // Clear symbol when navigating to dashboard root
+                        setStockSymbol(null);
                       }
                     : undefined
                 }
@@ -118,4 +157,6 @@ const Breadcrumbs = () => {
   );
 };
 
-export default Breadcrumbs;
+Breadcrumbs.displayName = 'Breadcrumbs';
+
+export default React.memo(Breadcrumbs);

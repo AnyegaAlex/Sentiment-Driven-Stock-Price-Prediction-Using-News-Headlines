@@ -49,7 +49,7 @@ const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResendVerification = lazy(() => import("./pages/ResendVerification"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
-const Onboarding = lazy(() => import("./pages/Onboarding"));
+const Onboarding = lazy(() => import("./components/Onboarding/index.jsx")); 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const NewsAnalysis = lazy(() => import("./pages/NewsAnalysis"));
 const PredictionHistory = lazy(() => import("./pages/PredictionHistory"));

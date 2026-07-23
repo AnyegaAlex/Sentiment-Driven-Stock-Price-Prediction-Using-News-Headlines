@@ -1255,7 +1255,10 @@ class APIKeyListView(APIView):
             
             # Rate limit: 10 key creations per minute
             rate_key = f"api_key_create_{request.user.id}"
-            if cache.get(rate_key, 0) >= 10:
+            
+            # Get current count, set if not exists
+            current_count = cache.get(rate_key, 0)
+            if current_count >= 10:
                 return Response(
                     error_response(
                         message='Too many API key creation attempts. Please try again later.',
@@ -1266,22 +1269,31 @@ class APIKeyListView(APIView):
                     status=status.HTTP_429_TOO_MANY_REQUESTS
                 )
             
-            cache.incr(rate_key)
-            cache.expire(rate_key, 60)
+            # Use set with timeout instead of incr
+            cache.set(rate_key, current_count + 1, timeout=60)
             
-            key_obj, raw_key = UserAPIKey.create_key(request.user, name)
+            # ============================================================
+            # ✅ WRAP THE ENTIRE OPERATION IN A TRANSACTION
+            # ============================================================
+            with transaction.atomic():
+                key_obj, raw_key = UserAPIKey.create_key(request.user, name)
+                
+                # Audit log (inside the transaction)
+                request_context = get_request_context(request)
+                AuditLog.objects.create(
+                    user=request.user,
+                    action='API_KEY_CREATED',
+                    details={
+                        'name': name,
+                        'key_id': key_obj.id,
+                        'ip': request_context['ip'],
+                        'request_id': request_id,
+                    }
+                )
             
-            request_context = get_request_context(request)
-            AuditLog.objects.create(
-                user=request.user,
-                action='API_KEY_CREATED',
-                details={
-                    'name': name,
-                    'key_id': key_obj.id,
-                    'ip': request_context['ip'],
-                    'request_id': request_id,
-                }
-            )
+            # ============================================================
+            # ✅ THE TRANSACTION IS COMMITTED HERE
+            # ============================================================
             
             logger.info(f"API key created for user {request.user.id}: {name}")
             
@@ -1290,7 +1302,7 @@ class APIKeyListView(APIView):
                     data={
                         'id': key_obj.id,
                         'name': key_obj.name,
-                        'raw_key': raw_key,  # only shown once
+                        'raw_key': raw_key,
                         'created_at': key_obj.created_at,
                     },
                     message='API key created successfully'

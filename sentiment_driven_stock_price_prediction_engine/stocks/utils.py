@@ -32,7 +32,9 @@ def save_prediction(
     confidence: float,
     sentiment_score: float,
     headline: str = "",
-    source: str = "lstm"
+    source: str = "lstm",
+    user=None,                     
+    price_at_prediction=None
 ) -> Prediction:
     """
     Save a prediction record with de‑duplication logic.
@@ -82,7 +84,9 @@ def save_prediction(
             sentiment_score=sentiment_score,
             predicted_movement=movement,
             confidence=confidence,
-            source=source
+            source=source,
+            user=user,                              
+            price_at_prediction=price_at_prediction  
         )
         logger.info(f"Saved prediction for {symbol}: {movement} (conf={confidence:.2f})")
         return pred
@@ -224,6 +228,15 @@ def resolve_prediction(prediction, resolution_days=7):
         prediction.resolution_date = datetime.now()
         prediction.time_to_resolution = prediction.resolution_date - datetime.combine(prediction.date, datetime.min.time())
         prediction.save()
+        # ✅ Update user's cached prediction accuracy
+        if prediction.user:
+            avg = Prediction.objects.filter(
+                user=prediction.user,
+                is_correct__isnull=False
+            ).aggregate(avg=Avg('is_correct'))['avg']
+            prediction.user.prediction_accuracy = round((avg or 0) * 100, 1)
+            prediction.user.save(update_fields=['prediction_accuracy'])
+            logger.info(f"Updated accuracy for user {prediction.user.id}: {prediction.user.prediction_accuracy}%")
         logger.info(f"Resolved prediction {prediction.id} for {prediction.stock_symbol}: {prediction.is_correct}")
         return True
 
