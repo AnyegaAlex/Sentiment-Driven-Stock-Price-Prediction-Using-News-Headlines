@@ -72,7 +72,7 @@ const TOTAL_STEPS = 4;
 const Onboarding = () => {
   const navigate = useNavigate();
   const { user, updateUser, refreshUser, isAuthenticated, isLoading } = useAuth(); // ✅ Add refreshUser
-  const { isComplete, completeOnboarding, persona } = useOnboarding();
+  const { isComplete, persona } = useOnboarding();
 
   // ============================================================
   // STATE
