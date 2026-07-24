@@ -220,6 +220,9 @@ const Onboarding = () => {
     setIsSaving(true);
 
     try {
+      console.log('[Onboarding] Starting completion...');
+      console.log('[Onboarding] Form data:', formData);
+
       // ============================================================
       // ✅ STEP 1: Update user profile on backend
       // ============================================================
@@ -227,8 +230,10 @@ const Onboarding = () => {
         full_name: formData.fullName,
         nickname: formData.nickname,
         bio: formData.bio,
-        onboarded: true, // ✅ Mark as onboarded
+        onboarded: true,
+        persona: formData.persona,
       });
+      console.log('[Onboarding] Profile updated');
 
       // ============================================================
       // ✅ STEP 2: Save user preferences
@@ -237,28 +242,40 @@ const Onboarding = () => {
         investment_goal: formData.investmentGoal,
         risk_tolerance: formData.riskTolerance,
         experience_level: formData.experienceLevel,
-        persona: formData.persona, // ✅ Save persona to preferences
       });
+      console.log('[Onboarding] Preferences saved');
 
       // ============================================================
       // ✅ STEP 3: Save watchlist symbols
       // ============================================================
       if (formData.watchlist.length > 0) {
         const watchlistPromises = formData.watchlist.map((symbol) =>
-          apiClient.post('/auth/watchlist/', { symbol })
+          apiClient.post('/auth/watchlist/', { symbol: symbol.toUpperCase() })
         );
         await Promise.all(watchlistPromises);
+        console.log('[Onboarding] Watchlist saved');
       }
 
       // ============================================================
-      // ✅ STEP 4: Update user context with fresh data
+      // ✅ STEP 4: Refresh user context (CRITICAL)
       // ============================================================
-      await refreshUser(); // ✅ CRITICAL: This updates the user context
+      const refreshedUser = await refreshUser();
+      console.log('[Onboarding] User refreshed:', refreshedUser);
 
       // ============================================================
-      // ✅ STEP 5: Mark onboarding as complete in context
+      // ✅ STEP 5: Force update if needed (prevents race conditions)
       // ============================================================
-      await completeOnboarding(formData.persona);
+      if (!refreshedUser?.onboarded) {
+        console.warn('[Onboarding] refreshUser returned stale data, forcing update...');
+        updateUser({
+          ...(refreshedUser || user),
+          onboarded: true,
+          full_name: formData.fullName,
+          nickname: formData.nickname,
+          bio: formData.bio,
+          persona: formData.persona,
+        });
+      }
 
       // ============================================================
       // ✅ STEP 6: Clear stored step
@@ -268,7 +285,9 @@ const Onboarding = () => {
       // ============================================================
       // ✅ STEP 7: Redirect to dashboard
       // ============================================================
+      console.log('[Onboarding] Navigating to dashboard...');
       navigate('/dashboard', { replace: true });
+
     } catch (err) {
       console.error('[Onboarding] Error:', err);
       const message =
@@ -278,7 +297,6 @@ const Onboarding = () => {
         'Failed to complete onboarding. Please try again.';
       setError(message);
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } finally {
       setIsSaving(false);
     }
   };
