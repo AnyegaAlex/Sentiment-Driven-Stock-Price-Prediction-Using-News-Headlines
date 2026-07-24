@@ -4,8 +4,20 @@ import { TrendingUp, TrendingDown, CheckCircle, XCircle } from 'lucide-react';
 
 const PredictionSummaryCards = ({ data }) => {
   if (!data) return null;
-  const { total_predictions, correct_predictions, overall } = data;
-  const accuracy = overall?.accuracy || 0;
+
+  const { 
+    total_predictions, 
+    resolved_predictions,  
+    correct_predictions, 
+    overall,
+    recent_accuracy 
+  } = data;
+  
+  // ✅ Calculate accuracy based on RESOLVED predictions only
+  const accuracy = resolved_predictions > 0 
+    ? Math.round((correct_predictions / resolved_predictions) * 100) 
+    : 0;
+
   const f1 = overall?.f1 || 0;
   const recentAccuracy = data?.recent_accuracy || 0;
 

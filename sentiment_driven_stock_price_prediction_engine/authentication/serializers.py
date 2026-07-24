@@ -614,6 +614,11 @@ class UserPreferencesSerializer(serializers.ModelSerializer):
         help_text="User's timezone (e.g., 'America/New_York')"
     )
 
+    theme = serializers.ChoiceField(
+        choices=['light', 'dark', 'system'],  
+        default='system'
+    )
+
     class Meta:
         model = UserPreferences
         fields = (
@@ -652,10 +657,11 @@ class UserPreferencesSerializer(serializers.ModelSerializer):
         return value
 
     def validate_theme(self, value: str) -> str:
-        """Validate theme is 'light' or 'dark'."""
-        if value not in ['light', 'dark']:
-            raise serializers.ValidationError("Theme must be 'light' or 'dark'.")
+        """✅ FIXED: Validate theme is 'light', 'dark', or 'system'."""
+        if value not in ['light', 'dark', 'system']:
+            raise serializers.ValidationError("Theme must be 'light', 'dark', or 'system'.")
         return value
+
 
     def create(self, validated_data: Dict) -> UserPreferences:
         """Create user preferences with default values."""

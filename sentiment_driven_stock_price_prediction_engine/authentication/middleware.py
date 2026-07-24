@@ -86,22 +86,22 @@ class APIKeyMiddleware:
         self.jwt_auth = JWTAuthentication()
 
     def __call__(self, request):
-        # 1. Skip authentication for public paths
-        if any(request.path.startswith(path) for path in PUBLIC_PATHS):
-            return self.get_response(request)
-
-        # 2. Try JWT authentication
+        # ✅ FIRST: Try JWT authentication for ALL requests
         try:
             auth_result = self.jwt_auth.authenticate(request)
             if auth_result:
                 user, token = auth_result
                 request.user = user
                 return self.get_response(request)
-        except (InvalidToken, TokenError, Exception) as e:
-            # Token invalid or missing – continue to API key check
+        except (InvalidToken, TokenError, Exception):
+            # JWT failed – continue to public paths check
             pass
 
-        # 3. Check API key (X-API-Key header)
+        # ⚠️ SECOND: Only skip for public paths if JWT failed
+        if any(request.path.startswith(path) for path in PUBLIC_PATHS):
+            return self.get_response(request)
+
+        # THIRD: Check API key (X-API-Key header)
         api_key = request.headers.get('X-API-Key')
         if not api_key:
             return JsonResponse(
@@ -113,17 +113,13 @@ class APIKeyMiddleware:
                 status=401
             )
 
-        # 4. Hash the key and look up directly (performance optimized)
+        # FOURTH: Validate API key
         try:
             # Hash the incoming key
-            key_hash = self._hash_key(api_key)
-            
-            # Direct lookup - much faster than iterating all keys
             from django.contrib.auth.hashers import check_password
             user_key = None
             
-            # We need to check all active keys because Django's check_password
-            # is used for validation
+            # Check all active keys
             user_keys = UserAPIKey.objects.filter(is_active=True).select_related('user')
             
             for key in user_keys:
@@ -132,7 +128,7 @@ class APIKeyMiddleware:
                     break
             
             if user_key:
-                # Update last_used asynchronously (fire and forget)
+                # Update last_used asynchronously
                 self._update_last_used(user_key)
                 
                 # Set user and key on request

@@ -21,6 +21,33 @@ import SecurityTab from '@/components/settings/SecurityTab';
 import AccountTab from '@/components/settings/AccountTab';
 import DeveloperTab from '@/components/settings/DeveloperTab';
 
+
+// ============================================================
+// ✅ VALUE MAPS for backend compatibility
+// ============================================================
+const RISK_MAP = {
+  'conservative': 'conservative',
+  'moderate': 'moderate',
+  'aggressive': 'aggressive',
+  'high': 'aggressive',
+  'low': 'conservative',
+};
+
+const GOAL_MAP = {
+  'growth': 'growth',
+  'income': 'income',
+  'value': 'value',
+  'trading': 'trading',
+  'retirement': 'retirement',
+};
+
+const EXPERIENCE_MAP = {
+  'beginner': 'beginner',
+  'intermediate': 'intermediate',
+  'advanced': 'advanced',
+};
+
+
 const Settings = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -42,18 +69,35 @@ const Settings = () => {
   // ---- Profile Update ----
   const profileMutation = useMutation({
     mutationFn: async (data) => {
-      const response = await apiClient.patch('/auth/profile/update/', data);
+      // ✅ FIX: Use correct endpoint '/auth/profile/'
+      const response = await apiClient.patch('/auth/profile/', data);
       return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['user']);
+      queryClient.invalidateQueries(['profile']);
     },
   });
 
   // ---- Preferences Update ----
   const preferencesMutation = useMutation({
     mutationFn: async (data) => {
-      const response = await apiClient.patch('/auth/preferences/', data);
+      // ✅ FIX: Map values before sending
+      const mappedData = {
+        investment_goal: GOAL_MAP[data.investment_goal] || data.investment_goal || 'growth',
+        risk_tolerance: RISK_MAP[data.risk_tolerance] || data.risk_tolerance || 'moderate',
+        experience_level: EXPERIENCE_MAP[data.experience_level] || data.experience_level || 'beginner',
+        // ✅ Allow 'system' for theme
+        theme: data.theme || 'system',
+        // Notification settings
+        email_notifications: data.email_notifications,
+        price_alerts: data.price_alerts,
+        news_alerts: data.news_alerts,
+        language: data.language || 'en',
+        timezone: data.timezone || 'UTC',
+      };
+      
+      const response = await apiClient.patch('/auth/preferences/', mappedData);
       return response.data;
     },
     onSuccess: () => {
@@ -66,21 +110,33 @@ const Settings = () => {
     setSaveStatus({ type: 'saving', message: 'Saving...' });
 
     try {
+      // ✅ FIX: Update profile
       await profileMutation.mutateAsync({
-        first_name: formData.first_name,
-        last_name: formData.last_name,
+        first_name: formData.first_name || '',
+        last_name: formData.last_name || '',
+        nickname: formData.nickname || '',
+        bio: formData.bio || '',
       });
+      
+      // ✅ FIX: Update preferences with mapped values
       await preferencesMutation.mutateAsync({
-        language: formData.language,
-        timezone: formData.timezone,
-        theme: formData.theme,
+        language: formData.language || 'en',
+        timezone: formData.timezone || 'UTC',
+        theme: formData.theme || 'system',
+        investment_goal: formData.investment_goal || 'growth',
+        risk_tolerance: formData.risk_tolerance || 'moderate',
+        experience_level: formData.experience_level || 'beginner',
+        email_notifications: formData.email_notifications !== undefined ? formData.email_notifications : true,
+        price_alerts: formData.price_alerts !== undefined ? formData.price_alerts : true,
+        news_alerts: formData.news_alerts !== undefined ? formData.news_alerts : true,
       });
 
       setSaveStatus({ type: 'success', message: 'Settings saved successfully!' });
     } catch (error) {
+      console.error('[Settings] Save error:', error);
       setSaveStatus({
         type: 'error',
-        message: error.response?.data?.message || 'Failed to save settings',
+        message: error.response?.data?.error || error.response?.data?.message || 'Failed to save settings',
       });
     } finally {
       setTimeout(() => setSaveStatus(null), 3000);
@@ -91,12 +147,26 @@ const Settings = () => {
     setSaveStatus({ type: 'saving', message: 'Saving...' });
 
     try {
-      await preferencesMutation.mutateAsync(formData);
+      // ✅ FIX: Map values before saving
+      const mappedData = {
+        investment_goal: GOAL_MAP[formData.investment_goal] || formData.investment_goal || 'growth',
+        risk_tolerance: RISK_MAP[formData.risk_tolerance] || formData.risk_tolerance || 'moderate',
+        experience_level: EXPERIENCE_MAP[formData.experience_level] || formData.experience_level || 'beginner',
+        theme: formData.theme || 'system',
+        email_notifications: formData.email_notifications !== undefined ? formData.email_notifications : true,
+        price_alerts: formData.price_alerts !== undefined ? formData.price_alerts : true,
+        news_alerts: formData.news_alerts !== undefined ? formData.news_alerts : true,
+        language: formData.language || 'en',
+        timezone: formData.timezone || 'UTC',
+      };
+      
+      await preferencesMutation.mutateAsync(mappedData);
       setSaveStatus({ type: 'success', message: 'Preferences saved successfully!' });
     } catch (error) {
+      console.error('[Settings] Preferences save error:', error);
       setSaveStatus({
         type: 'error',
-        message: error.response?.data?.message || 'Failed to save preferences',
+        message: error.response?.data?.error || error.response?.data?.message || 'Failed to save preferences',
       });
     } finally {
       setTimeout(() => setSaveStatus(null), 3000);

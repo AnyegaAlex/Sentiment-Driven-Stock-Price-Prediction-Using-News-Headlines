@@ -1395,6 +1395,10 @@ class PerformanceSummaryView(APIView):
         total_preds = qs.count()
         correct_preds = qs.filter(is_correct=True).count()
         
+        # ✅ ADD THIS - Get resolved predictions count
+        resolved_qs = qs.filter(is_correct__isnull=False)
+        total_resolved = resolved_qs.count()
+
         # Recent accuracy (last 7 days)
         recent_start = datetime.now() - timedelta(days=7)
         recent_qs = qs.filter(resolution_date__gte=recent_start)
@@ -1402,6 +1406,7 @@ class PerformanceSummaryView(APIView):
         
         return Response({
             'total_predictions': total_preds,
+            'resolved_predictions': total_resolved,
             'correct_predictions': correct_preds,
             'overall': metrics,
             'recent_accuracy': recent_metrics.get('accuracy', 0),

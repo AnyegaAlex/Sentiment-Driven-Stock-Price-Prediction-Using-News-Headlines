@@ -228,7 +228,10 @@ const Profile = () => {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isAPIKeyModalOpen, setIsAPIKeyModalOpen] = useState(false);
 
-  // React Query with optimized settings
+  // ============================================================================
+  // React Query
+  // ============================================================================
+
   const {
     data: profile,
     isLoading,
@@ -237,8 +240,9 @@ const Profile = () => {
   } = useQuery({
     queryKey: ['profile'],
     queryFn: async () => {
-      const response = await apiClient.get('/auth/profile/');
-      return response.data;
+      // The API returns the user object directly
+      // apiClient already unwraps the response
+      return await apiClient.get('/auth/profile/');
     },
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,

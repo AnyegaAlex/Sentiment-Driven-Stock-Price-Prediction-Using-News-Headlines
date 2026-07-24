@@ -238,10 +238,33 @@ const Onboarding = () => {
       // ============================================================
       // ✅ STEP 2: Save user preferences
       // ============================================================
+      // Map frontend values to backend accepted values
+      const riskMap = {
+        'conservative': 'conservative',
+        'moderate': 'moderate',
+        'aggressive': 'aggressive',
+        'high': 'aggressive',   
+        'low': 'conservative',  
+      };
+
+      const goalMap = {
+        'growth': 'growth',
+        'income': 'income',
+        'value': 'value',
+        'trading': 'trading',
+        'retirement': 'retirement',
+      };
+
+      const experienceMap = {
+        'beginner': 'beginner',
+        'intermediate': 'intermediate',
+        'advanced': 'advanced',
+      };
+
       await apiClient.patch('/auth/preferences/', {
-        investment_goal: formData.investmentGoal,
-        risk_tolerance: formData.riskTolerance,
-        experience_level: formData.experienceLevel,
+        investment_goal: goalMap[formData.investmentGoal] || 'growth',
+        risk_tolerance: riskMap[formData.riskTolerance] || 'moderate',
+        experience_level: experienceMap[formData.experienceLevel] || 'beginner',
       });
       console.log('[Onboarding] Preferences saved');
 

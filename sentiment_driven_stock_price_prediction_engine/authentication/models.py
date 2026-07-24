@@ -352,8 +352,8 @@ class UserPreferences(models.Model):
     # Theme preference
     theme = models.CharField(
         max_length=20,
-        default='light',
-        help_text="UI theme preference (light/dark)."
+        default='system',  
+        help_text="UI theme preference (light/dark/system)."
     )
 
     language = models.CharField(
@@ -387,8 +387,8 @@ class UserPreferences(models.Model):
     def clean(self):
         """Validate preferences data."""
         # Validate theme
-        if self.theme not in ['light', 'dark']:
-            raise models.ValidationError({'theme': 'Theme must be "light" or "dark".'})
+        if self.theme not in ['light', 'dark', 'system']:
+            raise models.ValidationError({'theme': 'Theme must be "light", "dark", or "system".'})
         
         # Validate language (basic)
         if self.language and not isinstance(self.language, str):
