@@ -35,11 +35,23 @@ const Login = () => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [isDemo, setIsDemo] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
+
+  // DEBUG: Log when form data changes
+  useEffect(() => {
+    console.log('[Login] Form data updated:', {
+      username: formData.username,
+      usernameLength: formData.username.length,
+      passwordLength: formData.password.length,
+      rememberMe: formData.rememberMe,
+    });
+  }, [formData]);
 
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
       const user = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
+      console.log('[Login] Already authenticated, redirecting. User:', user);
       if (user.onboarded) {
         navigate('/dashboard', { replace: true });
       } else {
@@ -64,39 +76,72 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    console.log('[Login] Form submitted.');
+
     // Validate
     if (!formData.username || !formData.password) {
       setError('Please enter both username and password.');
+      console.log('[Login] Validation failed: missing fields');
       return;
     }
 
     setLoading(true);
     setError(null);
     setSuccessMessage(null);
+    setLoginSuccess(false);
+
+    // === DEBUG: Log exactly what we're about to send ===
+    console.log('[Login] 🔍 === SUBMITTING LOGIN ===');
+    console.log('[Login] 📤 Raw username:', formData.username);
+    console.log('[Login] 📤 Trimmed username:', formData.username.trim());
+    console.log('[Login] 📤 Username length (raw):', formData.username.length);
+    console.log('[Login] 📤 Username length (trimmed):', formData.username.trim().length);
+    console.log('[Login] 📤 Username char codes:', [...formData.username].map(c => c.charCodeAt(0)));
+    console.log('[Login] 📤 Password length:', formData.password.length);
+    console.log('[Login] 📤 Password char codes:', [...formData.password].map(c => c.charCodeAt(0)));
+    console.log('[Login] 📤 Remember me:', formData.rememberMe);
 
     try {
       // ✅ Use the auth hook's login method
+      console.log('[Login] Calling login() with trimmed username and password.');
       const result = await login(
         formData.username.trim(),
         formData.password,
         formData.rememberMe
       );
 
+      console.log('[Login] Login result:', result);
+
       if (!result.success) {
         throw new Error(result.error);
       }
 
-      // Success
-      console.info('[Login] Successful', {
-        userId: result.user?.id,
-        username: result.user?.username,
-        rememberMe: formData.rememberMe,
-        timestamp: new Date().toISOString(),
-      });
+      // ✅ Store login success state
+      setLoginSuccess(true);
+
+      // ✅ Explicitly handle redirect based on user data
+      if (result.user) {
+        console.log('[Login] User data received:', {
+          id: result.user.id,
+          onboarded: result.user.onboarded,
+          email_verified: result.user.email_verified
+        });
+
+        // ✅ Small delay to ensure auth context updates
+        setTimeout(() => {
+          if (result.user.onboarded) {
+            console.log('[Login] Redirecting to dashboard...');
+            navigate('/dashboard', { replace: true });
+          } else {
+            console.log('[Login] Redirecting to onboarding...');
+            navigate('/onboarding', { replace: true });
+          }
+        }, 200);
+      }
 
       // Redirect handled by useEffect
     } catch (err) {
-      console.error('[Login Error]', err);
+      console.error('[Login] ❌ Login error caught:', err);
       
       // User-friendly error messages
       let errorMessage = err.message || 'Login failed. Please try again.';
@@ -115,21 +160,27 @@ const Login = () => {
       
       setError(errorMessage);
       handleError(err, { context: 'login' });
-    } finally {
       setLoading(false);
+    } finally {
+      // ✅ Don't set loading false if we're redirecting
+      if (!loginSuccess) {
+        console.log('[Login] Login not successful, setting loading false.');
+        setLoading(false);
+      } else {
+        console.log('[Login] Login successful, keeping loading true during redirect.');
+      }
     }
   };
 
   // Handle demo login
   const handleDemoLogin = () => {
+    console.log('[Login] Demo login clicked.');
     setIsDemo(true);
-    // Pre-fill demo credentials
     setFormData({
       username: import.meta.env.VITE_DEMO_USERNAME || 'demo@tickflow.com',
       password: import.meta.env.VITE_DEMO_PASSWORD || 'demo123',
       rememberMe: false,
     });
-    // Auto-submit after a brief delay
     setTimeout(() => {
       const form = document.getElementById('login-form');
       if (form) form.requestSubmit();

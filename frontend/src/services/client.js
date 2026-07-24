@@ -31,11 +31,15 @@ const normalizeUrl = (url) => {
 const getApiUrl = () => {
   let baseUrl = import.meta.env.VITE_API_BASE_URL;
   
-  if (!baseUrl) {
-    baseUrl = IS_DEVELOPMENT 
-      ? 'http://localhost:8000' 
-      : 'https://sentiment-driven-stock-price-prediction.onrender.com';
-  }
+  // ✅ HARDCODE THE CORRECT URL
+  baseUrl = 'https://sentiment-driven-stock-price-prediction.onrender.com';
+  
+  // Remove or comment out the env variable check
+  // if (!baseUrl) {
+  //   baseUrl = IS_DEVELOPMENT 
+  //     ? 'http://localhost:8000' 
+  //     : 'https://sentiment-driven-stock-price-prediction.onrender.com';
+  // }
   
   baseUrl = normalizeUrl(baseUrl);
   
@@ -74,7 +78,7 @@ const CONFIG = {
     'X-Client-Version': import.meta.env.VITE_APP_VERSION || '1.0.0',
   },
   security: {
-    withCredentials: true,
+    withCredentials: false,
     xsrfCookieName: 'csrftoken',
     xsrfHeaderName: 'X-CSRFToken',
   },

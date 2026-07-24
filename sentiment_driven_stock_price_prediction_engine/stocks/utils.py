@@ -1,3 +1,4 @@
+import yfinance as yf
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
