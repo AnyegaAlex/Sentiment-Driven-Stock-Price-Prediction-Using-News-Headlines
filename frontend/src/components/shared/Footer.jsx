@@ -1,204 +1,162 @@
-// components/Footer.jsx
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Radar } from 'lucide-react';
-import { useMutation } from '@tanstack/react-query';
-import apiClient from '@/services/client';
-import { cn } from '@/lib/utils';
-import PropTypes from 'prop-types';
+/**
+ * Footer Component – Tickflow Capital
+ * 
+ * Institutional-grade footer with:
+ * - Copyright and brand description
+ * - Navigation links (Documentation, API, GitHub, Contact)
+ * - Platform links (Web App, Backend API, Model Demo)
+ * - Technology stack attribution
+ * - MIT License
+ * 
+ * Features:
+ * - Fully responsive (mobile → desktop)
+ * - Accessible navigation
+ * - Dark mode only (brand compliant)
+ * - Clean, technical typography
+ */
+
+import React from 'react';
+
+// ============================================================================
+// Constants
+// ============================================================================
 
 const CURRENT_YEAR = new Date().getFullYear();
-const CONTACT_EMAIL = import.meta.env.VITE_CONTACT_EMAIL || 'anyega.alex.kamau@gmail.com';
 
-const propTypes = {
-  /** Additional CSS classes */
-  className: PropTypes.string,
-};
+const NAV_LINKS = [
+  { label: 'Documentation', url: 'https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki' },
+  { label: 'API Reference', url: 'https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/' },
+  { label: 'GitHub', url: 'https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines' },
+  { label: 'Contact', url: 'mailto:anyega.alex.kamau@gmail.com' },
+];
 
-const Footer = ({ className = '' }) => {
-  const [email, setEmail] = useState('');
-  const [status, setStatus] = useState(null);
-  const [errorMessage, setErrorMessage] = useState('');
+const PLATFORM_LINKS = [
+  { label: 'Web App', url: 'https://sentiment-driven-stock-price-predic.vercel.app/' },
+  { label: 'Backend API', url: 'https://sentiment-driven-stock-price-prediction.onrender.com' },
+  { label: 'Model Demo', url: 'https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics' },
+  { label: 'Uptime Status', url: 'https://stats.uptimerobot.com/520QWmDVBw' },
+];
 
-  const mutation = useMutation({
-    mutationFn: async (email) => {
-      const response = await apiClient.post('/subscribe/', { email });
-      return response.data;
-    },
-    onSuccess: () => {
-      setStatus('success');
-      setEmail('');
-      setTimeout(() => setStatus(null), 5000);
-    },
-    onError: (error) => {
-      const message = error.response?.data?.message || error.message || 'Subscription failed. Please try again.';
-      setStatus('error');
-      setErrorMessage(message);
-      setTimeout(() => setStatus(null), 5000);
-    },
-  });
+const TECH_STACK = ['React', 'Django', 'PyTorch', 'FinBERT', 'PostgreSQL'];
 
-  const handleSubscribe = (e) => {
-    e.preventDefault();
-    
-    // ✅ Validate email
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) {
-      setStatus('error');
-      setErrorMessage('Please enter your email address.');
-      setTimeout(() => setStatus(null), 3000);
-      return;
-    }
-    
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(trimmedEmail)) {
-      setStatus('error');
-      setErrorMessage('Please enter a valid email address.');
-      setTimeout(() => setStatus(null), 3000);
-      return;
-    }
+// ============================================================================
+// Sub-components
+// ============================================================================
 
-    mutation.mutate(trimmedEmail);
-  };
+const LinkList = ({ links, label }) => (
+  <div className="space-y-1">
+    <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+      {label}
+    </h4>
+    <ul className="space-y-1">
+      {links.map(({ label, url }) => (
+        <li key={label}>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-gray-400 hover:text-white transition"
+          >
+            {label}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+);
 
+// ============================================================================
+// Main Component
+// ============================================================================
+
+const Footer = () => {
   return (
-    <footer className={cn('bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800', className)}>
+    <footer
+      className="border-t border-gray-800 bg-black"
+      role="contentinfo"
+      aria-label="Site footer"
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* Brand */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Radar className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              <span className="font-bold text-gray-900 dark:text-white">
-                Tickflow Sentiment
-              </span>
+        {/* Primary Grid */}
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
+          
+          {/* Brand & Description */}
+          <div className="lg:col-span-5 space-y-4">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-white">
+                © {CURRENT_YEAR} Tickflow Capital
+              </p>
+              <p className="text-sm text-gray-400 max-w-md leading-relaxed">
+                Open-source platform combining LSTM neural networks, FinBERT sentiment analysis, 
+                and technical indicators for directional stock predictions with confidence scoring.
+              </p>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Open-source financial news intelligence.
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-500">
-              © {CURRENT_YEAR} Tickflow Capital
-            </p>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>MIT License</span>
+              <span>•</span>
+              <span className="text-gray-400">Open Source</span>
+            </div>
           </div>
 
-          {/* Product */}
-          <div>
-            <h4 className="font-semibold text-gray-900 dark:text-white mb-3 text-sm">
-              Product
-            </h4>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <Link to="/features" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-                  Features
-                </Link>
-              </li>
-              <li>
-                <a href="/api/docs" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-                  API Docs
-                </a>
-              </li>
-              <li>
-                <Link to="/dashboard?demo=true" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-                  Demo
-                </Link>
-              </li>
-            </ul>
+          {/* Navigation Links */}
+          <div className="lg:col-span-2">
+            <LinkList links={NAV_LINKS} label="Resources" />
           </div>
 
-          {/* Company */}
-          <div>
-            <h4 className="font-semibold text-gray-900 dark:text-white mb-3 text-sm">
-              Company
-            </h4>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <a
-                  href="https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                >
-                  GitHub
-                </a>
-              </li>
-              <li>
-                <Link to="/about" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-                  About
-                </Link>
-              </li>
-              <li>
-                <a
-                  href={`mailto:${CONTACT_EMAIL}`}
-                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                >
-                  Contact
-                </a>
-              </li>
-            </ul>
+          {/* Platform Links */}
+          <div className="lg:col-span-2">
+            <LinkList links={PLATFORM_LINKS} label="Platform" />
           </div>
 
-          {/* Subscribe */}
-          <div>
-            <h4 className="font-semibold text-gray-900 dark:text-white mb-3 text-sm">
-              Updates
-            </h4>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-              Get notified about new releases.
-            </p>
-            <form onSubmit={handleSubscribe} className="space-y-2" noValidate>
-              <label htmlFor="subscribe-email" className="sr-only">
-                Email address for newsletter
-              </label>
-              <input
-                id="subscribe-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com"
-                className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                required
-                disabled={mutation.isPending}
-                aria-label="Email address for newsletter"
-              />
-              <button
-                type="submit"
-                disabled={mutation.isPending || !email.trim()}
-                className={cn(
-                  'w-full px-4 py-2 rounded-md font-medium text-sm',
-                  'bg-blue-600 text-white hover:bg-blue-700',
-                  'dark:bg-blue-500 dark:hover:bg-blue-600',
-                  'transition-colors',
-                  'disabled:opacity-70 disabled:cursor-not-allowed'
-                )}
-              >
-                {mutation.isPending ? 'Subscribing…' : 'Subscribe'}
-              </button>
-              {status === 'success' && (
-                <p className="text-xs text-green-600 dark:text-green-400" role="status" aria-live="polite">
-                  ✓ Subscribed!
-                </p>
-              )}
-              {status === 'error' && (
-                <p className="text-xs text-red-600 dark:text-red-400" role="alert" aria-live="polite">
-                  {errorMessage}
-                </p>
-              )}
-            </form>
+          {/* Tech Stack */}
+          <div className="lg:col-span-3">
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                Technology Stack
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {TECH_STACK.map((tech) => (
+                  <span
+                    key={tech}
+                    className="text-xs text-gray-400 bg-gray-900 px-3 py-1 rounded-full border border-gray-800"
+                  >
+                    {tech}
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500">
+                68-page Wiki • 30+ Endpoints • 10 Supported Symbols
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Bottom bar */}
-        <div className="border-t border-gray-200 dark:border-gray-800 mt-10 pt-6 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-gray-500 dark:text-gray-500">
-          <span>MIT License</span>
-          <span>
-            Built with React · Django · PyTorch · FinBERT
-          </span>
+        {/* Bottom Bar */}
+        <div className="border-t border-gray-800 mt-10 pt-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-gray-500">
+          <div className="flex flex-wrap items-center gap-4">
+            <span>© {CURRENT_YEAR} Tickflow Capital</span>
+            <span className="hidden sm:inline">•</span>
+            <span>MIT License</span>
+            <span className="hidden sm:inline">•</span>
+            <span className="text-gray-600">Open-source financial intelligence</span>
+          </div>
+          <div className="flex flex-wrap justify-center gap-3">
+            {PLATFORM_LINKS.map(({ label, url }) => (
+              <a
+                key={label}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-500 hover:text-white transition"
+              >
+                {label}
+              </a>
+            ))}
+          </div>
         </div>
       </div>
     </footer>
   );
 };
-
-Footer.propTypes = propTypes;
 
 export default Footer;
