@@ -1,4 +1,3 @@
-arkdown
 # Contributing to StockSentiment AI
 
 Thank you for your interest in contributing! We welcome contributions from everyone.
