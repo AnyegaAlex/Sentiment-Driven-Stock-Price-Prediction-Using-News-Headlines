@@ -6,63 +6,77 @@
     <meta name="description" content="Account deletion requested for Tickflow Sentiment">
     <title>Account Deletion Requested</title>
     <style>
+        /* ============================================
+           BRAND THEME – Dark Only
+           ============================================ */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             line-height: 1.6;
-            color: #1a1a2e;
+            color: #FFFFFF;
             max-width: 600px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f9fafb;
+            background-color: #000000;
         }
         .container {
-            background-color: #ffffff;
-            border-radius: 8px;
-            padding: 40px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            background-color: #111111;
+            border-radius: 12px;
+            padding: 40px 32px;
+            border: 1px solid #1F2937;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.8);
         }
         .header {
             text-align: center;
-            padding: 20px 0;
-            border-bottom: 1px solid #e5e7eb;
+            padding: 20px 0 24px 0;
+            border-bottom: 1px solid #1F2937;
         }
         .logo {
-            font-size: 24px;
-            font-weight: bold;
-            color: #1a1a2e;
+            font-size: 26px;
+            font-weight: 700;
+            color: #FFFFFF;
+            letter-spacing: -0.5px;
         }
         .logo span {
-            color: #4f46e5;
+            color: #9CA3AF;
         }
         .content {
-            padding: 30px 0;
+            padding: 32px 0 24px 0;
         }
-        .button {
-            display: inline-block;
-            padding: 12px 32px;
-            background: #4f46e5;
-            color: #ffffff;
-            text-decoration: none;
-            border-radius: 6px;
-            font-weight: 500;
+        .content h2 {
+            color: #FFFFFF;
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0 0 16px 0;
+            letter-spacing: -0.3px;
+        }
+        .content p {
+            color: #9CA3AF;
+            font-size: 15px;
+            margin: 0 0 16px 0;
+        }
+        .content p strong {
+            color: #FFFFFF;
+            font-weight: 600;
+        }
+        .content a {
+            color: #D1D5DB;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+        .content a:hover {
+            color: #FFFFFF;
         }
         .warning {
-            background-color: #fef2f2;
-            padding: 16px;
+            background-color: rgba(248, 113, 113, 0.10);
+            padding: 16px 20px;
             border-radius: 8px;
-            border-left: 4px solid #ef4444;
+            border-left: 4px solid #F87171;
             margin: 20px 0;
         }
         .warning p {
+            color: #F87171;
+            font-weight: 500;
             margin: 0;
-            color: #991b1b;
-        }
-        .footer {
-            text-align: center;
-            padding: 20px 0 0 0;
-            font-size: 12px;
-            color: #6b7280;
-            border-top: 1px solid #e5e7eb;
         }
         .text-center {
             text-align: center;
@@ -73,6 +87,75 @@
         .mb-20 {
             margin-bottom: 20px;
         }
+
+        /* ============================================
+           PRIMARY BUTTON – High Contrast & Prominent
+           ============================================ */
+        .button {
+            display: inline-block;
+            padding: 16px 40px;
+            background: #FFFFFF;
+            color: #000000 !important;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 16px;
+            border: 1px solid #1F2937;
+            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.08);
+            transition: background 0.2s ease, box-shadow 0.2s ease;
+        }
+        .button:hover {
+            background: #D3D3D3;
+            box-shadow: 0 6px 20px rgba(255, 255, 255, 0.12);
+        }
+
+        /* Fallback plain-text link – visible if button fails */
+        .button-fallback {
+            display: inline-block;
+            color: #9CA3AF;
+            font-size: 14px;
+            text-decoration: underline;
+            margin-top: 8px;
+        }
+        .button-fallback:hover {
+            color: #FFFFFF;
+        }
+
+        /* ============================================
+           DIVIDER & FOOTER
+           ============================================ */
+        .divider {
+            height: 1px;
+            background: #1F2937;
+            margin: 24px 0;
+        }
+        .footer {
+            text-align: center;
+            padding: 24px 0 0 0;
+            font-size: 12px;
+            color: #4B5563;
+            border-top: 1px solid #1F2937;
+        }
+        .footer a {
+            color: #6B7280;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+        .footer a:hover {
+            color: #9CA3AF;
+        }
+        .badge {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 4px 12px;
+            border-radius: 999px;
+            background-color: #1F2937;
+            color: #9CA3AF;
+            border: 1px solid #374151;
+        }
         .preheader {
             display: none;
             font-size: 0;
@@ -81,30 +164,94 @@
             mso-hide: all;
             visibility: hidden;
         }
+
+        /* ============================================
+           RESPONSIVE
+           ============================================ */
+        @media only screen and (max-width: 480px) {
+            body {
+                padding: 12px;
+            }
+            .container {
+                padding: 24px 16px;
+            }
+            .logo {
+                font-size: 20px;
+            }
+            .content h2 {
+                font-size: 18px;
+            }
+            .content p {
+                font-size: 14px;
+            }
+            .button {
+                display: block;
+                width: 100%;
+                text-align: center;
+                padding: 16px 20px;
+                font-size: 16px;
+            }
+        }
     </style>
 </head>
 <body>
+    <!-- Preheader text for email clients -->
     <span class="preheader">Account deletion requested for your Tickflow Sentiment account</span>
+
     <div class="container">
+        <!-- Header -->
         <div class="header">
             <div class="logo">Tickflow <span>Sentiment</span></div>
+            <div style="margin-top: 6px;">
+                <span class="badge">LSTM + FinBERT</span>
+            </div>
         </div>
+
+        <!-- Content -->
         <div class="content">
             <h2>Account deletion requested</h2>
-            <p>Hi {{ user.username }},</p>
+
+            <p>Hi <strong>{{ user.username }}</strong>,</p>
+
             <p>You requested to delete your Tickflow Sentiment account.</p>
+
             <div class="warning">
-                <p>Your account is scheduled for deletion on {{ scheduled_for }}.</p>
+                <p>Your account is scheduled for deletion on <strong>{{ scheduled_for }}</strong>.</p>
             </div>
+
             <p>If you did not request this, click the button below to cancel the deletion.</p>
+
+            <!-- Primary Button -->
             <div class="text-center mt-20 mb-20">
-                <a href="{{ cancellation_link }}" class="button" style="display:inline-block;padding:12px 32px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:500;">Cancel deletion</a>
+                <a href="{{ cancellation_link }}" class="button">Cancel deletion</a>
+                <!-- Fallback link for email clients that block buttons -->
+                <div style="margin-top: 8px;">
+                    <a href="{{ cancellation_link }}" class="button-fallback">Cancel deletion (plain text link)</a>
+                </div>
             </div>
-            <p>This cancellation link expires in {{ days_left }} days.</p>
-            <p>If you have any questions, contact support at <a href="mailto:support@tickflow.com">support@tickflow.com</a>.</p>
+
+            <p>This cancellation link expires in <strong>{{ days_left }}</strong> days.</p>
+
+            <div class="divider"></div>
+
+            <p style="font-size: 14px; color: #6B7280;">
+                If you have any questions, contact us at&nbsp;
+                <a href="mailto:support@tickflow.com" style="color: #9CA3AF; text-decoration: underline;">info@tickflowcapital.com</a>
+            </p>
+
+            <p style="font-size: 13px; color: #4B5563; margin-top: 8px;">
+                Tickflow Sentiment – Open-source LSTM + FinBERT stock prediction platform.
+            </p>
         </div>
+
+        <!-- Footer -->
         <div class="footer">
-            <p>&copy; {{ year }} Tickflow Capital. All rights reserved.</p>
+            <p>
+                &copy; {{ year }} Tickflow Capital. All rights reserved.<br>
+                <a href="https://sentiment-driven-stock-price-predic.vercel.app/privacy" target="_blank">Privacy Policy</a>
+                &nbsp;·&nbsp;
+                <a href="https://sentiment-driven-stock-price-predic.vercel.app/terms" target="_blank">Terms of Service</a>
+            </p>
         </div>
     </div>
 </body>
