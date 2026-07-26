@@ -1,4 +1,3 @@
-// src/context/PersistGate.jsx
 import React from "react";
 import PropTypes from "prop-types";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -8,7 +7,7 @@ export const PersistGate = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ Single source of truth key (JSON-backed via hook)
+  // Single source of truth key (JSON-backed via hook)
   const [lastViewedSymbol] = useLocalStorage("lastViewedSymbol", "");
 
   React.useEffect(() => {

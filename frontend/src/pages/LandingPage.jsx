@@ -3,7 +3,7 @@ import React from 'react';
 import Navbar from '../components/shared/Navbar';
 import Footer from '../components/shared/Footer';
 
-// KEPT components
+// Landing components
 import Hero from '../components/landing/Hero';
 import Metrics from '../components/landing/Metrics';
 import HowItWorks from '../components/landing/HowItWorks';
@@ -14,19 +14,9 @@ import Documentation from '../components/landing/Documentation';
 import OpenSource from '../components/landing/OpenSource';
 import CTASection from '../components/landing/CTASection';
 
-// DELETED components – removed
-// TrustedEngineering
-// ProblemSection
-// BuiltForSection
-// OpenSourceSection (replaced by OpenSource)
-// AboutSection
-// FeaturesGrid (replaced by TechnicalBreakdown)
-// DashboardPreview
-// PricingTable
-
 const LandingPage = () => {
   return (
-    <>
+    <div className="min-h-screen bg-black">
       <Navbar variant="public" />
       <Hero />
       <Metrics />
@@ -38,7 +28,7 @@ const LandingPage = () => {
       <OpenSource />
       <CTASection />
       <Footer />
-    </>
+    </div>
   );
 };
 

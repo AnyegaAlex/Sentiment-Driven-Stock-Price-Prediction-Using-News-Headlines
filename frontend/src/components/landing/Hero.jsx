@@ -3,8 +3,6 @@ import React from 'react';
 const Hero = () => {
   return (
     <section className="relative bg-black text-white pt-24 pb-20 px-4 md:px-8 lg:px-16 overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_#1a1a1a_0%,_#000000_70%)]"></div>
-      
       <div className="relative max-w-5xl mx-auto text-center">
         <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight mb-6">
           LSTM-driven stock direction{' '}
@@ -35,19 +33,19 @@ const Hero = () => {
         <div className="flex flex-wrap justify-center gap-4 mb-16">
           <a
             href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
-            className="bg-white text-black px-8 py-3.5 rounded-md font-semibold hover:bg-gray-200 transition duration-200 text-base"
+            className="bg-white text-black px-8 py-3.5 min-h-[44px] rounded-md font-semibold hover:bg-gray-200 transition duration-200 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             Get API Key
           </a>
           <a
-          href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
-          className="border border-white text-white px-8 py-3.5 rounded-md font-semibold hover:bg-white hover:text-black transition duration-200 text-base"
+            href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
+            className="border border-white text-white px-8 py-3.5 min-h-[44px] rounded-md font-semibold hover:bg-white hover:text-black transition duration-200 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
-          Launch Live Demo
+            Launch Live Demo
           </a>
           <a
             href="https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines"
-            className="border border-white text-white px-8 py-3.5 rounded-md font-semibold hover:bg-white hover:text-black transition duration-200 text-base"
+            className="border border-white text-white px-8 py-3.5 min-h-[44px] rounded-md font-semibold hover:bg-white hover:text-black transition duration-200 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             View on GitHub
           </a>

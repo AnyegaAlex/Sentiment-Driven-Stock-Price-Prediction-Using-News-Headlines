@@ -14,6 +14,21 @@ const IS_DEVELOPMENT = import.meta.env.DEV;
 const GA_MEASUREMENT_ID = import.meta.env.VITE_GA_MEASUREMENT_ID;
 
 // ============================================================
+// Enforce Dark Mode
+// ============================================================
+
+// Ensure dark mode is always applied
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  rootElement.className = 'bg-black text-white';
+}
+
+// Add dark class to html element if not already present
+if (!document.documentElement.classList.contains('dark')) {
+  document.documentElement.classList.add('dark');
+}
+
+// ============================================================
 // Initialize Sentry (Error Tracking)
 // ============================================================
 
@@ -51,9 +66,7 @@ if (IS_PRODUCTION && GA_MEASUREMENT_ID) {
 // Render Application
 // ============================================================
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-
-root.render(
+ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>

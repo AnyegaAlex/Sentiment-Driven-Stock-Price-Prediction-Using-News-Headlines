@@ -24,11 +24,11 @@ const WelcomeStep = ({
   userName = '',
 }) => {
   return (
-    <div className={cn('text-center space-y-6', className)}>
-      <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+    <div className={cn('text-center space-y-6 bg-black', className)}>
+      <h1 className="text-3xl font-bold text-white">
         Welcome{userName ? `, ${userName}` : ''}
       </h1>
-      <p className="text-lg text-gray-600 dark:text-gray-400 max-w-xl mx-auto">
+      <p className="text-lg text-gray-400 max-w-xl mx-auto">
         Set up your preferences to get the most out of the platform.
       </p>
       <div className="flex flex-wrap justify-center gap-4">
@@ -36,6 +36,7 @@ const WelcomeStep = ({
           onClick={onNext} 
           size="lg" 
           disabled={isLoading}
+          className="min-h-[44px] bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         >
           {isLoading ? 'Loading...' : 'Get Started'}
         </Button>
@@ -43,6 +44,7 @@ const WelcomeStep = ({
           variant="ghost" 
           onClick={onSkip} 
           disabled={isLoading}
+          className="min-h-[44px] text-gray-400 hover:text-white hover:bg-gray-800 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         >
           Skip
         </Button>

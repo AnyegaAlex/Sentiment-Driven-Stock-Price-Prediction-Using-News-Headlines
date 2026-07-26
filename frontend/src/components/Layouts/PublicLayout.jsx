@@ -1,4 +1,3 @@
-// layouts/PublicLayout.jsx
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -13,7 +12,7 @@ export const PublicLayout = ({ className = '' }) => {
   return (
     <div 
       className={cn(
-        'min-h-screen flex flex-col',
+        'min-h-screen flex flex-col bg-black text-white',
         className
       )}
     >

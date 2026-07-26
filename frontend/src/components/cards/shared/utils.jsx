@@ -22,9 +22,8 @@ import { cn } from '@/lib/utils';
  * @property {string} border - Border utility classes
  * @property {string} text - Text color utility classes
  * @property {string} badge - Badge utility classes
- * @property {string} chart - Chart RGB color string
- * @property {string} chartBg - Chart background RGBA color string
- * @property {string} gradient - Tailwind gradient utility classes
+ * @property {string} chart - Chart color string
+ * @property {string} chartBg - Chart background color string
  * @property {string} hover - Hover state utility classes
  */
 
@@ -43,44 +42,40 @@ import { cn } from '@/lib/utils';
  */
 export const COLOR_SCHEMES = Object.freeze({
   positive: {
-    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
-    border: 'border-emerald-200 dark:border-emerald-800/30',
-    text: 'text-emerald-700 dark:text-emerald-400',
-    badge: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700',
-    chart: 'rgb(16, 185, 129)',
-    chartBg: 'rgba(16, 185, 129, 0.15)',
-    gradient: 'from-emerald-400 to-emerald-600',
-    hover: 'hover:bg-emerald-50 dark:hover:bg-emerald-950/20',
+    bg: 'bg-green-400/10',
+    border: 'border-green-400/30',
+    text: 'text-green-400',
+    badge: 'bg-green-400/20 text-green-400 border-green-400/30',
+    chart: '#34D399',
+    chartBg: 'rgba(52, 211, 153, 0.15)',
+    hover: 'hover:bg-green-400/5',
   },
   negative: {
-    bg: 'bg-rose-50 dark:bg-rose-950/30',
-    border: 'border-rose-200 dark:border-rose-800/30',
-    text: 'text-rose-700 dark:text-rose-400',
-    badge: 'bg-rose-100 dark:bg-rose-900/30 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-700',
-    chart: 'rgb(244, 63, 94)',
-    chartBg: 'rgba(244, 63, 94, 0.15)',
-    gradient: 'from-rose-400 to-rose-600',
-    hover: 'hover:bg-rose-50 dark:hover:bg-rose-950/20',
+    bg: 'bg-red-400/10',
+    border: 'border-red-400/30',
+    text: 'text-red-400',
+    badge: 'bg-red-400/20 text-red-400 border-red-400/30',
+    chart: '#F87171',
+    chartBg: 'rgba(248, 113, 113, 0.15)',
+    hover: 'hover:bg-red-400/5',
   },
   neutral: {
-    bg: 'bg-blue-50 dark:bg-blue-950/30',
-    border: 'border-blue-200 dark:border-blue-800/30',
-    text: 'text-blue-700 dark:text-blue-400',
-    badge: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-700',
-    chart: 'rgb(59, 130, 246)',
-    chartBg: 'rgba(59, 130, 246, 0.15)',
-    gradient: 'from-blue-400 to-blue-600',
-    hover: 'hover:bg-blue-50 dark:hover:bg-blue-950/20',
+    bg: 'bg-gray-800/30',
+    border: 'border-gray-700/50',
+    text: 'text-gray-400',
+    badge: 'bg-gray-700/50 text-gray-400 border-gray-700/50',
+    chart: '#9CA3AF',
+    chartBg: 'rgba(156, 163, 175, 0.15)',
+    hover: 'hover:bg-gray-800/20',
   },
   warning: {
-    bg: 'bg-amber-50 dark:bg-amber-950/30',
-    border: 'border-amber-200 dark:border-amber-800/30',
-    text: 'text-amber-700 dark:text-amber-400',
-    badge: 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-700',
-    chart: 'rgb(245, 158, 11)',
-    chartBg: 'rgba(245, 158, 11, 0.15)',
-    gradient: 'from-amber-400 to-amber-600',
-    hover: 'hover:bg-amber-50 dark:hover:bg-amber-950/20',
+    bg: 'bg-gray-700/30',
+    border: 'border-gray-600/30',
+    text: 'text-gray-300',
+    badge: 'bg-gray-700/50 text-gray-300 border-gray-600/30',
+    chart: '#D1D5DB',
+    chartBg: 'rgba(209, 213, 219, 0.15)',
+    hover: 'hover:bg-gray-700/20',
   },
 });
 
@@ -222,17 +217,17 @@ export const getChartOptions = (width, customOptions = {}) => {
       legend: {
         position: 'top',
         labels: {
-          color: '#6b7280',
+          color: '#9CA3AF',
           usePointStyle: true,
           boxWidth: 10,
           font: { size: isMobile ? 11 : 13 },
         },
       },
       tooltip: {
-        backgroundColor: 'rgba(17, 24, 39, 0.95)',
-        titleColor: '#f9fafb',
-        bodyColor: '#d1d5db',
-        borderColor: 'rgba(75, 85, 99, 0.5)',
+        backgroundColor: 'rgba(17, 17, 17, 0.95)',
+        titleColor: '#FFFFFF',
+        bodyColor: '#D1D5DB',
+        borderColor: 'rgba(31, 41, 55, 0.5)',
         borderWidth: 1,
         padding: isMobile ? 8 : 12,
         bodyFont: { size: tooltipFontSize },
@@ -243,14 +238,14 @@ export const getChartOptions = (width, customOptions = {}) => {
       y: {
         grid: { color: 'rgba(75, 85, 99, 0.15)' },
         ticks: {
-          color: '#6b7280',
+          color: '#9CA3AF',
           font: { size: fontSize },
         },
       },
       x: {
         grid: { display: false },
         ticks: {
-          color: '#6b7280',
+          color: '#9CA3AF',
           font: { size: fontSize },
           maxRotation: isMobile ? 45 : 30,
           minRotation: isMobile ? 45 : 30,
@@ -274,7 +269,7 @@ export const getChartOptions = (width, customOptions = {}) => {
 export const CardWrapper = ({ children, className }) => (
   <Card
     className={cn(
-      'relative overflow-hidden border-gray-200 bg-white transition-shadow duration-300 dark:border-gray-800 dark:bg-gray-900',
+      'relative overflow-hidden border border-gray-800 bg-gray-900 transition-shadow duration-300',
       'shadow-lg hover:shadow-xl',
       'mx-auto w-full max-w-6xl',
       className
@@ -296,7 +291,7 @@ CardWrapper.propTypes = {
  * @param {React.ReactNode} [props.children]
  */
 export const CardSkeleton = ({ className, children }) => (
-  <Card className={cn('border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900', className)}>
+  <Card className={cn('border border-gray-800 bg-gray-900', className)}>
     {children}
   </Card>
 );
@@ -332,12 +327,12 @@ export const CardError = ({ error, onRetry, className, title = 'Error Loading Da
   }, [error]);
 
   return (
-    <Card className={cn('border-rose-200 bg-rose-50 dark:border-rose-800/30 dark:bg-rose-950/20', className)}>
+    <Card className={cn('border border-red-400 bg-red-400/10', className)}>
       <CardContent className="p-6">
         <Alert variant="destructive" className="border-0 bg-transparent" role="alert">
-          <AlertCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" aria-hidden="true" />
-          <AlertTitle className="font-semibold text-rose-800 dark:text-rose-300">{title}</AlertTitle>
-          <AlertDescription className="mt-1 text-rose-700 dark:text-rose-300/80">
+          <AlertCircle className="h-5 w-5 text-red-400" aria-hidden="true" />
+          <AlertTitle className="font-semibold text-white">{title}</AlertTitle>
+          <AlertDescription className="mt-1 text-gray-300">
             {errorMessage}
           </AlertDescription>
           <Button
@@ -346,7 +341,7 @@ export const CardError = ({ error, onRetry, className, title = 'Error Loading Da
             onClick={handleRetry}
             disabled={isRetrying}
             aria-busy={isRetrying}
-            className="mt-3 min-h-[44px] border-rose-300 bg-rose-100 text-rose-700 hover:bg-rose-200 dark:border-rose-700/50 dark:bg-rose-900/30 dark:text-rose-300 dark:hover:bg-rose-900/50"
+            className="mt-3 min-h-[44px] border border-red-400 text-red-400 hover:bg-red-400/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             <RefreshCw className={cn('mr-2 h-4 w-4', isRetrying && 'animate-spin')} aria-hidden="true" />
             {isRetrying ? 'Retrying...' : 'Retry'}

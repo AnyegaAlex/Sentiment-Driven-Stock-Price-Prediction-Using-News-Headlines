@@ -9,7 +9,7 @@ import { useErrorHandler } from '@/utils/errorHandler';
  * Production-Ready Login Page
  * 
  * Features:
- * - Clean, accessible UI with dark mode support
+ * - Clean, accessible UI with dark mode only
  * - Proper auth hook integration
  * - Comprehensive error handling
  * - Loading states
@@ -90,19 +90,7 @@ const Login = () => {
     setSuccessMessage(null);
     setLoginSuccess(false);
 
-    // === DEBUG: Log exactly what we're about to send ===
-    console.log('[Login] 🔍 === SUBMITTING LOGIN ===');
-    console.log('[Login] 📤 Raw username:', formData.username);
-    console.log('[Login] 📤 Trimmed username:', formData.username.trim());
-    console.log('[Login] 📤 Username length (raw):', formData.username.length);
-    console.log('[Login] 📤 Username length (trimmed):', formData.username.trim().length);
-    console.log('[Login] 📤 Username char codes:', [...formData.username].map(c => c.charCodeAt(0)));
-    console.log('[Login] 📤 Password length:', formData.password.length);
-    console.log('[Login] 📤 Password char codes:', [...formData.password].map(c => c.charCodeAt(0)));
-    console.log('[Login] 📤 Remember me:', formData.rememberMe);
-
     try {
-      // ✅ Use the auth hook's login method
       console.log('[Login] Calling login() with trimmed username and password.');
       const result = await login(
         formData.username.trim(),
@@ -116,10 +104,8 @@ const Login = () => {
         throw new Error(result.error);
       }
 
-      // ✅ Store login success state
       setLoginSuccess(true);
 
-      // ✅ Explicitly handle redirect based on user data
       if (result.user) {
         console.log('[Login] User data received:', {
           id: result.user.id,
@@ -127,7 +113,6 @@ const Login = () => {
           email_verified: result.user.email_verified
         });
 
-        // ✅ Small delay to ensure auth context updates
         setTimeout(() => {
           if (result.user.onboarded) {
             console.log('[Login] Redirecting to dashboard...');
@@ -138,12 +123,9 @@ const Login = () => {
           }
         }, 200);
       }
-
-      // Redirect handled by useEffect
     } catch (err) {
       console.error('[Login] ❌ Login error caught:', err);
       
-      // User-friendly error messages
       let errorMessage = err.message || 'Login failed. Please try again.';
       
       if (err.code === 403 && errorMessage.includes('verify your email')) {
@@ -162,7 +144,6 @@ const Login = () => {
       handleError(err, { context: 'login' });
       setLoading(false);
     } finally {
-      // ✅ Don't set loading false if we're redirecting
       if (!loginSuccess) {
         console.log('[Login] Login not successful, setting loading false.');
         setLoading(false);
@@ -190,37 +171,37 @@ const Login = () => {
   // Loading state
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
       </div>
     );
   }
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 px-4 py-12"
+      className="min-h-screen flex items-center justify-center bg-black px-4 py-12"
       role="main"
       aria-labelledby="login-title"
     >
-      <div className="w-full max-w-md backdrop-blur-sm bg-transparent transition-all duration-300">
+      <div className="w-full max-w-md bg-black transition-all duration-300">
         {/* Header */}
         <div className="space-y-3 text-center pt-8 pb-4">
           <div className="flex items-center justify-center gap-2.5">
-            <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 dark:from-blue-500/20 dark:to-purple-500/20">
-              <Radar className="h-8 w-8 text-blue-600 dark:text-blue-400" strokeWidth={1.8} />
+            <div className="p-2.5 rounded-xl bg-gray-800">
+              <Radar className="h-8 w-8 text-gray-400" strokeWidth={1.8} />
             </div>
-            <span className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+            <span className="text-2xl font-bold text-white tracking-tight">
               Tickflow Sentiment
             </span>
           </div>
           <h1
             id="login-title"
-            className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight"
+            className="text-2xl font-bold text-white tracking-tight"
           >
             Welcome Back
           </h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm max-w-sm mx-auto">
-            Sign in to access your financial intelligence dashboard and market insights.
+          <p className="text-gray-400 text-sm max-w-sm mx-auto">
+            Sign in to access your LSTM + FinBERT predictions and market insights.
           </p>
         </div>
 
@@ -228,7 +209,7 @@ const Login = () => {
         <div className="px-6 pb-8">
           {/* Success Message */}
           {successMessage && (
-            <div className="mb-4 rounded-md bg-green-50 dark:bg-green-900/20 p-4">
+            <div className="mb-4 rounded-md border border-green-400 bg-green-400/10 p-4">
               <div className="flex">
                 <div className="flex-shrink-0">
                   <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
@@ -236,7 +217,7 @@ const Login = () => {
                   </svg>
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                  <p className="text-sm font-medium text-green-400">
                     {successMessage}
                   </p>
                 </div>
@@ -246,7 +227,7 @@ const Login = () => {
 
           {/* Error Message */}
           {error && (
-            <div className="mb-4 rounded-md bg-red-50 dark:bg-red-900/20 p-4">
+            <div className="mb-4 rounded-md border border-red-400 bg-red-400/10 p-4">
               <div className="flex">
                 <div className="flex-shrink-0">
                   <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
@@ -254,7 +235,7 @@ const Login = () => {
                   </svg>
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                  <p className="text-sm font-medium text-red-400">
                     {error}
                   </p>
                 </div>
@@ -268,7 +249,7 @@ const Login = () => {
               <div>
                 <label
                   htmlFor="username"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  className="block text-sm font-medium text-gray-300 mb-1"
                 >
                   Username or Email
                 </label>
@@ -278,7 +259,7 @@ const Login = () => {
                   type="text"
                   autoComplete="username"
                   required
-                  className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  className="w-full min-h-[44px] px-4 py-2.5 border border-gray-800 rounded-lg placeholder-gray-500 text-white bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all duration-200"
                   placeholder="Enter your username or email"
                   value={formData.username}
                   onChange={handleChange}
@@ -291,13 +272,13 @@ const Login = () => {
                 <div className="flex items-center justify-between mb-1">
                   <label
                     htmlFor="password"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    className="block text-sm font-medium text-gray-300"
                   >
                     Password
                   </label>
                   <Link
                     to="/forgot-password"
-                    className="text-sm text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                    className="text-sm text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                   >
                     Forgot password?
                   </Link>
@@ -308,7 +289,7 @@ const Login = () => {
                   type="password"
                   autoComplete="current-password"
                   required
-                  className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  className="w-full min-h-[44px] px-4 py-2.5 border border-gray-800 rounded-lg placeholder-gray-500 text-white bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all duration-200"
                   placeholder="Enter your password"
                   value={formData.password}
                   onChange={handleChange}
@@ -324,12 +305,12 @@ const Login = () => {
                 id="rememberMe"
                 name="rememberMe"
                 type="checkbox"
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                className="h-4 w-4 text-white focus:ring-gray-500 border-gray-800 rounded cursor-pointer bg-gray-900"
                 checked={formData.rememberMe}
                 onChange={handleChange}
                 disabled={loading}
               />
-              <label htmlFor="rememberMe" className="ml-2 block text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+              <label htmlFor="rememberMe" className="ml-2 block text-sm text-gray-400 cursor-pointer">
                 Remember me
               </label>
             </div>
@@ -338,7 +319,7 @@ const Login = () => {
             <button
               type="submit"
               disabled={loading || isDemo}
-              className="w-full flex items-center justify-center py-2.5 px-4 border border-transparent rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              className="w-full min-h-[44px] flex items-center justify-center py-2.5 px-4 border border-transparent rounded-lg text-sm font-medium text-black bg-white hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 focus:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
             >
               {loading ? (
                 <>
@@ -354,10 +335,10 @@ const Login = () => {
           {/* Divider */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+              <div className="w-full border-t border-gray-800" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="px-3 bg-transparent text-gray-400 dark:text-gray-500">
+              <span className="px-3 bg-black text-gray-500">
                 Or continue with
               </span>
             </div>
@@ -367,7 +348,7 @@ const Login = () => {
           <button
             onClick={handleDemoLogin}
             disabled={loading || isDemo}
-            className="flex items-center justify-center w-full py-2.5 text-sm font-medium text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center w-full min-h-[44px] py-2.5 text-sm font-medium text-gray-400 border border-gray-800 rounded-lg hover:bg-gray-800 hover:text-white transition-colors group disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             <span>Try Demo Dashboard</span>
             <ChevronRight className="h-4 w-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
@@ -375,11 +356,11 @@ const Login = () => {
 
           {/* Footer Links */}
           <div className="mt-6 space-y-2 text-center">
-            <div className="flex items-center justify-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+            <div className="flex items-center justify-center gap-1 text-sm text-gray-400">
               <span>Don't have an account?</span>
               <Link
                 to="/signup"
-                className="text-blue-600 dark:text-blue-400 hover:underline font-medium transition-colors"
+                className="text-white hover:text-gray-300 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
               >
                 Create one now
               </Link>
@@ -387,14 +368,14 @@ const Login = () => {
           </div>
 
           {/* Trust Badge */}
-          <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-800">
-            <p className="text-[10px] text-center text-gray-400 dark:text-gray-500">
+          <div className="mt-6 pt-4 border-t border-gray-800">
+            <p className="text-[10px] text-center text-gray-500">
               By signing in, you agree to our{' '}
-              <Link to="/terms" className="hover:underline">Terms of Service</Link>
+              <Link to="/terms" className="hover:text-white transition-colors">Terms of Service</Link>
               {' '}and{' '}
-              <Link to="/privacy" className="hover:underline">Privacy Policy</Link>
+              <Link to="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
             </p>
-            <p className="text-[10px] text-center text-gray-400 dark:text-gray-500 mt-1">
+            <p className="text-[10px] text-center text-gray-500 mt-1">
               Secured with industry‑standard encryption
             </p>
           </div>

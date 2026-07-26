@@ -1,4 +1,3 @@
-// components/onboarding/Tooltip.jsx
 import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { Info } from 'lucide-react';
@@ -28,15 +27,18 @@ const Tooltip = ({ text, className = '', position = 'top' }) => {
       onMouseEnter={() => setIsVisible(true)}
       onMouseLeave={() => setIsVisible(false)}
     >
-      <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 cursor-help" />
+      <Info 
+        className="w-4 h-4 text-gray-500 hover:text-gray-300 cursor-help focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
+        aria-label="More information"
+      />
       {isVisible && (
         <div className={cn(
-          'absolute z-50 w-64 p-3 text-sm text-gray-700 dark:text-gray-300',
-          'bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700',
+          'absolute z-50 w-64 p-3 text-sm text-gray-300',
+          'bg-gray-900 rounded-lg shadow-lg border border-gray-800',
           positions[position]
         )}>
           {text}
-          <div className="absolute w-2 h-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 transform rotate-45 -z-10" />
+          <div className="absolute w-2 h-2 bg-gray-900 border border-gray-800 transform rotate-45 -z-10" />
         </div>
       )}
     </div>

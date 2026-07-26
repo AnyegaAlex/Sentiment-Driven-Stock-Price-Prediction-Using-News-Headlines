@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { cn } from '@/lib/utils';
 
 const endpoints = [
   {
@@ -139,7 +140,6 @@ const endpoints = [
 
 const APIDemo = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [symbol, setSymbol] = useState('AAPL');
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
   useEffect(() => {
@@ -177,7 +177,7 @@ const APIDemo = () => {
               </span>
               <button
                 onClick={handleRefresh}
-                className="bg-gray-700 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-600 transition duration-200"
+                className="bg-gray-700 text-white px-3 py-1.5 min-h-[44px] rounded text-sm hover:bg-gray-600 transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
               >
                 Refresh
               </button>
@@ -212,7 +212,7 @@ const APIDemo = () => {
             </span>
             <a
               href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
-              className="text-blue-400 hover:underline"
+              className="text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
             >
               Get your API key
             </a>
@@ -225,9 +225,12 @@ const APIDemo = () => {
             <button
               key={i}
               onClick={() => setCurrentIndex(i)}
-              className={`px-2 py-0.5 rounded hover:text-white transition ${
-                i === currentIndex ? 'text-white bg-gray-800' : 'text-gray-500'
-              }`}
+              className={cn(
+                'min-h-[44px] min-w-[44px] px-2 py-0.5 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
+                i === currentIndex
+                  ? 'text-white bg-gray-800'
+                  : 'text-gray-500 hover:text-white hover:bg-gray-800'
+              )}
             >
               {ep.path}
             </button>

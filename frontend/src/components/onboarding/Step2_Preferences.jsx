@@ -99,8 +99,8 @@ const Step2_Preferences = ({
 
   const renderOptionGroup = (options, field, label, required = true) => (
     <div>
-      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        {label} {required && <span className="text-red-500">*</span>}
+      <h3 className="text-sm font-medium text-gray-300 mb-2">
+        {label} {required && <span className="text-red-400">*</span>}
       </h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {options.map((option) => (
@@ -110,29 +110,29 @@ const Step2_Preferences = ({
             onClick={() => handleFieldChange(field, option.value)}
             onBlur={() => setTouched((prev) => ({ ...prev, [field]: true }))}
             className={cn(
-              'p-4 text-left rounded-lg border-2 transition-all',
-              'hover:border-gray-400 dark:hover:border-gray-500',
-              'focus:outline-none focus:ring-2 focus:ring-blue-500',
+              'p-4 text-left rounded-lg border-2 transition-all min-h-[44px]',
+              'hover:border-gray-600',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
               isFieldError(field)
-                ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                ? 'border-red-400 bg-red-400/10'
                 : formData[field] === option.value
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                : 'border-gray-200 dark:border-gray-700'
+                ? 'border-white bg-gray-800'
+                : 'border-gray-800'
             )}
             disabled={isLoading}
             aria-pressed={formData[field] === option.value}
           >
-            <div className="font-semibold text-gray-900 dark:text-white">
+            <div className="font-semibold text-white">
               {option.label}
             </div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">
+            <div className="text-sm text-gray-400">
               {option.description}
             </div>
           </button>
         ))}
       </div>
       {isFieldError(field) && (
-        <p className="text-sm text-red-500 mt-1" role="alert">
+        <p className="text-sm text-red-400 mt-1" role="alert">
           Please select an option
         </p>
       )}
@@ -144,10 +144,10 @@ const Step2_Preferences = ({
   return (
     <div className={cn('space-y-6', className)}>
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        <h2 className="text-2xl font-bold text-white mb-2">
           Your investment style
         </h2>
-        <p className="text-gray-600 dark:text-gray-400">
+        <p className="text-gray-400">
           These help us tailor the content and recommendations you see.
         </p>
       </div>
@@ -165,6 +165,7 @@ const Step2_Preferences = ({
           onClick={handleContinue}
           disabled={!isFormValid || isLoading}
           size="lg"
+          className="min-h-[44px] bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         >
           {isLoading ? 'Saving...' : 'Continue'}
         </Button>
@@ -173,7 +174,7 @@ const Step2_Preferences = ({
           variant="ghost"
           onClick={onSkip}
           disabled={isLoading}
-          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          className="min-h-[44px] text-gray-400 hover:text-white hover:bg-gray-800 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         >
           Skip
         </Button>

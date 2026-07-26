@@ -6,7 +6,7 @@
  * Features:
  * - Toggle switches for all notification types
  * - Real-time updates
- * - Dark mode support
+ * - Dark mode only (brand compliant)
  * - Accessibility
  * 
  * @component
@@ -123,13 +123,13 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
   // Determine save status display
   const getSaveStatusDisplay = () => {
     if (parentSaveStatus?.type === 'saving') {
-      return { icon: null, text: 'Saving...', className: 'text-blue-600 dark:text-blue-400' };
+      return { icon: null, text: 'Saving...', className: 'text-gray-400' };
     }
     if (parentSaveStatus?.type === 'success') {
-      return { icon: CheckCircle, text: 'Saved successfully', className: 'text-green-600 dark:text-green-400' };
+      return { icon: CheckCircle, text: 'Saved successfully', className: 'text-green-400' };
     }
     if (parentSaveStatus?.type === 'error') {
-      return { icon: AlertCircle, text: 'Failed to save', className: 'text-red-600 dark:text-red-400' };
+      return { icon: AlertCircle, text: 'Failed to save', className: 'text-red-400' };
     }
     return null;
   };
@@ -141,16 +141,16 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
   const totalCount = NOTIFICATIONS.length;
 
   return (
-    <Card>
+    <Card className="bg-gray-900 border border-gray-800">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div>
-            <CardTitle>Notification Preferences</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-white">Notification Preferences</CardTitle>
+            <CardDescription className="text-gray-400">
               Choose what notifications you want to receive
             </CardDescription>
           </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">
+          <div className="text-sm text-gray-400">
             {enabledCount} of {totalCount} enabled
           </div>
         </div>
@@ -163,17 +163,17 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
               <div 
                 key={item.id} 
                 className={cn(
-                  "flex items-center justify-between p-4 rounded-lg border transition-colors",
+                  "flex items-center justify-between p-4 rounded-lg border transition-colors bg-gray-900",
                   form[item.id] 
-                    ? "border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10"
-                    : "border-gray-200 dark:border-gray-700"
+                    ? "border-gray-700"
+                    : "border-gray-800"
                 )}
               >
                 <div className="space-y-0.5">
-                  <Label htmlFor={item.id} className="text-sm font-medium">
+                  <Label htmlFor={item.id} className="text-sm font-medium text-white">
                     {item.label}
                   </Label>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <p className="text-sm text-gray-400">
                     {item.description}
                   </p>
                 </div>
@@ -182,6 +182,7 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
                   checked={form[item.id]}
                   onCheckedChange={(checked) => handleToggle(item.id, checked)}
                   disabled={parentSaveStatus?.type === 'saving'}
+                  className="data-[state=checked]:bg-white data-[state=unchecked]:bg-gray-700 min-h-[44px] min-w-[44px]"
                 />
               </div>
             ))}
@@ -192,7 +193,7 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
             <Button 
               type="submit" 
               disabled={isSaving || !hasChanges || parentSaveStatus?.type === 'saving'}
-              className="min-w-[140px]"
+              className="min-w-[140px] min-h-[44px] bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {parentSaveStatus?.type === 'saving' ? (
                 'Saving...'
@@ -209,7 +210,7 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
               variant="outline"
               onClick={handleReset}
               disabled={!hasChanges || parentSaveStatus?.type === 'saving'}
-              className="min-w-[120px]"
+              className="min-w-[120px] min-h-[44px] border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white focus-visible:ring-gray-500 focus-visible:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <RotateCcw className="h-4 w-4 mr-2" />
               Reset
@@ -229,7 +230,7 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
 
           {/* Unsaved Changes Indicator */}
           {hasChanges && parentSaveStatus?.type !== 'success' && (
-            <p className="text-sm text-yellow-600 dark:text-yellow-400">
+            <p className="text-sm text-gray-400">
               You have unsaved changes
             </p>
           )}

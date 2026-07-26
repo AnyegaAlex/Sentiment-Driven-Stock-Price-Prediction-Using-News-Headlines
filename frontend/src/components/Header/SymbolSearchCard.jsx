@@ -1,9 +1,8 @@
-// components/SymbolSearchCard.jsx
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import PropTypes from "prop-types";
 import { useSearchSymbolsQuery } from "@/hooks/queries/useSearchSymbolsQuery";
 import { Input } from "@/components/ui/input";
-import { FaSearch, FaSyncAlt, FaTimes } from "react-icons/fa";
+import { Search, RefreshCw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const propTypes = {
@@ -112,9 +111,10 @@ const SymbolSearchCard = ({
     >
       <div className="relative">
         <div className="flex items-center">
-          <FaSearch 
-            className="absolute left-3 text-gray-500 dark:text-gray-400" 
+          <Search 
+            className="absolute left-3 text-gray-500" 
             aria-hidden="true" 
+            size={16}
           />
           <Input
             type="text"
@@ -124,7 +124,7 @@ const SymbolSearchCard = ({
             placeholder={placeholder}
             disabled={disabled}
             className={cn(
-              "pl-10 pr-10 w-full",
+              "pl-10 pr-10 w-full min-h-[44px] bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500 focus:ring-offset-black",
               disabled && "opacity-50 cursor-not-allowed"
             )}
             aria-label="Stock symbol search"
@@ -137,17 +137,18 @@ const SymbolSearchCard = ({
           {query && !disabled && (
             <button
               onClick={clearSearch}
-              className="absolute right-3 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+              className="absolute right-3 text-gray-500 hover:text-gray-300 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
               aria-label="Clear search"
               type="button"
             >
-              <FaTimes />
+              <X size={16} />
             </button>
           )}
           {isLoading && (
-            <FaSyncAlt 
-              className="absolute right-8 animate-spin text-gray-500 dark:text-gray-400" 
+            <RefreshCw 
+              className="absolute right-8 animate-spin text-gray-500" 
               aria-hidden="true" 
+              size={14}
             />
           )}
         </div>
@@ -156,7 +157,7 @@ const SymbolSearchCard = ({
         {showSuggestions && (
           <ul
             id="suggestions-list"
-            className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto"
+            className="absolute z-50 w-full mt-1 bg-gray-900 border border-gray-800 rounded-md shadow-lg max-h-60 overflow-y-auto focus-visible:outline-none"
             role="listbox"
             aria-label="Stock suggestions"
           >
@@ -164,17 +165,17 @@ const SymbolSearchCard = ({
               <li key={`${item.symbol}-${index}`} role="none">
                 <button
                   role="option"
-                  className="w-full text-left p-2 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  className="w-full text-left p-2 hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black transition-colors min-h-[44px]"
                   onClick={() => handleSelect(item.symbol)}
                   tabIndex={0}
                 >
                   <div className="flex justify-between">
-                    <span className="font-medium">{item.symbol}</span>
-                    <span className="text-gray-500 dark:text-gray-400 text-xs">
+                    <span className="font-medium text-white">{item.symbol}</span>
+                    <span className="text-gray-500 text-xs">
                       {item.region}
                     </span>
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-300 truncate">
+                  <div className="text-sm text-gray-400 truncate">
                     {item.name}
                   </div>
                 </button>
@@ -185,19 +186,19 @@ const SymbolSearchCard = ({
 
         {/* Loading Skeleton */}
         {isLoading && suggestions.length === 0 && debouncedQuery.length >= 2 && (
-          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-md shadow-lg p-2">
+          <div className="absolute z-50 w-full mt-1 bg-gray-900 border border-gray-800 rounded-md shadow-lg p-2">
             <div className="animate-pulse space-y-2">
-              <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded" />
-              <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded" />
-              <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded" />
+              <div className="h-8 bg-gray-800 rounded" />
+              <div className="h-8 bg-gray-800 rounded" />
+              <div className="h-8 bg-gray-800 rounded" />
             </div>
           </div>
         )}
 
         {/* Error Message */}
         {error && (
-          <div className="mt-1 text-red-500 dark:text-red-400 text-sm" role="alert" aria-live="polite">
-            {error.message || "Failed to fetch symbols."}
+          <div className="mt-1 text-red-400 text-sm" role="alert" aria-live="polite">
+            {error.message || "Failed to fetch symbols. Please try again."}
           </div>
         )}
       </div>

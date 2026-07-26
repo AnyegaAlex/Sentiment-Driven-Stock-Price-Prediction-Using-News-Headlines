@@ -1,4 +1,3 @@
-// AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api, setAuthToken, removeAuthToken } from '../services/api';
 import { trackEvent } from '../utils/analytics';

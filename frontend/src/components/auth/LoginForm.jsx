@@ -1,4 +1,3 @@
-// components/auth/LoginForm.jsx
 import React, { useState, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -19,7 +18,7 @@ import { cn } from '@/lib/utils';
  * - Loading state with spinner
  * - Dismissible general error alert
  * - Accessibility (ARIA labels, keyboard navigation)
- * - Responsive and dark mode ready
+ * - Responsive and dark mode only (brand compliant)
  * - Remember me functionality
  * - Forgot password link
  * - Redirect back to original page after login
@@ -70,20 +69,16 @@ export const LoginForm = () => {
     setFieldErrors({});
 
     try {
-      // ✅ Pass rememberMe to login
       const result = await login(username.trim(), password, rememberMe);
 
-      // ✅ Handle result from useAuth
       if (result && !result.success) {
         setError(result.error || 'Login failed. Please try again.');
         setLoading(false);
         return;
       }
 
-      // ✅ Navigate to the page user came from, or dashboard
       navigate(from, { replace: true });
     } catch (err) {
-      // ✅ Handle both axios errors and custom errors
       let errorMessage = 'Login failed. Please check your connection and try again.';
       
       if (err.response?.status === 401) {
@@ -106,11 +101,9 @@ export const LoginForm = () => {
     }
   };
 
-  // ✅ Handle demo login
   const handleDemoLogin = async () => {
     setUsername('demo@tickflow.com');
     setPassword('demopass123');
-    // Auto-submit after a brief delay
     setTimeout(() => {
       const form = document.getElementById('login-form');
       if (form) form.requestSubmit();
@@ -125,7 +118,7 @@ export const LoginForm = () => {
       <div className="space-y-1">
         <label htmlFor="login-username" className="sr-only">Username or Email</label>
         <div className="relative">
-          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500 pointer-events-none" />
           <Input
             id="login-username"
             type="text"
@@ -134,10 +127,10 @@ export const LoginForm = () => {
             onChange={handleUsernameChange}
             onBlur={() => handleBlur('username')}
             className={cn(
-              'h-11 pl-10 transition-all duration-200',
+              'min-h-[44px] pl-10 transition-all duration-200 bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500 focus:ring-offset-black',
               fieldErrors.username && touched.username
-                ? 'border-red-500 focus:ring-red-500'
-                : 'focus:ring-blue-500'
+                ? 'border-red-400'
+                : ''
             )}
             aria-invalid={!!fieldErrors.username}
             aria-describedby={fieldErrors.username ? 'username-error' : undefined}
@@ -148,7 +141,7 @@ export const LoginForm = () => {
           />
         </div>
         {fieldErrors.username && touched.username && (
-          <p className="text-red-500 text-sm mt-1" id="username-error">
+          <p className="text-red-400 text-sm mt-1" id="username-error">
             {fieldErrors.username}
           </p>
         )}
@@ -158,7 +151,7 @@ export const LoginForm = () => {
       <div className="space-y-1">
         <label htmlFor="login-password" className="sr-only">Password</label>
         <div className="relative">
-          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500 pointer-events-none" />
           <Input
             id="login-password"
             type={showPassword ? 'text' : 'password'}
@@ -167,10 +160,10 @@ export const LoginForm = () => {
             onChange={handlePasswordChange}
             onBlur={() => handleBlur('password')}
             className={cn(
-              'h-11 pl-10 pr-11 transition-all duration-200',
+              'min-h-[44px] pl-10 pr-11 transition-all duration-200 bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500 focus:ring-offset-black',
               fieldErrors.password && touched.password
-                ? 'border-red-500 focus:ring-red-500'
-                : 'focus:ring-blue-500'
+                ? 'border-red-400'
+                : ''
             )}
             aria-invalid={!!fieldErrors.password}
             aria-describedby={fieldErrors.password ? 'password-error' : undefined}
@@ -181,14 +174,14 @@ export const LoginForm = () => {
           <button
             type="button"
             onClick={() => setShowPassword((prev) => !prev)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 rounded p-0.5"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label={showPassword ? 'Hide password' : 'Show password'}
           >
             {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
           </button>
         </div>
         {fieldErrors.password && touched.password && (
-          <p className="text-red-500 text-sm mt-1" id="password-error">
+          <p className="text-red-400 text-sm mt-1" id="password-error">
             {fieldErrors.password}
           </p>
         )}
@@ -202,18 +195,18 @@ export const LoginForm = () => {
             checked={rememberMe}
             onCheckedChange={(checked) => setRememberMe(checked)}
             disabled={loading}
-            className="h-4 w-4"
+            className="h-4 w-4 border-gray-700 data-[state=checked]:bg-white data-[state=checked]:text-black focus-visible:ring-gray-500 focus-visible:ring-offset-black min-h-[44px] min-w-[44px] flex items-center justify-center"
           />
           <label
             htmlFor="remember-me"
-            className="text-sm text-gray-600 dark:text-gray-400 cursor-pointer select-none"
+            className="text-sm text-gray-400 cursor-pointer select-none"
           >
             Remember me
           </label>
         </div>
         <Link
           to="/forgot-password"
-          className="text-sm text-blue-600 hover:underline dark:text-blue-400 transition-colors"
+          className="text-sm text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
         >
           Forgot password?
         </Link>
@@ -223,16 +216,16 @@ export const LoginForm = () => {
       {error && (
         <Alert
           variant="destructive"
-          className="animate-slide-down"
+          className="animate-slide-down border border-red-400/30 bg-red-400/10 text-red-400"
           role="alert"
           aria-live="polite"
         >
-          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <AlertCircle className="h-4 w-4 flex-shrink-0 text-red-400" />
           <span className="ml-2 flex-1">{error}</span>
           <button
             type="button"
             onClick={() => setError('')}
-            className="ml-2 text-white/70 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 rounded"
+            className="ml-2 text-red-400 hover:text-red-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label="Dismiss error"
           >
             <X className="h-4 w-4" />
@@ -243,12 +236,12 @@ export const LoginForm = () => {
       {/* Submit Button */}
       <Button
         type="submit"
-        className="w-full h-11 text-base font-medium transition-all duration-200 hover:shadow-lg disabled:opacity-70 group"
+        className="w-full min-h-[44px] text-base font-medium transition-all duration-200 hover:shadow-lg disabled:opacity-70 group bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         disabled={loading || !isFormValid}
       >
         {loading ? (
           <span className="flex items-center justify-center gap-2">
-            <span className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <span className="h-5 w-5 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" />
             Signing in…
           </span>
         ) : (
@@ -259,13 +252,13 @@ export const LoginForm = () => {
         )}
       </Button>
 
-      {/* Demo Account (Optional) */}
+      {/* Demo Account */}
       <div className="relative my-4">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+          <div className="w-full border-t border-gray-800" />
         </div>
         <div className="relative flex justify-center text-xs">
-          <span className="px-3 bg-white dark:bg-gray-900 text-gray-400 dark:text-gray-500">
+          <span className="px-3 bg-black text-gray-500">
             Or continue with
           </span>
         </div>
@@ -276,18 +269,18 @@ export const LoginForm = () => {
         variant="outline"
         onClick={handleDemoLogin}
         disabled={loading}
-        className="w-full h-11"
+        className="w-full min-h-[44px] border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white focus-visible:ring-gray-500 focus-visible:ring-offset-black"
       >
         Try Demo Account
       </Button>
 
-      <p className="text-center text-xs text-gray-400 dark:text-gray-500">
+      <p className="text-center text-xs text-gray-500">
         By signing in, you agree to our{' '}
-        <Link to="/terms" className="text-blue-600 hover:underline dark:text-blue-400">
+        <Link to="/terms" className="text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded">
           Terms of Service
         </Link>{' '}
         and{' '}
-        <Link to="/privacy" className="text-blue-600 hover:underline dark:text-blue-400">
+        <Link to="/privacy" className="text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded">
           Privacy Policy
         </Link>
       </p>

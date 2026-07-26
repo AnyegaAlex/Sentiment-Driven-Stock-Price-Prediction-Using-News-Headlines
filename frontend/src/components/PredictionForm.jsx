@@ -1,6 +1,8 @@
 import { useState } from "react";
 import axios from "axios";
 import PropTypes from "prop-types";
+import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predict/" }) => {
   const [formData, setFormData] = useState({
@@ -78,8 +80,8 @@ const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predic
   };
 
   return (
-    <div className="p-4 sm:p-6 rounded-xl bg-white dark:bg-gray-800 shadow-md max-w-md sm:max-w-lg mx-auto w-full">
-      <h2 className="text-xl font-bold mb-6 text-gray-800 dark:text-gray-100">
+    <div className="p-4 sm:p-6 rounded-xl border border-gray-800 bg-gray-900 max-w-md sm:max-w-lg mx-auto w-full">
+      <h2 className="text-xl font-bold mb-6 text-white">
         Stock Movement Prediction
       </h2>
       
@@ -88,10 +90,10 @@ const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predic
           <div key={field}>
             <label
               htmlFor={field}
-              className="block font-medium text-gray-700 dark:text-gray-300 mb-1"
+              className="block font-medium text-gray-300 mb-1"
             >
               {field.split(/(?=[A-Z])/).join(" ")}
-              <span className="text-red-500">*</span>
+              <span className="text-red-400">*</span>
             </label>
             <input
               type="number"
@@ -100,9 +102,10 @@ const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predic
               value={formData[field]}
               onChange={handleInputChange}
               onBlur={() => setTouched({ ...touched, [field]: true })}
-              className={`w-full p-3 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
-                isFieldValid(field) ? "border-red-500" : "border-gray-300"
-              }`}
+              className={cn(
+                "w-full min-h-[44px] p-3 border rounded-md bg-gray-900 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-black",
+                isFieldValid(field) ? "border-red-400" : "border-gray-800"
+              )}
               required
               step={field === "sentimentScore" ? "0.01" : "any"}
               min={field === "sentimentScore" ? "-1" : "0"}
@@ -111,7 +114,7 @@ const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predic
               aria-describedby={isFieldValid(field) ? `${field}-error` : undefined}
             />
             {isFieldValid(field) && (
-              <p id={`${field}-error`} className="mt-1 text-sm text-red-600 dark:text-red-400">
+              <p id={`${field}-error`} className="mt-1 text-sm text-red-400">
                 This field is required
               </p>
             )}
@@ -121,15 +124,12 @@ const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predic
         <button
           type="submit"
           disabled={loading || !validateForm()}
-          className="w-full p-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 min-h-[44px] min-w-[44px]"
+          className="w-full min-h-[44px] p-3 bg-white text-black rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           aria-busy={loading}
         >
           {loading ? (
             <span className="flex items-center justify-center">
-              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+              <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />
               Predicting...
             </span>
           ) : (
@@ -141,7 +141,7 @@ const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predic
       {prediction && (
         <div
           role="status"
-          className="mt-6 p-4 rounded-lg bg-green-100 dark:bg-green-900 border border-green-200 dark:border-green-800 shadow-sm text-green-700 dark:text-green-200"
+          className="mt-6 p-4 rounded-lg border border-green-400 bg-green-400/10 text-green-400"
         >
           <strong className="font-medium">Prediction:</strong>{" "}
           <span className="capitalize">{prediction.toLowerCase()}</span>
@@ -151,7 +151,7 @@ const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predic
       {error && (
         <div
           role="alert"
-          className="mt-6 p-4 rounded-lg bg-red-100 dark:bg-red-900 border border-red-200 dark:border-red-800 shadow-sm text-red-700 dark:text-red-200"
+          className="mt-6 p-4 rounded-lg border border-red-400 bg-red-400/10 text-red-400"
         >
           <strong className="font-medium">Error:</strong> {error}
         </div>

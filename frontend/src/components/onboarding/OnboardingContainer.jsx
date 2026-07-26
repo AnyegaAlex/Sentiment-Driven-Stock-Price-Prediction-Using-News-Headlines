@@ -11,9 +11,10 @@ import PersonaSelection from './PersonaSelection';
 import DashboardTour from './CompletionStep';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { X } from 'lucide-react';
 
 const steps = ['welcome', 'persona', 'tour', 'complete'];
-const stepLabels = ['Welcome', 'Your Persona', 'Dashboard Tour', 'You\'re Ready!'];
+const stepLabels = ['Welcome', 'Your Persona', 'Dashboard Tour', "You're Ready!"];
 
 const OnboardingContainer = () => {
   const { user, isAuthenticated, isLoading, updateUser } = useAuth();
@@ -102,7 +103,7 @@ const OnboardingContainer = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-black p-4">
       {/* Confetti */}
       {showConfetti && <Confetti recycle={false} numberOfPieces={200} />}
 
@@ -116,8 +117,8 @@ const OnboardingContainer = () => {
                 className={cn(
                   'text-xs font-medium transition-colors',
                   index <= currentStepIndex
-                    ? 'text-blue-600 dark:text-blue-400'
-                    : 'text-gray-400 dark:text-gray-500'
+                    ? 'text-white'
+                    : 'text-gray-500'
                 )}
               >
                 {index < currentStepIndex ? '✓' : index + 1}
@@ -125,10 +126,16 @@ const OnboardingContainer = () => {
               </div>
             ))}
           </div>
-          <Progress 
-            value={progress} 
-            className="h-2 bg-gray-200 dark:bg-gray-700"
-          />
+          <div className="relative h-2 w-full rounded-full bg-gray-800 overflow-hidden">
+            <div
+              className="absolute left-0 top-0 h-full rounded-full bg-white transition-all duration-500"
+              style={{ width: `${progress}%` }}
+              role="progressbar"
+              aria-valuenow={progress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            />
+          </div>
         </div>
 
         {/* Error */}
@@ -136,11 +143,15 @@ const OnboardingContainer = () => {
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 text-sm flex items-center justify-between"
+            className="mb-4 p-3 border border-red-400 bg-red-400/10 rounded-lg text-red-400 text-sm flex items-center justify-between"
           >
             <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">
-              ✕
+            <button 
+              onClick={() => setError(null)} 
+              className="text-red-400 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] min-w-[44px] flex items-center justify-center"
+              aria-label="Dismiss error"
+            >
+              <X className="h-4 w-4" />
             </button>
           </motion.div>
         )}
@@ -181,22 +192,22 @@ const OnboardingContainer = () => {
               />
             )}
             {step === 'complete' && (
-              <div className="text-center py-12">
+              <div className="text-center py-12 bg-black">
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ type: 'spring', duration: 0.6 }}
                 >
-                  <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                    <svg className="w-12 h-12 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-green-400/20 flex items-center justify-center">
+                    <svg className="w-12 h-12 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
                 </motion.div>
-                <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                  You're All Set! 🎉
+                <h2 className="text-3xl font-bold text-white mb-2">
+                  You're All Set!
                 </h2>
-                <p className="text-gray-600 dark:text-gray-400">
+                <p className="text-gray-400">
                   Redirecting to your dashboard...
                 </p>
               </div>

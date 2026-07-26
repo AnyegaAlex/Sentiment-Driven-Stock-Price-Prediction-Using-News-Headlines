@@ -40,7 +40,7 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess, user }) => {
         onClose();
       }, 1500);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update profile');
+      setError(err.response?.data?.message || 'Failed to update profile. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -48,57 +48,72 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess, user }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md border border-gray-800 bg-gray-900 text-white">
         <DialogHeader>
-          <DialogTitle>Edit Profile</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-white">Edit Profile</DialogTitle>
+          <DialogDescription className="text-gray-400">
             Update your display name and username
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="display_name">Display Name</Label>
+            <Label htmlFor="display_name" className="text-gray-300">
+              Display Name
+            </Label>
             <Input
               id="display_name"
               value={form.display_name}
               onChange={(e) => setForm({ ...form, display_name: e.target.value })}
               placeholder="Your display name"
+              className="min-h-[44px] bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500 focus:ring-offset-black"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="username">Username</Label>
+            <Label htmlFor="username" className="text-gray-300">
+              Username
+            </Label>
             <Input
               id="username"
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
               placeholder="Your username"
+              className="min-h-[44px] bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500 focus:ring-offset-black"
             />
             <p className="text-xs text-gray-500">Usernames are unique and can be changed twice per year.</p>
           </div>
 
           {error && (
-            <Alert variant="destructive" className="animate-slide-down">
-              <AlertCircle className="h-4 w-4" />
+            <Alert variant="destructive" className="border border-red-400 bg-red-400/10 text-red-400">
+              <AlertCircle className="h-4 w-4 text-red-400" />
               <span className="ml-2">{error}</span>
             </Alert>
           )}
 
           {success && (
-            <Alert className="bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800 animate-slide-down">
-              <CheckCircle className="h-4 w-4 text-green-500" />
-              <span className="ml-2 text-green-700 dark:text-green-400">
+            <Alert className="border border-green-400 bg-green-400/10 text-green-400">
+              <CheckCircle className="h-4 w-4 text-green-400" />
+              <span className="ml-2 text-green-400">
                 Profile updated successfully!
               </span>
             </Alert>
           )}
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
+          <DialogFooter className="flex flex-col sm:flex-row gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="min-h-[44px] border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white focus-visible:ring-gray-500 focus-visible:ring-offset-black"
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading || !form.username}>
+            <Button
+              type="submit"
+              disabled={loading || !form.username}
+              className="min-h-[44px] bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               {loading ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>

@@ -30,7 +30,7 @@ const Documentation = () => {
               href={item.link}
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-gray-900 border border-gray-800 p-4 rounded-lg text-center hover:border-gray-600 transition duration-200 group"
+              className="bg-gray-900 border border-gray-800 p-4 rounded-lg text-center hover:border-gray-600 transition duration-200 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
             >
               <span className="block text-2xl font-bold text-white group-hover:text-gray-200 transition">
                 {item.count}
@@ -48,13 +48,13 @@ const Documentation = () => {
           <div className="flex flex-wrap justify-center gap-4">
             <a
               href="https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki"
-              className="inline-block bg-white text-black px-6 py-3 rounded-md font-semibold hover:bg-gray-200 transition duration-200"
+              className="inline-block bg-white text-black px-6 py-3 min-h-[44px] rounded-md font-semibold hover:bg-gray-200 transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
             >
               Read the Wiki
             </a>
             <a
               href="https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/"
-              className="inline-block border border-white text-white px-6 py-3 rounded-md font-semibold hover:bg-white hover:text-black transition duration-200"
+              className="inline-block border border-white text-white px-6 py-3 min-h-[44px] rounded-md font-semibold hover:bg-white hover:text-black transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
             >
               Swagger API Docs
             </a>

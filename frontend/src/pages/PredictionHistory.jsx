@@ -15,7 +15,7 @@
  * - Optimized data fetching with React Query
  * - Real-time updates via refetch interval
  * - Responsive design with Tailwind
- * - Dark mode support
+ * - Dark mode only
  * - Event tracking for analytics
  * 
  * @version 4.0.0
@@ -116,15 +116,15 @@ const PAGE_SIZE = 25;
 const AVAILABLE_SYMBOLS = ['AAPL', 'TSLA', 'GOOGL', 'MSFT', 'AMZN', 'NVDA', 'IBM', 'JPM', 'PLTR', 'LULU'];
 
 const STATUS_COLORS = {
-  pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-  correct: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  incorrect: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  pending: 'bg-gray-700 text-gray-300',
+  correct: 'bg-green-400/20 text-green-400',
+  incorrect: 'bg-red-400/20 text-red-400',
 };
 
 const DIRECTION_ICONS = {
-  up: <TrendingUp className="h-4 w-4 text-green-500" />,
-  down: <TrendingDown className="h-4 w-4 text-red-500" />,
-  neutral: <Minus className="h-4 w-4 text-yellow-500" />,
+  up: <TrendingUp className="h-4 w-4 text-green-400" />,
+  down: <TrendingDown className="h-4 w-4 text-red-400" />,
+  neutral: <Minus className="h-4 w-4 text-gray-400" />,
 };
 
 // ============================================================================
@@ -137,7 +137,7 @@ const DIRECTION_ICONS = {
 const PredictionStatusBadge = ({ isCorrect, isResolved }) => {
   if (!isResolved) {
     return (
-      <Badge variant="outline" className="border-yellow-300 text-yellow-600 dark:border-yellow-700 dark:text-yellow-400">
+      <Badge variant="outline" className="border-gray-700 text-gray-400">
         <Clock className="mr-1 h-3 w-3" />
         Pending
       </Badge>
@@ -146,7 +146,7 @@ const PredictionStatusBadge = ({ isCorrect, isResolved }) => {
   
   if (isCorrect) {
     return (
-      <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+      <Badge className="bg-green-400/20 text-green-400 border-0">
         <CheckCircle className="mr-1 h-3 w-3" />
         Correct
       </Badge>
@@ -154,7 +154,7 @@ const PredictionStatusBadge = ({ isCorrect, isResolved }) => {
   }
   
   return (
-    <Badge variant="destructive">
+    <Badge className="bg-red-400/20 text-red-400 border-0">
       <XCircle className="mr-1 h-3 w-3" />
       Incorrect
     </Badge>
@@ -171,9 +171,9 @@ PredictionStatusBadge.propTypes = {
  */
 const ConfidenceIndicator = ({ confidence }) => {
   const getColor = (val) => {
-    if (val >= 70) return 'bg-green-500';
-    if (val >= 50) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (val >= 70) return 'bg-green-400';
+    if (val >= 50) return 'bg-gray-400';
+    return 'bg-red-400';
   };
 
   return (
@@ -181,14 +181,16 @@ const ConfidenceIndicator = ({ confidence }) => {
       <Tooltip>
         <TooltipTrigger asChild>
           <div className="flex items-center gap-2">
-            <Progress
-              value={confidence}
-              className={cn('h-2 w-16', getColor(confidence))}
-            />
-            <span className="text-xs font-medium">{Math.round(confidence)}%</span>
+            <div className="h-2 w-16 rounded-full bg-gray-800 overflow-hidden">
+              <div
+                className={cn('h-full rounded-full transition-all', getColor(confidence))}
+                style={{ width: `${Math.min(100, confidence)}%` }}
+              />
+            </div>
+            <span className="text-xs font-medium text-gray-300">{Math.round(confidence)}%</span>
           </div>
         </TooltipTrigger>
-        <TooltipContent>
+        <TooltipContent className="bg-gray-900 border border-gray-800 text-white">
           <p>Confidence: {Math.round(confidence)}%</p>
         </TooltipContent>
       </Tooltip>
@@ -204,24 +206,21 @@ ConfidenceIndicator.propTypes = {
  * PriceChangeIndicator – Shows price change with color
  */
 const PriceChangeIndicator = ({ change }) => {
-  // ✅ Parse the value once – handles string, number, null, undefined
   const numChange = typeof change === 'number' ? change : parseFloat(change);
   
-  // ✅ Handle all invalid cases using numChange
   if (numChange === null || numChange === undefined || isNaN(numChange)) {
-    return <span className="text-gray-400">—</span>;
+    return <span className="text-gray-500">—</span>;
   }
   
-  // ✅ Use numChange for all comparisons and formatting
   const isPositive = numChange > 0;
   const isNegative = numChange < 0;
   
   return (
     <span className={cn(
       'font-mono text-sm font-medium',
-      isPositive && 'text-green-600 dark:text-green-400',
-      isNegative && 'text-red-600 dark:text-red-400',
-      !isPositive && !isNegative && 'text-gray-500 dark:text-gray-400'
+      isPositive && 'text-green-400',
+      isNegative && 'text-red-400',
+      !isPositive && !isNegative && 'text-gray-400'
     )}>
       {isPositive ? '+' : ''}{numChange.toFixed(2)}%
     </span>
@@ -243,19 +242,19 @@ const ResolutionCountdown = ({ createdAt }) => {
   const daysRemaining = differenceInDays(resolutionDate, now);
   
   if (daysRemaining <= 0) {
-    return <span className="text-sm text-green-600 dark:text-green-400">Resolving...</span>;
+    return <span className="text-sm text-green-400">Resolving...</span>;
   }
   
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+          <span className="flex items-center gap-1 text-sm text-gray-400">
             <Clock className="h-3 w-3" />
             {daysRemaining}d
           </span>
         </TooltipTrigger>
-        <TooltipContent>
+        <TooltipContent className="bg-gray-900 border border-gray-800 text-white">
           <p>Resolves on {format(resolutionDate, 'MMM d, yyyy')}</p>
         </TooltipContent>
       </Tooltip>
@@ -361,7 +360,7 @@ const PredictionHistory = () => {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to refresh data.",
+        description: "Failed to refresh data. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -414,7 +413,7 @@ const PredictionHistory = () => {
       
       toast({ title: "Export Successful", description: `Exported ${predictions.length} predictions.` });
     } catch (error) {
-      toast({ title: "Export Failed", description: error.message, variant: "destructive" });
+      toast({ title: "Export Failed", description: error.message || "Failed to export.", variant: "destructive" });
     }
   }, [symbol, dateRange, outcome, source, toast]);
 
@@ -430,12 +429,12 @@ const PredictionHistory = () => {
 
   // ---- Render ----
   return (
-    <div className="container mx-auto space-y-8 px-4 py-8">
+    <div className="container mx-auto space-y-8 px-4 py-8 bg-black text-white">
       {/* Header */}
       <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Prediction History</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <h1 className="text-3xl font-bold text-white">Prediction History</h1>
+          <p className="text-sm text-gray-400">
             Track your predictions and model performance over time
           </p>
         </div>
@@ -445,6 +444,7 @@ const PredictionHistory = () => {
             size="sm"
             onClick={handleRefresh}
             disabled={isRefreshing || isLoading}
+            className="border-white text-white hover:bg-white hover:text-black min-h-[44px]"
           >
             <RefreshCw className={cn(
               'h-4 w-4 mr-2',
@@ -456,6 +456,7 @@ const PredictionHistory = () => {
             variant="outline"
             size="sm"
             onClick={handleExportCSV}
+            className="border-white text-white hover:bg-white hover:text-black min-h-[44px]"
           >
             <Download className="mr-2 h-4 w-4" />
             Export CSV
@@ -472,7 +473,7 @@ const PredictionHistory = () => {
       {isLoading ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-xl" />
+            <Skeleton key={i} className="h-24 rounded-xl bg-gray-800" />
           ))}
         </div>
       ) : (
@@ -493,20 +494,20 @@ const PredictionHistory = () => {
       />
 
       {/* Performance Chart */}
-      <Card>
+      <Card className="bg-gray-900 border border-gray-800">
         <CardHeader>
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <CardTitle>Performance Trends</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-white">Performance Trends</CardTitle>
+              <CardDescription className="text-gray-400">
                 {chartMetric === 'f1' ? 'F1 Score' : 'Accuracy'} over the last 30 days
               </CardDescription>
             </div>
             <Tabs value={chartMetric} onValueChange={setChartMetric} className="w-auto">
-              <TabsList>
-                <TabsTrigger value="f1">F1 Score</TabsTrigger>
-                <TabsTrigger value="accuracy">Accuracy</TabsTrigger>
-                <TabsTrigger value="precision">Precision</TabsTrigger>
+              <TabsList className="bg-gray-800">
+                <TabsTrigger value="f1" className="data-[state=active]:bg-black data-[state=active]:text-white text-gray-400 hover:text-white min-h-[44px]">F1 Score</TabsTrigger>
+                <TabsTrigger value="accuracy" className="data-[state=active]:bg-black data-[state=active]:text-white text-gray-400 hover:text-white min-h-[44px]">Accuracy</TabsTrigger>
+                <TabsTrigger value="precision" className="data-[state=active]:bg-black data-[state=active]:text-white text-gray-400 hover:text-white min-h-[44px]">Precision</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -521,19 +522,19 @@ const PredictionHistory = () => {
       </Card>
 
       {/* Prediction Table */}
-      <Card>
+      <Card className="bg-gray-900 border border-gray-800">
         <CardHeader>
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <CardTitle>Predictions</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-white">Predictions</CardTitle>
+              <CardDescription className="text-gray-400">
                 Showing {predictions.length} of {total} predictions
-                <span className="ml-2 text-yellow-600 dark:text-yellow-400">
+                <span className="ml-2 text-gray-400">
                   ({predictions.filter(p => p.is_correct === null).length} pending)
                 </span>
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-2 text-sm text-gray-400">
               <span>Resolves in {RESOLUTION_DAYS} days</span>
             </div>
           </div>
@@ -541,38 +542,43 @@ const PredictionHistory = () => {
         <CardContent>
           {isLoading ? (
             <div className="flex justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
             </div>
           ) : isError ? (
-            <div className="flex items-center justify-center gap-2 py-12 text-red-500">
+            <div className="flex items-center justify-center gap-2 py-12 text-red-400">
               <AlertTriangle className="h-5 w-5" />
               <span>Error loading predictions. Please try again.</span>
-              <Button variant="outline" size="sm" onClick={handleRefresh}>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleRefresh}
+                className="border-white text-white hover:bg-white hover:text-black min-h-[44px]"
+              >
                 Retry
               </Button>
             </div>
           ) : predictions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-500 dark:text-gray-400">
-              <FileText className="mb-4 h-12 w-12" />
+            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+              <FileText className="mb-4 h-12 w-12 text-gray-500" />
               <p className="text-lg font-medium">No predictions found</p>
               <p className="text-sm">Try adjusting your filters or generate a new prediction</p>
             </div>
           ) : (
             <>
-              <ScrollArea className="rounded-md border">
+              <ScrollArea className="rounded-md border border-gray-800">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Symbol</TableHead>
-                      <TableHead>Prediction</TableHead>
-                      <TableHead className="hidden md:table-cell">Actual</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="hidden lg:table-cell">Price at Pred</TableHead>
-                      <TableHead className="hidden lg:table-cell">Price Change</TableHead>
-                      <TableHead>Confidence</TableHead>
-                      <TableHead className="hidden sm:table-cell">Resolves In</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                    <TableRow className="border-b border-gray-800 hover:bg-gray-800/50">
+                      <TableHead className="text-gray-400">Date</TableHead>
+                      <TableHead className="text-gray-400">Symbol</TableHead>
+                      <TableHead className="text-gray-400">Prediction</TableHead>
+                      <TableHead className="hidden md:table-cell text-gray-400">Actual</TableHead>
+                      <TableHead className="text-gray-400">Status</TableHead>
+                      <TableHead className="hidden lg:table-cell text-gray-400">Price at Pred</TableHead>
+                      <TableHead className="hidden lg:table-cell text-gray-400">Price Change</TableHead>
+                      <TableHead className="text-gray-400">Confidence</TableHead>
+                      <TableHead className="hidden sm:table-cell text-gray-400">Resolves In</TableHead>
+                      <TableHead className="text-right text-gray-400">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -584,29 +590,31 @@ const PredictionHistory = () => {
                       return (
                         <TableRow
                           key={pred.id}
-                          className="cursor-pointer hover:bg-muted/50"
+                          className="cursor-pointer hover:bg-gray-800/50 border-b border-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                           onClick={() => handleRowClick(pred)}
+                          tabIndex={0}
+                          onKeyDown={(e) => e.key === 'Enter' && handleRowClick(pred)}
                         >
-                          <TableCell className="text-sm">
+                          <TableCell className="text-sm text-gray-300">
                             {format(new Date(pred.date), 'MMM d, yyyy')}
                           </TableCell>
-                          <TableCell className="font-mono font-medium">
+                          <TableCell className="font-mono font-medium text-white">
                             {pred.stock_symbol}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
                               {DIRECTION_ICONS[pred.predicted_movement] || DIRECTION_ICONS.neutral}
-                              <span className="capitalize">{pred.predicted_movement}</span>
+                              <span className="capitalize text-gray-300">{pred.predicted_movement}</span>
                             </div>
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
                             {isResolved ? (
                               <div className="flex items-center gap-1">
                                 {DIRECTION_ICONS[pred.actual_direction] || DIRECTION_ICONS.neutral}
-                                <span className="capitalize">{pred.actual_direction || '—'}</span>
+                                <span className="capitalize text-gray-300">{pred.actual_direction || '—'}</span>
                               </div>
                             ) : (
-                              <span className="text-gray-400">Pending</span>
+                              <span className="text-gray-500">Pending</span>
                             )}
                           </TableCell>
                           <TableCell>
@@ -615,14 +623,14 @@ const PredictionHistory = () => {
                               isResolved={isResolved}
                             />
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell font-mono text-sm">
+                          <TableCell className="hidden lg:table-cell font-mono text-sm text-gray-300">
                             {pred.price_at_prediction ? `$${Number(pred.price_at_prediction).toFixed(2)}` : '—'}
                           </TableCell>
                           <TableCell className="hidden lg:table-cell">
                             {isResolved ? (
                               <PriceChangeIndicator change={priceChange} />
                             ) : (
-                              <span className="text-gray-400">—</span>
+                              <span className="text-gray-500">—</span>
                             )}
                           </TableCell>
                           <TableCell>
@@ -632,7 +640,7 @@ const PredictionHistory = () => {
                             {isPending ? (
                               <ResolutionCountdown createdAt={pred.created_at} />
                             ) : (
-                              <span className="text-sm text-green-600 dark:text-green-400">✓ Resolved</span>
+                              <span className="text-sm text-green-400">✓ Resolved</span>
                             )}
                           </TableCell>
                           <TableCell className="text-right">
@@ -643,6 +651,8 @@ const PredictionHistory = () => {
                                 e.stopPropagation();
                                 handleRowClick(pred);
                               }}
+                              className="text-gray-400 hover:text-white hover:bg-gray-800 min-h-[44px] min-w-[44px]"
+                              aria-label="View prediction details"
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -655,8 +665,8 @@ const PredictionHistory = () => {
               </ScrollArea>
 
               {/* Pagination */}
-              <div className="flex items-center justify-between border-t px-4 py-4">
-                <div className="text-sm text-gray-500 dark:text-gray-400">
+              <div className="flex items-center justify-between border-t border-gray-800 px-4 py-4">
+                <div className="text-sm text-gray-400">
                   Showing {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
                 </div>
                 <div className="flex gap-2">
@@ -665,6 +675,7 @@ const PredictionHistory = () => {
                     size="sm"
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                     disabled={page === 0}
+                    className="border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white min-h-[44px] disabled:opacity-50"
                   >
                     Previous
                   </Button>
@@ -673,6 +684,7 @@ const PredictionHistory = () => {
                     size="sm"
                     onClick={() => setPage((p) => p + 1)}
                     disabled={(page + 1) * PAGE_SIZE >= total}
+                    className="border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white min-h-[44px] disabled:opacity-50"
                   >
                     Next
                   </Button>

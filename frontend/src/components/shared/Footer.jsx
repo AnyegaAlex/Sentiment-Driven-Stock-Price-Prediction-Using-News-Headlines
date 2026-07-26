@@ -55,7 +55,7 @@ const LinkList = ({ links, label }) => (
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-gray-400 hover:text-white transition"
+            className="text-sm text-gray-400 hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
           >
             {label}
           </a>
@@ -147,7 +147,7 @@ const Footer = () => {
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-500 hover:text-white transition"
+                className="text-gray-500 hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
               >
                 {label}
               </a>

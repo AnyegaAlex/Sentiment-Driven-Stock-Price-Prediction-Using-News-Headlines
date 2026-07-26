@@ -1,4 +1,3 @@
-// components/cards/StockOpinionCard.jsx
 /**
  * StockOpinionCard
  *
@@ -32,7 +31,6 @@ import {
   CardContent,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
@@ -129,10 +127,10 @@ const calculateSMADiff = (currentPrice, sma) => {
 const Section = ({ title, icon: Icon, children }) => (
   <div className="space-y-3">
     <div className="flex items-center gap-2">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800/80 dark:text-gray-400">
+      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-800 text-gray-400">
         <Icon className="h-4 w-4" aria-hidden="true" />
       </div>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300 sm:text-sm">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-300 sm:text-sm">
         {title}
       </h3>
     </div>
@@ -151,33 +149,33 @@ const PriceOverviewCard = ({ currentPrice, sma50, sma200 }) => {
   const sma200Diff = calculateSMADiff(currentPrice, sma200);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/50 dark:bg-gray-800/30 sm:p-5">
+    <div className="rounded-xl border border-gray-800 bg-gray-900 p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">Current Price</span>
+        <span className="text-xs font-medium text-gray-400 sm:text-sm">Current Price</span>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              className="h-8 w-8 p-0 text-gray-500 hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
               aria-label="More information about current price"
             >
               <Info className="h-4 w-4" aria-hidden="true" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="top" className="border-gray-800 bg-gray-900 text-gray-100">
+          <TooltipContent side="top" className="border border-gray-800 bg-gray-900 text-white">
             <p className="text-sm">Last traded price</p>
           </TooltipContent>
         </Tooltip>
       </div>
-      <div className="font-mono text-2xl font-bold text-gray-900 dark:text-gray-50 sm:text-3xl">
+      <div className="font-mono text-2xl font-bold text-white sm:text-3xl">
         ${currentPrice.toFixed(2)}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4">
         <div className="space-y-1">
-          <div className="text-xs text-gray-500 dark:text-gray-400">SMA 50</div>
+          <div className="text-xs text-gray-500">SMA 50</div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-xs text-gray-700 dark:text-gray-300 sm:text-sm">
+            <span className="font-mono text-xs text-gray-300 sm:text-sm">
               {formatSMA(sma50)}
             </span>
             {sma50 !== null && sma50 !== undefined && sma50 !== 0 && (
@@ -188,9 +186,9 @@ const PriceOverviewCard = ({ currentPrice, sma50, sma200 }) => {
           </div>
         </div>
         <div className="space-y-1">
-          <div className="text-xs text-gray-500 dark:text-gray-400">SMA 200</div>
+          <div className="text-xs text-gray-500">SMA 200</div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-xs text-gray-700 dark:text-gray-300 sm:text-sm">
+            <span className="font-mono text-xs text-gray-300 sm:text-sm">
               {formatSMA(sma200)}
             </span>
             {sma200 !== null && sma200 !== undefined && sma200 !== 0 && (
@@ -226,9 +224,9 @@ const SentimentCard = ({ percentage, direction }) => {
   const Icon = config.icon;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/50 dark:bg-gray-800/30 sm:p-5">
+    <div className="rounded-xl border border-gray-800 bg-gray-900 p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">Market Sentiment</span>
+        <span className="text-xs font-medium text-gray-400 sm:text-sm">Market Sentiment</span>
         <Badge className={cn('border font-medium', config.color.badge)}>
           <Icon className="mr-1 h-3 w-3" aria-hidden="true" />
           {config.label}
@@ -236,15 +234,16 @@ const SentimentCard = ({ percentage, direction }) => {
       </div>
       <div className="space-y-2">
         <div className="flex justify-between text-sm">
-          <span className="text-gray-500 dark:text-gray-400">Sentiment Score</span>
+          <span className="text-gray-500">Sentiment Score</span>
           <span className={cn('font-medium', config.color.text)}>{percentage.toFixed(0)}%</span>
         </div>
-        <Progress
-          value={percentage}
-          className="h-2 bg-gray-200 dark:bg-gray-700"
-          indicatorClassName={cn('bg-gradient-to-r', config.color.gradient)}
-        />
-        <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500">
+        <div className="relative h-2 w-full rounded-full bg-gray-800 overflow-hidden">
+          <div
+            className={cn('h-full rounded-full transition-all', config.color.bg)}
+            style={{ width: `${Math.min(percentage, 100)}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-xs text-gray-500">
           <span>Bearish</span>
           <span>Neutral</span>
           <span>Bullish</span>
@@ -262,28 +261,28 @@ SentimentCard.propTypes = {
 const RSIIndicator = ({ value }) => {
   if (value === null || value === undefined || value === 0) {
     return (
-      <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/30 dark:bg-gray-800/20">
+      <div className="flex h-full flex-col rounded-lg border border-gray-800 bg-gray-900 p-4">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-500 dark:text-gray-400">RSI (14)</span>
-          <Badge variant="outline" className="text-xs text-gray-400">N/A</Badge>
+          <span className="text-xs text-gray-500">RSI (14)</span>
+          <Badge variant="outline" className="text-xs text-gray-500 border-gray-700">N/A</Badge>
         </div>
-        <div className="mt-2 font-mono text-2xl font-bold text-gray-400 dark:text-gray-500">—</div>
-        <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">Data unavailable</div>
+        <div className="mt-2 font-mono text-2xl font-bold text-gray-500">—</div>
+        <div className="mt-1 text-xs text-gray-500">Data unavailable</div>
       </div>
     );
   }
 
   const status = getRSIStatus(value);
   return (
-    <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/30 dark:bg-gray-800/20">
+    <div className="flex h-full flex-col rounded-lg border border-gray-800 bg-gray-900 p-4">
       <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-500 dark:text-gray-400">RSI (14)</span>
+        <span className="text-xs text-gray-500">RSI (14)</span>
         <Badge className={cn('text-xs font-medium', status.color.badge)}>{status.label}</Badge>
       </div>
-      <div className="mt-2 font-mono text-2xl font-bold text-gray-900 dark:text-gray-50">
+      <div className="mt-2 font-mono text-2xl font-bold text-white">
         {value.toFixed(1)}
       </div>
-      <div className="mt-1 h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+      <div className="mt-1 h-1.5 w-full rounded-full bg-gray-800">
         <div
           className={cn('h-full rounded-full', status.color.bg.replace('/30', '/50'))}
           style={{ width: `${Math.min(value, 100)}%` }}
@@ -298,13 +297,13 @@ RSIIndicator.propTypes = { value: PropTypes.number };
 const SupportResistanceIndicator = ({ type, value, current }) => {
   if (value === null || value === undefined || value === 0) {
     return (
-      <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/30 dark:bg-gray-800/20">
+      <div className="flex h-full flex-col rounded-lg border border-gray-800 bg-gray-900 p-4">
         <div className="flex items-center justify-between">
-          <span className="text-xs capitalize text-gray-500 dark:text-gray-400">{type}</span>
-          <Badge variant="outline" className="text-xs text-gray-400">N/A</Badge>
+          <span className="text-xs capitalize text-gray-500">{type}</span>
+          <Badge variant="outline" className="text-xs text-gray-500 border-gray-700">N/A</Badge>
         </div>
-        <div className="mt-2 font-mono text-2xl font-bold text-gray-400 dark:text-gray-500">—</div>
-        <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">Data unavailable</div>
+        <div className="mt-2 font-mono text-2xl font-bold text-gray-500">—</div>
+        <div className="mt-1 text-xs text-gray-500">Data unavailable</div>
       </div>
     );
   }
@@ -320,17 +319,17 @@ const SupportResistanceIndicator = ({ type, value, current }) => {
     : isAbove ? COLOR_SCHEMES.positive : COLOR_SCHEMES.neutral;
 
   return (
-    <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/30 dark:bg-gray-800/20">
+    <div className="flex h-full flex-col rounded-lg border border-gray-800 bg-gray-900 p-4">
       <div className="flex items-center justify-between">
-        <span className="text-xs capitalize text-gray-500 dark:text-gray-400">{type}</span>
+        <span className="text-xs capitalize text-gray-500">{type}</span>
         <Badge className={cn('text-xs font-medium', color.badge)}>
           {formatPercentage(distance)}
         </Badge>
       </div>
-      <div className="mt-2 font-mono text-2xl font-bold text-gray-900 dark:text-gray-50">
+      <div className="mt-2 font-mono text-2xl font-bold text-white">
         ${value.toFixed(2)}
       </div>
-      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{status}</div>
+      <div className="mt-1 text-xs text-gray-500">{status}</div>
     </div>
   );
 };
@@ -342,15 +341,15 @@ SupportResistanceIndicator.propTypes = {
 };
 
 const VolumeIndicator = ({ volume }) => (
-  <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700/30 dark:bg-gray-800/20">
+  <div className="flex h-full flex-col rounded-lg border border-gray-800 bg-gray-900 p-4">
     <div className="flex items-center justify-between">
-      <span className="text-xs text-gray-500 dark:text-gray-400">Volume</span>
-      <Activity className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+      <span className="text-xs text-gray-500">Volume</span>
+      <Activity className="h-4 w-4 text-gray-500" aria-hidden="true" />
     </div>
-    <div className="mt-2 font-mono text-2xl font-bold text-gray-900 dark:text-gray-50">
+    <div className="mt-2 font-mono text-2xl font-bold text-white">
       {volume > 0 ? formatVolume(volume) : '—'}
     </div>
-    <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+    <div className="mt-1 text-xs text-gray-500">
       {volume > 0 ? '24h trading volume' : 'Data unavailable'}
     </div>
   </div>
@@ -370,19 +369,19 @@ const TargetCard = ({ label, value, current, type }) => {
   const Icon = config.icon;
 
   return (
-    <div className={cn('rounded-lg border p-3', config.color.border, config.color.bg, 'sm:p-4')}>
+    <div className={cn('rounded-lg border p-3 sm:p-4', config.color.border, config.color.bg)}>
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
+        <span className="text-xs text-gray-500">{label}</span>
         <Icon className={cn('h-4 w-4', config.color.text)} aria-hidden="true" />
       </div>
-      <div className="font-mono text-lg font-bold text-gray-900 dark:text-gray-50 sm:text-xl">
+      <div className="font-mono text-lg font-bold text-white sm:text-xl">
         ${value.toFixed(2)}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <Badge className={cn('text-xs font-medium', config.color.badge)}>
           {formatPercentage(diff)}
         </Badge>
-        <span className="text-xs text-gray-500 dark:text-gray-400">from current</span>
+        <span className="text-xs text-gray-500">from current</span>
       </div>
     </div>
   );
@@ -405,13 +404,13 @@ const FactorItem = ({ title, description, impact }) => {
   const Icon = config.icon;
 
   return (
-    <div className="flex gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700/30 dark:bg-gray-800/20">
+    <div className="flex gap-3 rounded-lg border border-gray-800 bg-gray-900 p-3">
       <div className={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg', config.color.bg)}>
         <Icon className={cn('h-3.5 w-3.5', config.color.text)} aria-hidden="true" />
       </div>
       <div className="min-w-0 flex-1">
-        <h4 className="mb-1 text-sm font-medium text-gray-800 dark:text-gray-200">{title}</h4>
-        <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">{description}</p>
+        <h4 className="mb-1 text-sm font-medium text-gray-200">{title}</h4>
+        <p className="text-xs leading-relaxed text-gray-400">{description}</p>
       </div>
     </div>
   );
@@ -445,9 +444,9 @@ const ConfidenceBadge = ({ confidence }) => {
   const confidencePercent = getConfidencePercent(confidence);
 
   return (
-    <Badge variant="outline" className="flex h-9 items-center border-gray-200 bg-gray-50 px-3 py-1.5 dark:border-gray-700 dark:bg-gray-800/50">
-      <span className="text-sm text-gray-600 dark:text-gray-300">Confidence</span>
-      <span className="ml-2 text-sm font-bold text-gray-900 dark:text-gray-50">
+    <Badge variant="outline" className="flex h-9 items-center border border-gray-700 bg-gray-900 px-3 py-1.5">
+      <span className="text-sm text-gray-400">Confidence</span>
+      <span className="ml-2 text-sm font-bold text-white">
         {confidencePercent}%
       </span>
     </Badge>
@@ -462,7 +461,7 @@ ConfidenceBadge.propTypes = { confidence: PropTypes.number };
 const LSTMPredictionBadge = ({ prediction }) => {
   if (!prediction) {
     return (
-      <Badge variant="outline" className="flex h-9 items-center border-gray-400 bg-gray-100 px-3 py-1.5 text-xs text-gray-600 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-400">
+      <Badge variant="outline" className="flex h-9 items-center border border-gray-700 bg-gray-900 px-3 py-1.5 text-xs text-gray-400">
         <Zap className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
         LSTM: Unavailable
       </Badge>
@@ -481,7 +480,7 @@ const LSTMPredictionBadge = ({ prediction }) => {
     const fallbackMessage = prediction.fallback ? ' (Fallback)' : '';
     const displayDirection = direction || 'Unavailable';
     return (
-      <Badge variant="outline" className="flex h-9 items-center border-yellow-400 bg-yellow-50 px-3 py-1.5 text-xs text-yellow-700 dark:border-yellow-600 dark:bg-yellow-900/20 dark:text-yellow-400">
+      <Badge variant="outline" className="flex h-9 items-center border border-gray-700 bg-gray-900 px-3 py-1.5 text-xs text-gray-400">
         <Zap className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
         LSTM: {displayDirection}{fallbackMessage}
       </Badge>
@@ -558,10 +557,10 @@ const RecentPredictions = ({ symbol }) => {
   if (isLoading) {
     return (
       <div className="space-y-2">
-        <Skeleton className="h-4 w-32 bg-gray-200 dark:bg-gray-800" />
+        <Skeleton className="h-4 w-32 bg-gray-800" />
         <div className="flex gap-3">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-12 flex-1 rounded-lg bg-gray-200 dark:bg-gray-800" />
+            <Skeleton key={i} className="h-12 flex-1 rounded-lg bg-gray-800" />
           ))}
         </div>
       </div>
@@ -570,7 +569,7 @@ const RecentPredictions = ({ symbol }) => {
 
   if (error || !history.length) {
     return (
-      <div className="text-xs text-gray-500 dark:text-gray-400">
+      <div className="text-xs text-gray-500">
         {error ? 'Unable to load recent predictions' : 'No recent predictions'}
       </div>
     );
@@ -581,11 +580,11 @@ const RecentPredictions = ({ symbol }) => {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <h4 className="text-xs font-medium text-gray-600 dark:text-gray-400">Recent Predictions</h4>
+        <h4 className="text-xs font-medium text-gray-400">Recent Predictions</h4>
         <Button
           variant="link"
           size="sm"
-          className="h-auto p-0 text-xs text-blue-600 dark:text-blue-400"
+          className="h-auto p-0 text-xs text-gray-400 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           onClick={() => navigate('/prediction-history')}
         >
           View All <ChevronRight className="ml-0.5 h-3 w-3" />
@@ -613,10 +612,10 @@ const RecentPredictions = ({ symbol }) => {
                 <Icon className={cn('h-3 w-3', config.text)} />
                 <span className={config.text}>{displayMovement}</span>
               </div>
-              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <div className="mt-1 text-xs text-gray-500">
                 {formatDate(pred?.date || pred?.created_at)}
               </div>
-              <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+              <div className="mt-0.5 text-xs text-gray-500">
                 Conf: {Math.round((pred?.confidence || 0) * 100)}%
               </div>
             </div>
@@ -693,47 +692,47 @@ const StockOpinionCard = ({
         <CardHeader className="pb-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-2">
-              <Skeleton className="h-8 w-48 bg-gray-200 dark:bg-gray-800" />
-              <Skeleton className="h-4 w-32 bg-gray-200 dark:bg-gray-800" />
+              <Skeleton className="h-8 w-48 bg-gray-800" />
+              <Skeleton className="h-4 w-32 bg-gray-800" />
             </div>
             <div className="flex gap-2">
-              <Skeleton className="h-9 w-24 bg-gray-200 dark:bg-gray-800" />
-              <Skeleton className="h-9 w-28 bg-gray-200 dark:bg-gray-800" />
-              <Skeleton className="h-9 w-32 bg-gray-200 dark:bg-gray-800" />
+              <Skeleton className="h-9 w-24 bg-gray-800" />
+              <Skeleton className="h-9 w-28 bg-gray-800" />
+              <Skeleton className="h-9 w-32 bg-gray-800" />
             </div>
           </div>
           <div className="mt-3 flex gap-2">
-            <Skeleton className="h-6 w-24 bg-gray-200 dark:bg-gray-800" />
-            <Skeleton className="h-6 w-28 bg-gray-200 dark:bg-gray-800" />
+            <Skeleton className="h-6 w-24 bg-gray-800" />
+            <Skeleton className="h-6 w-28 bg-gray-800" />
           </div>
         </CardHeader>
-        <Separator className="bg-gray-200 dark:bg-gray-800" />
+        <Separator className="bg-gray-800" />
         <CardContent className="space-y-5 p-4 sm:p-5">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Skeleton className="h-40 rounded-xl bg-gray-200 dark:bg-gray-800" />
-            <Skeleton className="h-40 rounded-xl bg-gray-200 dark:bg-gray-800" />
+            <Skeleton className="h-40 rounded-xl bg-gray-800" />
+            <Skeleton className="h-40 rounded-xl bg-gray-800" />
           </div>
           <div className="space-y-3">
-            <Skeleton className="h-6 w-40 bg-gray-200 dark:bg-gray-800" />
+            <Skeleton className="h-6 w-40 bg-gray-800" />
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-24 rounded-lg bg-gray-200 dark:bg-gray-800" />
+                <Skeleton key={i} className="h-24 rounded-lg bg-gray-800" />
               ))}
             </div>
           </div>
           <div className="space-y-3">
-            <Skeleton className="h-6 w-32 bg-gray-200 dark:bg-gray-800" />
+            <Skeleton className="h-6 w-32 bg-gray-800" />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-28 rounded-lg bg-gray-200 dark:bg-gray-800" />
+                <Skeleton key={i} className="h-28 rounded-lg bg-gray-800" />
               ))}
             </div>
           </div>
           <div className="space-y-2">
-            <Skeleton className="h-4 w-32 bg-gray-200 dark:bg-gray-800" />
+            <Skeleton className="h-4 w-32 bg-gray-800" />
             <div className="flex gap-3">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-12 flex-1 rounded-lg bg-gray-200 dark:bg-gray-800" />
+                <Skeleton key={i} className="h-12 flex-1 rounded-lg bg-gray-800" />
               ))}
             </div>
           </div>
@@ -755,30 +754,25 @@ const StockOpinionCard = ({
 
   return (
     <CardWrapper className={cn('relative overflow-hidden', className)}>
-      <div
-        className={cn('pointer-events-none absolute inset-0 bg-gradient-to-br opacity-5', RECOMMENDATION_CONFIG[recommendation]?.color?.gradient || '')}
-        aria-hidden="true"
-      />
-
       <CardHeader className="relative space-y-3 pb-3 sm:pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1.5">
-            <CardTitle className="text-lg font-bold tracking-tight text-gray-900 dark:text-gray-50 sm:text-xl lg:text-2xl">
-              Stock Opinion| {data.company || symbol}
+            <CardTitle className="text-lg font-bold tracking-tight text-white sm:text-xl lg:text-2xl">
+              Stock Opinion | {data.company || symbol}
             </CardTitle>
-            <CardDescription className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400 sm:text-sm">
-              <span className="font-mono font-medium text-gray-700 dark:text-gray-300">
+            <CardDescription className="flex flex-wrap items-center gap-2 text-xs text-gray-400 sm:text-sm">
+              <span className="font-mono font-medium text-gray-300">
                 {data.symbol}
               </span>
-              <span className="hidden h-1 w-1 rounded-full bg-gray-400 dark:bg-gray-600 sm:inline-block" />
-              <Badge variant="outline" className="text-xs font-normal capitalize">
+              <span className="hidden h-1 w-1 rounded-full bg-gray-600 sm:inline-block" />
+              <Badge variant="outline" className="text-xs font-normal capitalize border-gray-700 text-gray-400">
                 {riskType} Risk
               </Badge>
-              <Badge variant="outline" className="text-xs font-normal capitalize">
+              <Badge variant="outline" className="text-xs font-normal capitalize border-gray-700 text-gray-400">
                 {holdTime.replace('-', ' ')}
               </Badge>
-              <span className="hidden h-1 w-1 rounded-full bg-gray-400 dark:bg-gray-600 sm:inline-block" />
-              <span className="flex items-center gap-1.5">
+              <span className="hidden h-1 w-1 rounded-full bg-gray-600 sm:inline-block" />
+              <span className="flex items-center gap-1.5 text-gray-500">
                 <Clock className="h-3.5 w-3.5" aria-hidden="true" />
                 {formatDate(data.lastUpdated)}
               </span>
@@ -786,7 +780,7 @@ const StockOpinionCard = ({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {!hasTechnicalData && (
-              <Badge variant="destructive" className="text-xs">
+              <Badge className="bg-red-400/20 text-red-400 border-0 text-xs">
                 Technical data unavailable
               </Badge>
             )}
@@ -797,7 +791,7 @@ const StockOpinionCard = ({
         </div>
       </CardHeader>
 
-      <Separator className="bg-gray-200 dark:bg-gray-800" />
+      <Separator className="bg-gray-800" />
 
       <CardContent className="relative space-y-4 p-4 sm:space-y-5 sm:p-5">
         <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
@@ -810,7 +804,7 @@ const StockOpinionCard = ({
         </div>
 
         <Section title="Technical Analysis" icon={BarChart3}>
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <RSIIndicator value={technicals.rsi} />
             <SupportResistanceIndicator type="support" value={technicals.support} current={technicals.currentPrice} />
             <SupportResistanceIndicator type="resistance" value={technicals.resistance} current={technicals.currentPrice} />
@@ -841,7 +835,7 @@ const StockOpinionCard = ({
         </div>
 
         <div className="flex flex-col gap-4 pt-2 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-xs text-gray-500">
             Analysis generated {formatDate(data.lastUpdated)}
           </p>
           <Button
@@ -849,7 +843,7 @@ const StockOpinionCard = ({
             size="sm"
             onClick={() => refetch()}
             disabled={isLoading}
-            className="min-h-[44px] border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-50"
+            className="min-h-[44px] border border-gray-700 bg-gray-900 text-gray-400 hover:bg-gray-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             <RefreshCw className={cn('mr-2 h-4 w-4', isLoading && 'animate-spin')} aria-hidden="true" />
             Refresh Analysis

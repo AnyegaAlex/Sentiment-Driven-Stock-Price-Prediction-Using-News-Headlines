@@ -24,7 +24,7 @@ const OpenSource = () => {
               <li className="text-xs text-gray-500">
                 <a
                   href="https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/blob/main/LICENSE"
-                  className="text-blue-400 hover:underline"
+                  className="text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
                 >
                   View full license
                 </a>
@@ -43,7 +43,7 @@ const OpenSource = () => {
               <li className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-800">
                 <a
                   href="https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/security"
-                  className="text-blue-400 hover:underline"
+                  className="text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
                 >
                   View security policies
                 </a>
@@ -74,7 +74,7 @@ const OpenSource = () => {
         <div className="text-center mt-8">
           <a
             href="https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines"
-            className="inline-block border border-white text-white px-6 py-3 rounded-md font-semibold hover:bg-white hover:text-black transition"
+            className="inline-block border border-white text-white px-6 py-3 min-h-[44px] rounded-md font-semibold hover:bg-white hover:text-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             View on GitHub
           </a>

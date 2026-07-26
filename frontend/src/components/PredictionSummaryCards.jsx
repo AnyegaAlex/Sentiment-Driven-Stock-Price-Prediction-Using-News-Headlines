@@ -13,7 +13,7 @@ const PredictionSummaryCards = ({ data }) => {
     recent_accuracy 
   } = data;
   
-  // ✅ Calculate accuracy based on RESOLVED predictions only
+  // Calculate accuracy based on RESOLVED predictions only
   const accuracy = resolved_predictions > 0 
     ? Math.round((correct_predictions / resolved_predictions) * 100) 
     : 0;
@@ -22,41 +22,41 @@ const PredictionSummaryCards = ({ data }) => {
   const recentAccuracy = data?.recent_accuracy || 0;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <Card>
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4" role="group" aria-label="Prediction summary statistics">
+      <Card className="bg-gray-900 border border-gray-800">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Accuracy</CardTitle>
+          <CardTitle className="text-sm font-medium text-gray-400">Accuracy</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{accuracy}%</div>
-          <p className="text-xs text-muted-foreground">{total_predictions} verified</p>
+          <div className="text-2xl font-bold text-white">{accuracy}%</div>
+          <p className="text-xs text-gray-500">{total_predictions} verified</p>
         </CardContent>
       </Card>
-      <Card>
+      <Card className="bg-gray-900 border border-gray-800">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">F1 Score</CardTitle>
+          <CardTitle className="text-sm font-medium text-gray-400">F1 Score</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{f1}%</div>
-          <p className="text-xs text-muted-foreground">Balanced metric</p>
+          <div className="text-2xl font-bold text-white">{f1}%</div>
+          <p className="text-xs text-gray-500">Balanced metric</p>
         </CardContent>
       </Card>
-      <Card>
+      <Card className="bg-gray-900 border border-gray-800">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Total Predictions</CardTitle>
+          <CardTitle className="text-sm font-medium text-gray-400">Total Predictions</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{total_predictions}</div>
-          <p className="text-xs text-muted-foreground">{correct_predictions} correct</p>
+          <div className="text-2xl font-bold text-white">{total_predictions}</div>
+          <p className="text-xs text-gray-500">{correct_predictions} correct</p>
         </CardContent>
       </Card>
-      <Card>
+      <Card className="bg-gray-900 border border-gray-800">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Last 7 Days</CardTitle>
+          <CardTitle className="text-sm font-medium text-gray-400">Last 7 Days</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{recentAccuracy}%</div>
-          <p className="text-xs text-muted-foreground">Recent performance</p>
+          <div className="text-2xl font-bold text-white">{recentAccuracy}%</div>
+          <p className="text-xs text-gray-500">Recent performance</p>
         </CardContent>
       </Card>
     </div>

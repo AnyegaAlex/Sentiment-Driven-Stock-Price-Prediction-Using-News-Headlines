@@ -53,29 +53,28 @@ class ErrorBoundary extends React.Component {
           role="alert"
           aria-live="assertive"
           className={cn(
-            "p-6 rounded-lg border shadow-sm max-w-2xl mx-auto my-8",
-            "bg-red-50/80 dark:bg-red-900/20",
-            "border-red-200 dark:border-red-800"
+            "p-6 rounded-lg border max-w-2xl mx-auto my-8",
+            "border-red-400 bg-red-400/10"
           )}
         >
           <div className="flex flex-col items-center text-center gap-4">
             <AlertTriangle 
-              className="w-12 h-12 text-red-500 dark:text-red-400" 
+              className="w-12 h-12 text-red-400" 
               aria-hidden="true"
             />
             <div>
-              <h2 className="text-xl font-semibold text-red-800 dark:text-red-200 mb-2">
+              <h2 className="text-xl font-semibold text-white mb-2">
                 Something went wrong
               </h2>
-              <p className="text-red-700 dark:text-red-300 mb-1">
-                {this.state.error?.toString() || "Unknown error"}
+              <p className="text-gray-400 mb-1">
+                {this.state.error?.toString() || "An unexpected error occurred."}
               </p>
               {this.state.errorInfo?.componentStack && (
                 <details className="mt-3 text-left">
-                  <summary className="text-sm text-red-600 dark:text-red-400 cursor-pointer">
+                  <summary className="text-sm text-gray-400 hover:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded px-2 py-1 transition-colors">
                     Technical details
                   </summary>
-                  <pre className="mt-2 p-2 bg-white/50 dark:bg-black/20 text-xs overflow-x-auto rounded">
+                  <pre className="mt-2 p-2 bg-black/50 text-xs overflow-x-auto rounded border border-gray-800 text-gray-400">
                     {this.state.errorInfo.componentStack}
                   </pre>
                 </details>
@@ -86,15 +85,14 @@ class ErrorBoundary extends React.Component {
               <Button
                 variant="outline"
                 onClick={this.handleReset}
-                className="gap-2 bg-red-100 hover:bg-red-200 dark:bg-red-800/30 dark:hover:bg-red-800/50"
+                className="gap-2 min-h-[44px] border border-red-400 text-red-400 hover:bg-red-400/20 hover:text-white focus-visible:ring-gray-500 focus-visible:ring-offset-black"
               >
                 <RefreshCw className="w-4 h-4" />
                 Try again
               </Button>
               <Button
-                variant="destructive"
                 onClick={this.handleFullReload}
-                className="gap-2"
+                className="gap-2 min-h-[44px] bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
               >
                 Reload page
               </Button>

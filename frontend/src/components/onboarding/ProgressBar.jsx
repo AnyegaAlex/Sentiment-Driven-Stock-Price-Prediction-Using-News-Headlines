@@ -1,6 +1,6 @@
-// components/onboarding/ProgressBar.jsx
 import React from 'react';
 import PropTypes from 'prop-types';
+import { cn } from '@/lib/utils';
 
 const propTypes = {
   currentStep: PropTypes.number.isRequired,
@@ -12,14 +12,14 @@ const ProgressBar = ({ currentStep, totalSteps, className = '' }) => {
   const percentage = ((currentStep) / totalSteps) * 100;
 
   return (
-    <div className={`w-full ${className}`}>
-      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+    <div className={cn('w-full', className)}>
+      <div className="flex justify-between text-xs text-gray-400 mb-1">
         <span>Step {currentStep} of {totalSteps}</span>
         <span>{Math.round(percentage)}%</span>
       </div>
-      <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+      <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
         <div
-          className="h-full bg-blue-600 dark:bg-blue-500 rounded-full transition-all duration-500 ease-out"
+          className="h-full bg-white rounded-full transition-all duration-500 ease-out"
           style={{ width: `${percentage}%` }}
           role="progressbar"
           aria-valuenow={percentage}

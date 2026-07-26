@@ -28,18 +28,18 @@ import NewsItem from './NewsItem';
 const NewsListSkeleton = ({ count = 6 }) => (
   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
     {Array.from({ length: count }).map((_, index) => (
-      <Card key={`skeleton-${index}`} className="space-y-3 p-4 dark:bg-gray-800">
-        <Skeleton className="h-40 w-full rounded-md bg-gray-200 dark:bg-gray-700" />
-        <Skeleton className="h-5 w-4/5 bg-gray-200 dark:bg-gray-700" />
-        <Skeleton className="h-4 w-full bg-gray-200 dark:bg-gray-700" />
-        <Skeleton className="h-4 w-full bg-gray-200 dark:bg-gray-700" />
+      <Card key={`skeleton-${index}`} className="space-y-3 p-4 border border-gray-800 bg-gray-900">
+        <Skeleton className="h-40 w-full rounded-md bg-gray-800" />
+        <Skeleton className="h-5 w-4/5 bg-gray-800" />
+        <Skeleton className="h-4 w-full bg-gray-800" />
+        <Skeleton className="h-4 w-full bg-gray-800" />
         <div className="grid grid-cols-2 gap-2">
-          <Skeleton className="h-4 w-16 bg-gray-200 dark:bg-gray-700" />
-          <Skeleton className="h-4 w-16 bg-gray-200 dark:bg-gray-700" />
+          <Skeleton className="h-4 w-16 bg-gray-800" />
+          <Skeleton className="h-4 w-16 bg-gray-800" />
         </div>
         <div className="flex items-center justify-between pt-2">
-          <Skeleton className="h-4 w-16 bg-gray-200 dark:bg-gray-700" />
-          <Skeleton className="h-4 w-16 bg-gray-200 dark:bg-gray-700" />
+          <Skeleton className="h-4 w-16 bg-gray-800" />
+          <Skeleton className="h-4 w-16 bg-gray-800" />
         </div>
       </Card>
     ))}
@@ -120,7 +120,7 @@ const NewsList = ({ symbol, newsData = null, loading: parentLoading = false, lim
   if (isLoading) {
     return (
       <div className="p-4">
-        <h2 className="mb-4 text-xl font-semibold dark:text-white">Latest News for {displaySymbol}</h2>
+        <h2 className="mb-4 text-xl font-semibold text-white">Latest News for {displaySymbol}</h2>
         <NewsListSkeleton />
       </div>
     );
@@ -130,10 +130,15 @@ const NewsList = ({ symbol, newsData = null, loading: parentLoading = false, lim
   if (error) {
     return (
       <div className="p-4">
-        <h2 className="mb-4 text-xl font-semibold dark:text-white">Latest News for {displaySymbol}</h2>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-          <p className="text-red-500 dark:text-red-400">{error.message}</p>
-          <Button variant="outline" size="sm" className="mt-2" onClick={fetchNews}>
+        <h2 className="mb-4 text-xl font-semibold text-white">Latest News for {displaySymbol}</h2>
+        <div className="rounded-lg border border-red-400 bg-red-400/10 p-4">
+          <p className="text-red-400">{error.message}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 min-h-[44px] border-red-400 text-red-400 hover:bg-red-400/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+            onClick={fetchNews}
+          >
             Retry
           </Button>
         </div>
@@ -145,8 +150,8 @@ const NewsList = ({ symbol, newsData = null, loading: parentLoading = false, lim
   if (!news.length) {
     return (
       <div className="p-4">
-        <h2 className="mb-4 text-xl font-semibold dark:text-white">Latest News for {displaySymbol}</h2>
-        <div className="rounded-lg border p-4 text-center text-muted-foreground dark:border-gray-700 dark:text-gray-400">
+        <h2 className="mb-4 text-xl font-semibold text-white">Latest News for {displaySymbol}</h2>
+        <div className="rounded-lg border border-gray-800 p-4 text-center text-gray-400">
           No news articles found for this stock.
         </div>
       </div>
@@ -155,14 +160,14 @@ const NewsList = ({ symbol, newsData = null, loading: parentLoading = false, lim
 
   return (
     <div className="p-4">
-      <h2 className="mb-4 text-xl font-semibold dark:text-white">Latest News for {displaySymbol}</h2>
+      <h2 className="mb-4 text-xl font-semibold text-white">Latest News for {displaySymbol}</h2>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {news.map((item, index) => (
           <NewsItem key={`news-${index}-${item.id || item.url}`} item={item} />
         ))}
       </div>
       {news.length >= limit && (
-        <div className="mt-4 text-center text-sm text-muted-foreground dark:text-gray-400">
+        <div className="mt-4 text-center text-sm text-gray-400">
           Showing {limit} of {news.length} articles
         </div>
       )}

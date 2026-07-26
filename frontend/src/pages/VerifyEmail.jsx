@@ -139,7 +139,7 @@ const VerifyEmail = () => {
       await apiClient.post('/auth/resend-verification/', { email });
       setMessage('A new verification email has been sent. Please check your inbox.');
     } catch (error) {
-      setMessage(error.response?.data?.error || 'Failed to resend verification email.');
+      setMessage(error.response?.data?.error || 'Failed to resend verification email. Please try again.');
     } finally {
       setResendLoading(false);
     }
@@ -162,14 +162,14 @@ const VerifyEmail = () => {
   // Loading state
   if (status === 'verifying') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen flex items-center justify-center bg-black px-4">
+        <Card className="w-full max-w-md border border-gray-800 bg-gray-900">
           <CardContent className="text-center py-8 space-y-4">
             <LoadingSpinner size="lg" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            <h2 className="text-lg font-semibold text-white">
               Verifying your email…
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-gray-400">
               Please wait while we confirm your email address.
             </p>
           </CardContent>
@@ -181,23 +181,23 @@ const VerifyEmail = () => {
   // Success state
   if (status === 'success') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen flex items-center justify-center bg-black px-4">
+        <Card className="w-full max-w-md border border-gray-800 bg-gray-900">
           <CardContent className="text-center py-8 space-y-4">
             <div className="flex justify-center">
-              <div className="h-16 w-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+              <div className="h-16 w-16 rounded-full bg-green-400/20 flex items-center justify-center">
+                <CheckCircle className="h-8 w-8 text-green-400" />
               </div>
             </div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-              Email Verified! ✅
+            <h2 className="text-xl font-bold text-white">
+              Email Verified!
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">{message}</p>
-            <p className="text-sm text-gray-400 dark:text-gray-500">
+            <p className="text-gray-400">{message}</p>
+            <p className="text-sm text-gray-500">
               Redirecting to {authUser?.onboarded ? 'dashboard' : 'onboarding'}…
             </p>
             <Link to={authUser?.onboarded ? '/dashboard' : '/onboarding'}>
-              <Button className="w-full">
+              <Button className="w-full min-h-[44px] bg-white text-black hover:bg-gray-200">
                 {authUser?.onboarded ? 'Go to Dashboard' : 'Continue to Onboarding'}
               </Button>
             </Link>
@@ -210,20 +210,20 @@ const VerifyEmail = () => {
   // Error state
   if (status === 'error') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen flex items-center justify-center bg-black px-4">
+        <Card className="w-full max-w-md border border-gray-800 bg-gray-900">
           <CardContent className="text-center py-8 space-y-4">
             <div className="flex justify-center">
-              <div className="h-16 w-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                <AlertCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
+              <div className="h-16 w-16 rounded-full bg-red-400/20 flex items-center justify-center">
+                <AlertCircle className="h-8 w-8 text-red-400" />
               </div>
             </div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+            <h2 className="text-xl font-bold text-white">
               Verification Failed
             </h2>
-            <Alert variant="destructive" className="text-left">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{message}</AlertDescription>
+            <Alert variant="destructive" className="border-red-400 bg-red-400/10 text-red-400 text-left">
+              <AlertCircle className="h-4 w-4 text-red-400" />
+              <AlertDescription className="text-red-400">{message}</AlertDescription>
             </Alert>
             
             <div className="space-y-3">
@@ -232,14 +232,14 @@ const VerifyEmail = () => {
                   variant="outline"
                   onClick={handleResend}
                   disabled={resendLoading}
-                  className="w-full"
+                  className="w-full min-h-[44px] border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white"
                 >
                   <RefreshCw className={cn("h-4 w-4 mr-2", resendLoading && "animate-spin")} />
                   {resendLoading ? 'Sending...' : 'Resend Verification Email'}
                 </Button>
               )}
               <Link to="/login">
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full min-h-[44px] border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white">
                   Back to Login
                 </Button>
               </Link>
@@ -252,23 +252,25 @@ const VerifyEmail = () => {
 
   // Manual code entry (fallback)
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-black px-4">
+      <Card className="w-full max-w-md border border-gray-800 bg-gray-900">
         <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center text-gray-900 dark:text-white">
+          <CardTitle className="text-2xl font-bold text-center text-white">
             Enter Verification Code
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex justify-center">
-            <Mail className="h-12 w-12 text-blue-600 dark:text-blue-400" />
+            <div className="p-3 rounded-xl bg-gray-800">
+              <Mail className="h-10 w-10 text-gray-400" />
+            </div>
           </div>
-          <p className="text-center text-gray-600 dark:text-gray-400">
+          <p className="text-center text-gray-400">
             Enter the 6-digit verification code from your email.
           </p>
 
           <div className="space-y-2">
-            <Label htmlFor="code">Verification Code</Label>
+            <Label htmlFor="code" className="text-gray-300">Verification Code</Label>
             <Input
               id="code"
               type="text"
@@ -276,13 +278,13 @@ const VerifyEmail = () => {
               placeholder="Enter 6-digit code"
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-              className="text-center text-lg font-mono tracking-widest"
+              className="min-h-[44px] text-center text-lg font-mono tracking-widest bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500"
               disabled={loading}
             />
           </div>
 
           {message && (
-            <Alert variant={message.includes('sent') ? 'default' : 'destructive'}>
+            <Alert className={message.includes('sent') ? 'border-green-400 bg-green-400/10 text-green-400' : 'border-red-400 bg-red-400/10 text-red-400'}>
               <AlertDescription>{message}</AlertDescription>
             </Alert>
           )}
@@ -291,7 +293,7 @@ const VerifyEmail = () => {
             <Button
               onClick={verifyWithCode}
               disabled={loading || code.length !== 6}
-              className="w-full"
+              className="w-full min-h-[44px] bg-white text-black hover:bg-gray-200"
             >
               {loading ? 'Verifying...' : 'Verify Email'}
             </Button>
@@ -300,14 +302,14 @@ const VerifyEmail = () => {
               variant="outline"
               onClick={handleResend}
               disabled={resendLoading}
-              className="w-full"
+              className="w-full min-h-[44px] border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white"
             >
               <RefreshCw className={cn("h-4 w-4 mr-2", resendLoading && "animate-spin")} />
               {resendLoading ? 'Sending...' : 'Resend Code'}
             </Button>
 
             <Link to="/login">
-              <Button variant="ghost" className="w-full">
+              <Button variant="ghost" className="w-full min-h-[44px] text-gray-400 hover:text-white hover:bg-gray-800">
                 Back to Login
               </Button>
             </Link>

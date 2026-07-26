@@ -27,6 +27,7 @@ import StockOpinionCard from "../components/cards/StockOpinionCard";
 import TechnicalIndicatorsCard from "../components/cards/TechnicalIndicatorsCard";
 import SentimentAnalysisCard from "../components/cards/SentimentAnalysisCard";
 import NewsList from "../components/NewsList";
+import NewsSkeleton from "../components/NewsSkeleton";
 
 // Hooks
 import { useLocalStorage, useSessionStorage } from "../hooks/useStorage";
@@ -56,35 +57,51 @@ const TAB_CONFIG = [
 
 const EmptyState = () => (
   <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
-    <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-4 mb-6">
-      <Search className="w-12 h-12 text-blue-600 dark:text-blue-400" />
+    <div className="rounded-full bg-gray-800 p-4 mb-6">
+      <Search className="w-12 h-12 text-gray-400" />
     </div>
-    <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-gray-100 mb-3">
-      Find a Stock
+    <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">
+      Search for a Stock
     </h2>
-    <p className="text-gray-600 dark:text-gray-400 max-w-md text-base sm:text-lg">
-      Use the search bar in the header to look up any stock symbol and get AI-powered analysis.
+    <p className="text-gray-400 max-w-md text-base sm:text-lg">
+      Enter a stock symbol in the search bar to get LSTM + FinBERT analysis.
     </p>
-    <p className="text-gray-500 dark:text-gray-500 text-sm mt-2">
-      Try searching for AAPL, TSLA, MSFT, or any other symbol.
+    <p className="text-gray-500 text-sm mt-2">
+      Try searching for AAPL, TSLA, MSFT, NVDA, or any other symbol.
     </p>
   </div>
 );
 
+const EmptyStateSkeleton = () => (
+  <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+    <div className="rounded-full bg-gray-800 p-4 mb-6">
+      <div className="w-12 h-12 rounded-full bg-gray-700 animate-pulse" />
+    </div>
+    <div className="skeleton h-8 w-64 mb-3" />
+    <div className="skeleton h-6 w-80 mb-2" />
+    <div className="skeleton h-4 w-48" />
+  </div>
+);
+
 const PreferencesSummary = ({ riskType, holdTime, detailed, onEdit }) => (
-  <div className="section-wrap glass-hover flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+  <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
     <div className="space-y-1 sm:space-y-0 sm:space-x-4 text-sm">
-      <span className="inline-block">
-        <strong>Risk:</strong> <span className="capitalize">{riskType}</span>
+      <span className="inline-block text-gray-300">
+        <strong className="text-white">Risk:</strong> <span className="capitalize text-gray-400">{riskType}</span>
       </span>
-      <span className="inline-block">
-        <strong>Hold:</strong> <span className="capitalize">{holdTime}</span>
+      <span className="inline-block text-gray-300">
+        <strong className="text-white">Hold:</strong> <span className="capitalize text-gray-400">{holdTime}</span>
       </span>
-      <span className="inline-block">
-        <strong>View:</strong> {detailed ? "Detailed" : "Summary"}
+      <span className="inline-block text-gray-300">
+        <strong className="text-white">View:</strong> <span className="text-gray-400">{detailed ? "Detailed" : "Summary"}</span>
       </span>
     </div>
-    <Button variant="ghost" size="sm" onClick={onEdit} className="gap-2">
+    <Button 
+      variant="ghost" 
+      size="sm" 
+      onClick={onEdit} 
+      className="gap-2 text-gray-400 hover:text-white min-h-[44px]"
+    >
       <Settings className="w-4 h-4" />
       Edit Preferences
     </Button>
@@ -195,15 +212,13 @@ const Dashboard = () => {
       />
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
-        <div className="sticky-subheader top-[110px] md:top-[120px] px-3 py-3">
+        <div className="sticky top-[110px] md:top-[120px] z-40 bg-black/80 backdrop-blur-sm rounded-lg border border-gray-800 px-3 py-3">
           <TabsList className="w-full flex justify-center bg-transparent gap-2 p-0">
             {TAB_CONFIG.map((tab) => (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className="px-4 py-2 rounded-xl text-sm bg-white/5 border border-white/10
-                  data-[state=active]:bg-white/12 data-[state=active]:border-white/20
-                  transition-all"
+                className="px-4 py-2 rounded-lg text-sm text-gray-400 data-[state=active]:bg-gray-800 data-[state=active]:text-white data-[state=active]:border-gray-700 transition-all min-h-[44px]"
               >
                 <tab.icon className="w-4 h-4 mr-2" />
                 {tab.label}
@@ -212,7 +227,7 @@ const Dashboard = () => {
           </TabsList>
         </div>
 
-        <TabsContent value="opinion" className="space-y-6">
+        <TabsContent value="opinion" className="space-y-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <StockOpinionCard
               symbol={symbol}
@@ -224,12 +239,16 @@ const Dashboard = () => {
           </div>
         </TabsContent>
 
-        <TabsContent value="news" className="space-y-6">
-          <NewsList 
-            symbol={symbol}        
-            newsData={newsData} 
-            loading={newsLoading} 
-          />
+        <TabsContent value="news" className="space-y-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
+          {newsLoading ? (
+            <NewsSkeleton />
+          ) : (
+            <NewsList 
+              symbol={symbol}        
+              newsData={newsData} 
+              loading={newsLoading} 
+            />
+          )}
         </TabsContent>
       </Tabs>
     </div>

@@ -99,10 +99,10 @@ const Breadcrumbs = () => {
   if (pathSegments.length === 0) {
     return (
       <nav
-        className="flex items-center gap-1 py-2 text-sm text-muted-foreground"
+        className="flex items-center gap-1 py-2 text-sm text-gray-400"
         aria-label="Breadcrumbs"
       >
-        <Home className="h-4 w-4" aria-hidden="true" />
+        <Home className="h-4 w-4 text-gray-400" aria-hidden="true" />
         <span className="sr-only">Home</span>
       </nav>
     );
@@ -110,7 +110,7 @@ const Breadcrumbs = () => {
 
   return (
     <nav
-      className="flex items-center gap-1 py-2 text-sm text-muted-foreground"
+      className="flex items-center gap-1 py-2 text-sm text-gray-400"
       aria-label="Breadcrumbs"
     >
       {items.map((item, index) => {
@@ -120,13 +120,13 @@ const Breadcrumbs = () => {
           <React.Fragment key={item.path || 'home'}>
             {index > 0 && (
               <ChevronRight
-                className="h-3 w-3 text-muted-foreground/50"
+                className="h-3 w-3 text-gray-500"
                 aria-hidden="true"
               />
             )}
             {isLast ? (
               <span
-                className="font-medium text-foreground"
+                className="font-medium text-white"
                 aria-current="page"
               >
                 {item.label}
@@ -135,8 +135,9 @@ const Breadcrumbs = () => {
               <Link
                 to={item.path}
                 className={cn(
-                  'transition-colors hover:text-foreground',
-                  'text-muted-foreground hover:text-foreground'
+                  'transition-colors min-h-[44px] inline-flex items-center',
+                  'text-gray-400 hover:text-white',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded'
                 )}
                 onClick={
                   item.path === '/dashboard'

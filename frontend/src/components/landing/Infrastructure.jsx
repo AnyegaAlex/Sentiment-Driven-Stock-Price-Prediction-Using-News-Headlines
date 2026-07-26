@@ -84,7 +84,7 @@ const Infrastructure = () => {
                     href={service.link} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="text-white font-semibold text-sm hover:text-gray-300 transition"
+                    className="inline-block min-h-[44px] text-white font-semibold text-sm hover:text-gray-300 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
                   >
                     {service.name}
                   </a>

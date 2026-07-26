@@ -26,12 +26,13 @@ import apiClient from '@/services/client';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 
 import Step1_Profile from './Step1_Profile';
 import Step2_Preferences from './Step2_Preferences';
 import Step3_Watchlist from './Step3_Watchlist';
-import CompletionStep from './CompletionStep';
+import CompletionStep from '../../components/onboarding/CompletionStep';
 import ProgressBar from '../../components/onboarding/ProgressBar';
 import Tooltip from '../../components/onboarding/Tooltip';
 
@@ -71,7 +72,7 @@ const TOTAL_STEPS = 4;
  */
 const Onboarding = () => {
   const navigate = useNavigate();
-  const { user, updateUser, refreshUser, isAuthenticated, isLoading } = useAuth(); // ✅ Add refreshUser
+  const { user, updateUser, refreshUser, isAuthenticated, isLoading } = useAuth();
   const { isComplete, persona } = useOnboarding();
 
   // ============================================================
@@ -337,14 +338,14 @@ const Onboarding = () => {
   // ============================================================
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+    <div className="min-h-screen bg-black py-12 px-4">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-3xl font-bold text-white">
             Set up your account
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
+          <p className="text-gray-400 mt-2">
             This takes about two minutes.
           </p>
         </div>
@@ -359,17 +360,17 @@ const Onboarding = () => {
         {error && (
           <Alert
             variant="destructive"
-            className="mt-4 animate-slide-down"
+            className="mt-4 border border-red-400 bg-red-400/10 text-red-400 animate-slide-down"
             role="alert"
             aria-live="polite"
           >
-            <AlertCircle className="h-4 w-4" />
+            <AlertCircle className="h-4 w-4 text-red-400" />
             <span className="ml-2">{error}</span>
           </Alert>
         )}
 
         {/* Step Content */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mt-6">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl shadow-lg p-6 md:p-8 mt-6">
           {step === 1 && (
             <Step1_Profile
               formData={formData}
@@ -412,13 +413,13 @@ const Onboarding = () => {
 
           {/* Navigation Buttons (steps 1-3 only) */}
           {step < 4 && (
-            <div className="flex justify-between mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex justify-between mt-8 pt-6 border-t border-gray-800">
               <Button
                 type="button"
                 variant="ghost"
                 onClick={handleBack}
                 disabled={step === 1 || isSaving}
-                className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                className="min-h-[44px] text-gray-400 hover:text-white hover:bg-gray-800 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
               >
                 Back
               </Button>
@@ -427,6 +428,7 @@ const Onboarding = () => {
                 onClick={handleNext}
                 disabled={isSaving}
                 size="lg"
+                className="min-h-[44px] bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
               >
                 {isSaving ? 'Saving...' : 'Continue'}
               </Button>
@@ -441,7 +443,7 @@ const Onboarding = () => {
               type="button"
               onClick={handleSkip}
               disabled={isSaving}
-              className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
+              className="text-sm text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded px-2 py-1"
             >
               Skip for now
             </button>

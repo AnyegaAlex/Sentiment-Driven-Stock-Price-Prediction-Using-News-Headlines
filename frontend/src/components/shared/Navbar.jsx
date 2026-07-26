@@ -56,7 +56,7 @@ const Navbar = ({ variant = 'public' }) => {
       className={cn(
         'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
         scrolled
-          ? 'bg-black/80 backdrop-blur-sm border-b border-gray-800'
+          ? 'bg-black border-b border-gray-800'
           : 'bg-transparent border-transparent'
       )}
       aria-label="Main navigation"
@@ -67,7 +67,7 @@ const Navbar = ({ variant = 'public' }) => {
           {/* Logo */}
           <Link 
             to="/" 
-            className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-gray-500 rounded-md"
+            className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded-md min-h-[44px] px-2"
           >
             <span className="text-xl font-bold text-white tracking-tight">
               Tickflow Sentiment
@@ -88,7 +88,7 @@ const Navbar = ({ variant = 'public' }) => {
                     href={link.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-gray-400 hover:text-white transition"
+                    className="text-sm text-gray-400 hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] inline-flex items-center px-2"
                   >
                     {link.name}
                   </a>
@@ -100,7 +100,7 @@ const Navbar = ({ variant = 'public' }) => {
                   to={link.href}
                   className={({ isActive }) =>
                     cn(
-                      'text-sm transition',
+                      'text-sm transition min-h-[44px] inline-flex items-center px-2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
                       isActive
                         ? 'text-white font-medium'
                         : 'text-gray-400 hover:text-white'
@@ -117,13 +117,13 @@ const Navbar = ({ variant = 'public' }) => {
               <>
                 <a
                   href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
-                  className="text-sm text-gray-400 hover:text-white transition"
+                  className="text-sm text-gray-400 hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] inline-flex items-center px-2"
                 >
                   Sign In
                 </a>
                 <a
                   href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
-                  className="inline-block bg-white text-black px-4 py-2 rounded-md font-medium text-sm hover:bg-gray-200 transition"
+                  className="inline-block bg-white text-black px-4 py-2 rounded-md font-medium text-sm hover:bg-gray-200 transition min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 >
                   Get API Key
                 </a>
@@ -134,7 +134,7 @@ const Navbar = ({ variant = 'public' }) => {
                   {/* user?.username – handled by auth context if needed */}
                 </span>
                 <button
-                  className="text-sm text-gray-400 hover:text-white transition"
+                  className="text-sm text-gray-400 hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] inline-flex items-center px-2"
                   // onClick={handleLogout}
                 >
                   Logout
@@ -146,7 +146,7 @@ const Navbar = ({ variant = 'public' }) => {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="md:hidden p-2 rounded-md text-gray-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-gray-500"
+            className="md:hidden p-2 rounded-md text-gray-400 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label={isOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={isOpen}
             aria-controls="mobile-menu"
@@ -185,7 +185,7 @@ const Navbar = ({ variant = 'public' }) => {
                   href={link.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block text-sm text-gray-400 hover:text-white"
+                  className="block text-sm text-gray-400 hover:text-white min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded px-2"
                   onClick={() => setIsOpen(false)}
                   role="menuitem"
                 >
@@ -199,7 +199,7 @@ const Navbar = ({ variant = 'public' }) => {
                 to={link.href}
                 className={({ isActive }) =>
                   cn(
-                    'block text-sm transition',
+                    'block text-sm transition min-h-[44px] flex items-center rounded px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
                     isActive
                       ? 'text-white font-medium'
                       : 'text-gray-400 hover:text-white'
@@ -218,7 +218,7 @@ const Navbar = ({ variant = 'public' }) => {
             <>
               <a
                 href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
-                className="block text-sm text-gray-400 hover:text-white"
+                className="block text-sm text-gray-400 hover:text-white min-h-[44px] flex items-center rounded px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 onClick={() => setIsOpen(false)}
                 role="menuitem"
               >
@@ -226,7 +226,7 @@ const Navbar = ({ variant = 'public' }) => {
               </a>
               <a
                 href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
-                className="block text-sm font-medium text-white bg-gray-800 px-4 py-2 rounded-md text-center"
+                className="block text-sm font-medium text-white bg-gray-800 px-4 py-2 rounded-md text-center min-h-[44px] flex items-center justify-center hover:bg-gray-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 onClick={() => setIsOpen(false)}
                 role="menuitem"
               >
@@ -235,7 +235,7 @@ const Navbar = ({ variant = 'public' }) => {
             </>
           ) : (
             <button
-              className="block text-sm text-gray-400 hover:text-white w-full text-left"
+              className="block text-sm text-gray-400 hover:text-white w-full text-left min-h-[44px] flex items-center rounded px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
               role="menuitem"
             >
               Logout

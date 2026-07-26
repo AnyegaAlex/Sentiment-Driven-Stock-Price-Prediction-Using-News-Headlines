@@ -4,7 +4,7 @@
  * Features:
  * - Framer Motion animations with staggered delay
  * - Responsive design with Tailwind
- * - Dark mode support
+ * - Dark mode only (brand compliant)
  * - Accessibility (ARIA labels, semantic HTML)
  * - Memoized for performance
  * - Comprehensive prop validation
@@ -25,15 +25,15 @@ import PropTypes from 'prop-types';
 // ============================================================================
 
 const SENTIMENT_CLASSES = {
-  positive: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200',
-  negative: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200',
-  neutral: 'bg-gray-100 text-gray-800 dark:bg-gray-700/50 dark:text-gray-200',
+  positive: 'bg-green-400/20 text-green-400',
+  negative: 'bg-red-400/20 text-red-400',
+  neutral: 'bg-gray-700/50 text-gray-400',
 };
 
 const RELIABILITY_CLASSES = {
-  high: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200',
-  moderate: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200',
-  low: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200',
+  high: 'bg-green-400/20 text-green-400',
+  moderate: 'bg-gray-700/50 text-gray-400',
+  low: 'bg-red-400/20 text-red-400',
 };
 
 // ============================================================================
@@ -121,7 +121,7 @@ const NewsCard = ({ article, index = 0 }) => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
-      className="rounded-lg bg-white p-6 shadow-sm transition-shadow hover:shadow-md dark:bg-gray-800"
+      className="rounded-lg border border-gray-800 bg-gray-900 p-6 transition-shadow hover:shadow-md"
     >
       <div className="flex flex-col space-y-3">
         {/* Title and Sentiment */}
@@ -131,7 +131,7 @@ const NewsCard = ({ article, index = 0 }) => {
               href={article.url || '#'}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+              className="text-gray-300 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] inline-flex items-center"
               aria-label={`Read full article: ${article.title || 'Untitled article'}`}
             >
               {article.title || 'No title available'}
@@ -148,7 +148,7 @@ const NewsCard = ({ article, index = 0 }) => {
         </div>
 
         {/* Summary */}
-        <p className="break-words text-gray-600 dark:text-gray-300">
+        <p className="break-words text-gray-400">
           {article.summary || 'No summary available'}
         </p>
 
@@ -158,7 +158,7 @@ const NewsCard = ({ article, index = 0 }) => {
             {keyPhrases.map((phrase, i) => (
               <span
                 key={`${phrase}-${i}`}
-                className="truncate rounded-full bg-gray-200 px-2 py-1 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200"
+                className="truncate rounded-full border border-gray-700 bg-gray-800 px-2 py-1 text-xs font-medium text-gray-400"
                 title={phrase}
                 aria-label={`Key phrase: ${phrase}`}
               >
@@ -169,18 +169,18 @@ const NewsCard = ({ article, index = 0 }) => {
         )}
 
         {/* Metadata */}
-        <div className="grid grid-cols-2 gap-1 text-sm text-gray-500 dark:text-gray-400 sm:flex sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid grid-cols-2 gap-1 text-sm text-gray-500 sm:flex sm:flex-row sm:items-center sm:justify-between">
           {/* Confidence */}
-          <span className="text-xs font-medium">
+          <span className="text-xs font-medium text-gray-500">
             Confidence: {confidenceDisplay}
           </span>
 
           {/* Published At */}
-          <span>{formattedDate}</span>
+          <span className="text-gray-500">{formattedDate}</span>
 
           {/* Source and Reliability */}
           <div className="col-span-2 flex items-center gap-2 sm:col-auto">
-            <span className="max-w-[30%] truncate italic" aria-label={`News source: ${article.source || 'unknown'}`}>
+            <span className="max-w-[30%] truncate italic text-gray-500" aria-label={`News source: ${article.source || 'unknown'}`}>
               {article.source || 'Unknown source'}
             </span>
             {article.source_reliability !== undefined && (

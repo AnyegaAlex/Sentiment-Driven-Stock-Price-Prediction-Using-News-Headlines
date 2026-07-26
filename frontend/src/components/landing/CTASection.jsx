@@ -17,19 +17,19 @@ const CTASection = () => {
         <div className="flex flex-wrap justify-center gap-4">
           <a
             href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
-            className="bg-white text-black px-8 py-4 rounded-md font-bold text-base md:text-lg hover:bg-gray-200 transition duration-200 min-w-[180px]"
+            className="bg-white text-black px-8 py-4 min-h-[44px] rounded-md font-bold text-base md:text-lg hover:bg-gray-200 transition duration-200 min-w-[180px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             Get API Key
           </a>
           <a
             href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
-            className="border border-white text-white px-8 py-4 rounded-md font-bold text-base md:text-lg hover:bg-white hover:text-black transition duration-200 min-w-[180px]"
+            className="border border-white text-white px-8 py-4 min-h-[44px] rounded-md font-bold text-base md:text-lg hover:bg-white hover:text-black transition duration-200 min-w-[180px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             Launch Demo
           </a>
           <a
             href="https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines"
-            className="border border-white text-white px-8 py-4 rounded-md font-bold text-base md:text-lg hover:bg-white hover:text-black transition duration-200 min-w-[180px]"
+            className="border border-white text-white px-8 py-4 min-h-[44px] rounded-md font-bold text-base md:text-lg hover:bg-white hover:text-black transition duration-200 min-w-[180px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             View GitHub
           </a>
@@ -38,7 +38,7 @@ const CTASection = () => {
         <div className="mt-8 text-gray-500 text-sm flex flex-wrap justify-center gap-4">
           <a
             href="https://stats.uptimerobot.com/520QWmDVBw"
-            className="hover:text-gray-300 transition duration-200"
+            className="hover:text-gray-300 transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -47,7 +47,7 @@ const CTASection = () => {
           <span className="text-gray-700">·</span>
           <a
             href="https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/"
-            className="hover:text-gray-300 transition duration-200"
+            className="hover:text-gray-300 transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -56,7 +56,7 @@ const CTASection = () => {
           <span className="text-gray-700">·</span>
           <a
             href="https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki"
-            className="hover:text-gray-300 transition duration-200"
+            className="hover:text-gray-300 transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded"
             target="_blank"
             rel="noopener noreferrer"
           >

@@ -25,27 +25,27 @@ const NewsSkeleton = ({ count = 3 }) => {
       <span className="sr-only">Loading news articles...</span>
 
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="rounded-lg bg-white p-6 shadow-sm dark:bg-gray-800" aria-hidden="true">
+        <div key={i} className="rounded-lg border border-gray-800 bg-gray-900 p-6" aria-hidden="true">
           <div className="space-y-4">
             {/* Image skeleton */}
-            <Skeleton className="h-40 w-full rounded-md bg-gray-200 dark:bg-gray-700" />
+            <Skeleton className="h-40 w-full rounded-md bg-gray-800" />
 
             {/* Title skeleton */}
-            <Skeleton className={`h-6 ${randomWidth()} bg-gray-200 dark:bg-gray-700`} />
+            <Skeleton className={`h-6 ${randomWidth()} bg-gray-800`} />
 
             {/* Summary lines */}
             <div className="space-y-2">
-              <Skeleton className="h-4 w-full bg-gray-200 dark:bg-gray-700" />
-              <Skeleton className={`h-4 ${randomWidth()} bg-gray-200 dark:bg-gray-700`} />
-              <Skeleton className={`h-4 ${randomWidth()} bg-gray-200 dark:bg-gray-700`} />
+              <Skeleton className="h-4 w-full bg-gray-800" />
+              <Skeleton className={`h-4 ${randomWidth()} bg-gray-800`} />
+              <Skeleton className={`h-4 ${randomWidth()} bg-gray-800`} />
             </div>
 
             {/* Metadata */}
             <div className="flex justify-between pt-2">
-              <Skeleton className="h-3 w-1/4 bg-gray-200 dark:bg-gray-700" />
+              <Skeleton className="h-3 w-1/4 bg-gray-800" />
               <div className="flex items-center gap-2">
-                <Skeleton className="h-3 w-16 bg-gray-200 dark:bg-gray-700" />
-                <Skeleton className="h-3 w-12 bg-gray-200 dark:bg-gray-700" />
+                <Skeleton className="h-3 w-16 bg-gray-800" />
+                <Skeleton className="h-3 w-12 bg-gray-800" />
               </div>
             </div>
           </div>

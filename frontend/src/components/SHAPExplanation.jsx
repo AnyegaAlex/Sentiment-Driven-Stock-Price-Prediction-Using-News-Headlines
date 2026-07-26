@@ -1,5 +1,5 @@
 /**
- * SHAPExplanation – Displays SHAP feature importance for model predictions
+ * SHAPExplanation – Displays SHAP feature importance for LSTM model predictions
  *
  * Features:
  * - Shows top 5 features with importance bars
@@ -22,7 +22,6 @@
 
 import React, { useState, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -35,13 +34,13 @@ import { cn } from '@/lib/utils';
 
 const SHAP_COLORS = {
   positive: {
-    bar: 'bg-emerald-500',
-    text: 'text-emerald-600 dark:text-emerald-400',
+    bar: 'bg-green-400',
+    text: 'text-green-400',
     label: 'Increases prediction',
   },
   negative: {
-    bar: 'bg-red-500',
-    text: 'text-red-600 dark:text-red-400',
+    bar: 'bg-red-400',
+    text: 'text-red-400',
     label: 'Decreases prediction',
   },
 };
@@ -134,17 +133,17 @@ const SHAPExplanation = ({
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-4 w-32 bg-gray-200 dark:bg-gray-700" />
+        <Skeleton className="h-4 w-32 bg-gray-800" />
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="space-y-1">
             <div className="flex justify-between">
-              <Skeleton className="h-4 w-24 bg-gray-200 dark:bg-gray-700" />
-              <Skeleton className="h-4 w-12 bg-gray-200 dark:bg-gray-700" />
+              <Skeleton className="h-4 w-24 bg-gray-800" />
+              <Skeleton className="h-4 w-12 bg-gray-800" />
             </div>
-            <Skeleton className="h-2 w-full bg-gray-200 dark:bg-gray-700" />
+            <Skeleton className="h-2 w-full bg-gray-800" />
           </div>
         ))}
-        <Skeleton className="h-16 w-full rounded-lg bg-gray-200 dark:bg-gray-700" />
+        <Skeleton className="h-16 w-full rounded-lg bg-gray-800" />
       </div>
     );
   }
@@ -152,9 +151,9 @@ const SHAPExplanation = ({
   // ----- Empty State -----
   if (!hasData) {
     return (
-      <div className="rounded-lg border border-dashed p-4 text-center text-muted-foreground dark:border-gray-700">
+      <div className="rounded-lg border border-dashed border-gray-700 p-4 text-center text-gray-500">
         <p className="text-sm">No SHAP data available for this prediction.</p>
-        <p className="text-xs text-muted-foreground">Feature importance data is not provided.</p>
+        <p className="text-xs text-gray-500">Feature importance data is not provided.</p>
       </div>
     );
   }
@@ -165,16 +164,19 @@ const SHAPExplanation = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">Top Contributors</span>
+          <span className="text-sm font-medium text-gray-300">Top Contributors</span>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button className="text-muted-foreground hover:text-foreground" aria-label="SHAP info">
+              <button
+                className="text-gray-500 hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black min-h-[44px] min-w-[44px] flex items-center justify-center"
+                aria-label="SHAP info"
+              >
                 <Info className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[200px] dark:border-gray-700 dark:bg-gray-900">
+            <TooltipContent side="top" className="max-w-[200px] border border-gray-800 bg-gray-900 text-white">
               <p className="text-xs">
-                SHAP values show how each feature contributed to the model's prediction.
+                SHAP values show how each feature contributed to the LSTM model's prediction.
                 Green indicates positive contribution, red indicates negative.
               </p>
             </TooltipContent>
@@ -185,7 +187,7 @@ const SHAPExplanation = ({
             variant="ghost"
             size="sm"
             onClick={() => setShowAll(!showAll)}
-            className="h-6 px-2 text-xs"
+            className="h-8 px-2 text-xs text-gray-400 hover:text-white hover:bg-gray-800 focus-visible:ring-gray-500 focus-visible:ring-offset-black min-h-[44px]"
           >
             {showAll ? (
               <>
@@ -212,17 +214,17 @@ const SHAPExplanation = ({
           return (
             <div key={feature} className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm capitalize">{formatFeatureName(feature)}</span>
+                <span className="text-sm capitalize text-gray-300">{formatFeatureName(feature)}</span>
                 <div className="flex items-center gap-2">
                   <span className={cn('text-sm font-medium', color.text)}>
                     {formatShapValue(value)}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-gray-500">
                     {isPositive ? '↑' : '↓'}
                   </span>
                 </div>
               </div>
-              <div className="relative h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+              <div className="relative h-2 w-full rounded-full bg-gray-800">
                 <div
                   className={cn(
                     'absolute h-full rounded-full transition-all duration-500',
@@ -238,14 +240,14 @@ const SHAPExplanation = ({
 
       {/* Explanation */}
       {explanation && (
-        <div className="mt-4 rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
-          <p className="text-sm text-muted-foreground">{explanation}</p>
+        <div className="mt-4 rounded-lg bg-gray-900 p-3 border border-gray-800">
+          <p className="text-sm text-gray-400">{explanation}</p>
         </div>
       )}
 
       {/* Feature Count */}
       {allFeatures.length > maxFeatures && !showAll && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-gray-500">
           Showing top {maxFeatures} of {allFeatures.length} features
         </p>
       )}

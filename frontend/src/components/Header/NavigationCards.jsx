@@ -1,4 +1,3 @@
-// components/NavigationCards.jsx
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import PropTypes from 'prop-types';
@@ -56,11 +55,11 @@ const NavigationCards = ({
             cn(
               'px-3 py-2 sm:px-4 sm:py-2.5 text-sm sm:text-base font-medium rounded-lg transition-colors',
               'min-h-[44px] min-w-[44px] flex items-center justify-center',
-              'hover:bg-gray-100 dark:hover:bg-gray-800',
-              'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2',
+              'hover:bg-gray-800 hover:text-white',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
               isActive
-                ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                : 'text-gray-700 dark:text-gray-300',
+                ? 'bg-gray-800 text-white'
+                : 'text-gray-400',
               item.className
             )
           }

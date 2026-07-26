@@ -1,4 +1,3 @@
-// components/settings/GeneralTab.jsx
 import { cn } from "@/lib/utils";
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -147,13 +146,13 @@ const GeneralTab = ({ preferences, onSave, isSaving, saveStatus: parentSaveStatu
   // Determine save status display
   const getSaveStatusDisplay = () => {
     if (parentSaveStatus?.type === 'saving') {
-      return { icon: null, text: 'Saving...', className: 'text-blue-600 dark:text-blue-400' };
+      return { icon: null, text: 'Saving...', className: 'text-gray-400' };
     }
     if (parentSaveStatus?.type === 'success') {
-      return { icon: CheckCircle, text: 'Saved successfully', className: 'text-green-600 dark:text-green-400' };
+      return { icon: CheckCircle, text: 'Saved successfully', className: 'text-green-400' };
     }
     if (parentSaveStatus?.type === 'error') {
-      return { icon: AlertCircle, text: 'Failed to save', className: 'text-red-600 dark:text-red-400' };
+      return { icon: AlertCircle, text: 'Failed to save', className: 'text-red-400' };
     }
     return null;
   };
@@ -161,10 +160,10 @@ const GeneralTab = ({ preferences, onSave, isSaving, saveStatus: parentSaveStatu
   const statusDisplay = getSaveStatusDisplay();
 
   return (
-    <Card>
+    <Card className="bg-gray-900 border border-gray-800">
       <CardHeader>
-        <CardTitle>General Settings</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-white">General Settings</CardTitle>
+        <CardDescription className="text-gray-400">
           Manage your basic account information and preferences
         </CardDescription>
       </CardHeader>
@@ -173,9 +172,9 @@ const GeneralTab = ({ preferences, onSave, isSaving, saveStatus: parentSaveStatu
           {/* Name Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="first_name">
+              <Label htmlFor="first_name" className="text-gray-300">
                 First Name
-                <span className="text-xs text-gray-400 ml-1">(optional)</span>
+                <span className="text-xs text-gray-500 ml-1">(optional)</span>
               </Label>
               <Input
                 id="first_name"
@@ -183,17 +182,20 @@ const GeneralTab = ({ preferences, onSave, isSaving, saveStatus: parentSaveStatu
                 onChange={(e) => handleFieldChange('first_name', e.target.value)}
                 placeholder="Your first name"
                 maxLength={50}
-                className={cn(errors.first_name && 'border-red-500 dark:border-red-500')}
+                className={cn(
+                  'min-h-[44px] bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500 focus:ring-offset-black',
+                  errors.first_name && 'border-red-400'
+                )}
                 disabled={parentSaveStatus?.type === 'saving'}
               />
               {errors.first_name && (
-                <p className="text-sm text-red-600 dark:text-red-400">{errors.first_name}</p>
+                <p className="text-sm text-red-400">{errors.first_name}</p>
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="last_name">
+              <Label htmlFor="last_name" className="text-gray-300">
                 Last Name
-                <span className="text-xs text-gray-400 ml-1">(optional)</span>
+                <span className="text-xs text-gray-500 ml-1">(optional)</span>
               </Label>
               <Input
                 id="last_name"
@@ -201,28 +203,31 @@ const GeneralTab = ({ preferences, onSave, isSaving, saveStatus: parentSaveStatu
                 onChange={(e) => handleFieldChange('last_name', e.target.value)}
                 placeholder="Your last name"
                 maxLength={50}
-                className={cn(errors.last_name && 'border-red-500 dark:border-red-500')}
+                className={cn(
+                  'min-h-[44px] bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500 focus:ring-offset-black',
+                  errors.last_name && 'border-red-400'
+                )}
                 disabled={parentSaveStatus?.type === 'saving'}
               />
               {errors.last_name && (
-                <p className="text-sm text-red-600 dark:text-red-400">{errors.last_name}</p>
+                <p className="text-sm text-red-400">{errors.last_name}</p>
               )}
             </div>
           </div>
 
           {/* Language */}
           <div className="space-y-2">
-            <Label htmlFor="language">Language</Label>
+            <Label htmlFor="language" className="text-gray-300">Language</Label>
             <Select 
               value={form.language} 
               onValueChange={(value) => handleFieldChange('language', value)}
             >
-              <SelectTrigger id="language" disabled={parentSaveStatus?.type === 'saving'}>
+              <SelectTrigger id="language" className="min-h-[44px] bg-gray-900 border-gray-800 text-white focus:ring-gray-500 focus:ring-offset-black" disabled={parentSaveStatus?.type === 'saving'}>
                 <SelectValue placeholder="Select language" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-gray-900 border-gray-800 text-white">
                 {LANGUAGE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
+                  <SelectItem key={option.value} value={option.value} className="focus:bg-gray-800 focus:text-white text-gray-400 hover:text-white min-h-[44px]">
                     {option.label}
                   </SelectItem>
                 ))}
@@ -232,17 +237,17 @@ const GeneralTab = ({ preferences, onSave, isSaving, saveStatus: parentSaveStatu
 
           {/* Time Zone */}
           <div className="space-y-2">
-            <Label htmlFor="timezone">Time Zone</Label>
+            <Label htmlFor="timezone" className="text-gray-300">Time Zone</Label>
             <Select 
               value={form.timezone} 
               onValueChange={(value) => handleFieldChange('timezone', value)}
             >
-              <SelectTrigger id="timezone" disabled={parentSaveStatus?.type === 'saving'}>
+              <SelectTrigger id="timezone" className="min-h-[44px] bg-gray-900 border-gray-800 text-white focus:ring-gray-500 focus:ring-offset-black" disabled={parentSaveStatus?.type === 'saving'}>
                 <SelectValue placeholder="Select timezone" />
               </SelectTrigger>
-              <SelectContent className="max-h-60 overflow-y-auto">
+              <SelectContent className="bg-gray-900 border-gray-800 text-white max-h-60 overflow-y-auto">
                 {TIMEZONE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
+                  <SelectItem key={option.value} value={option.value} className="focus:bg-gray-800 focus:text-white text-gray-400 hover:text-white min-h-[44px]">
                     {option.label}
                   </SelectItem>
                 ))}
@@ -252,7 +257,7 @@ const GeneralTab = ({ preferences, onSave, isSaving, saveStatus: parentSaveStatu
 
           {/* Theme */}
           <div className="space-y-2">
-            <Label>Theme</Label>
+            <Label className="text-gray-300">Theme</Label>
             <div className="flex flex-wrap gap-4">
               {THEME_OPTIONS.map((theme) => (
                 <button
@@ -261,10 +266,11 @@ const GeneralTab = ({ preferences, onSave, isSaving, saveStatus: parentSaveStatu
                   onClick={() => handleFieldChange('theme', theme.value)}
                   disabled={parentSaveStatus?.type === 'saving'}
                   className={cn(
-                    'px-4 py-2 rounded-lg border transition-all capitalize',
+                    'min-h-[44px] px-4 py-2 rounded-lg border transition-all capitalize',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
                     form.theme === theme.value 
-                      ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800',
+                      ? 'border-white bg-gray-800 text-white'
+                      : 'border-gray-800 text-gray-400 hover:border-gray-600 hover:bg-gray-800 hover:text-white',
                     parentSaveStatus?.type === 'saving' && 'opacity-50 cursor-not-allowed'
                   )}
                 >
@@ -279,7 +285,7 @@ const GeneralTab = ({ preferences, onSave, isSaving, saveStatus: parentSaveStatu
             <Button 
               type="submit" 
               disabled={isSaving || !hasChanges || parentSaveStatus?.type === 'saving'}
-              className="min-w-[140px]"
+              className="min-w-[140px] min-h-[44px] bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {parentSaveStatus?.type === 'saving' ? (
                 'Saving...'
@@ -296,7 +302,7 @@ const GeneralTab = ({ preferences, onSave, isSaving, saveStatus: parentSaveStatu
               variant="outline"
               onClick={handleReset}
               disabled={!hasChanges || parentSaveStatus?.type === 'saving'}
-              className="min-w-[120px]"
+              className="min-w-[120px] min-h-[44px] border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white focus-visible:ring-gray-500 focus-visible:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <RotateCcw className="h-4 w-4 mr-2" />
               Reset
@@ -316,7 +322,7 @@ const GeneralTab = ({ preferences, onSave, isSaving, saveStatus: parentSaveStatu
 
           {/* Unsaved Changes Indicator */}
           {hasChanges && parentSaveStatus?.type !== 'success' && (
-            <p className="text-sm text-yellow-600 dark:text-yellow-400">
+            <p className="text-sm text-gray-400">
               You have unsaved changes
             </p>
           )}
