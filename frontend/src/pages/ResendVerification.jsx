@@ -14,8 +14,9 @@
 
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Radar, Mail, ArrowLeft, CheckCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { Mail, ArrowLeft, CheckCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import AuthService from '@/services/authService';
+import TfcLogo from '@/assets/Primary Icon White.svg'; 
 
 const ResendVerification = () => {
   const navigate = useNavigate();
@@ -64,17 +65,24 @@ const ResendVerification = () => {
 
   return (
     <div className="w-full max-w-md bg-black transition-all duration-300">
-      {/* Header */}
+      {/* ============================================================
+          HEADER – Logo + Brand + Subtitle + Heading
+          ============================================================ */}
       <div className="space-y-3 text-center pt-8 pb-4">
-        <div className="flex items-center justify-center gap-2.5">
-          <div className="p-2.5 rounded-xl bg-gray-800">
-            <Radar className="h-8 w-8 text-gray-400" strokeWidth={1.8} />
-          </div>
-          <span className="text-2xl font-bold text-white tracking-tight">
+        <div className="flex flex-col items-center">
+          <img
+            src={TfcLogo}
+            alt="TFC"
+            className="h-14 w-14 mb-2 opacity-80"
+          />
+          <span className="text-lg font-semibold text-white tracking-tight">
             Tickflow Intelligence
           </span>
+          <span className="text-[10px] text-gray-500 mt-0.5 tracking-wide">
+            Hybrid LSTM + FinBERT Stock Intelligence
+          </span>
         </div>
-        <h1 className="text-2xl font-bold text-white tracking-tight">
+        <h1 className="text-2xl font-bold text-white tracking-tight mt-2">
           Resend Verification
         </h1>
         <p className="text-gray-400 text-sm max-w-sm mx-auto">
@@ -82,7 +90,9 @@ const ResendVerification = () => {
         </p>
       </div>
 
-      {/* Form */}
+      {/* ============================================================
+          FORM CONTAINER
+          ============================================================ */}
       <div className="px-6 pb-8">
         {/* Success Message */}
         {success && (
