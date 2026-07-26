@@ -6,7 +6,7 @@ import { CheckCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
-import TfcLogo from '@/assets/Primary Icon White.svg'; // Import your TFC logo
+import TfcLogo from '@/assets/Primary Icon White.svg'; 
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -72,7 +72,9 @@ const Signup = () => {
       aria-labelledby="signup-title"
     >
       <div className="w-full max-w-md bg-black transition-all duration-300">
-        {/* Header with Logo & Brand Name */}
+        {/* ============================================================
+            HEADER – Logo + Brand + Subtitle + Heading
+            ============================================================ */}
         <div className="space-y-3 text-center pt-8 pb-4">
           <div className="flex flex-col items-center">
             <img
@@ -80,16 +82,19 @@ const Signup = () => {
               alt="TFC"
               className="h-14 w-14 mb-2 opacity-80"
             />
-            <span className="text-2xl font-bold text-white tracking-tight">
+            {/* Brand name – now smaller (text-lg semibold) */}
+            <span className="text-lg font-semibold text-white tracking-tight">
               Tickflow Intelligence
             </span>
-            <span className="text-xs text-gray-500 mt-0.5">
+            {/* Subtitle – very small */}
+            <span className="text-[10px] text-gray-500 mt-0.5 tracking-wide">
               Hybrid LSTM + FinBERT Stock Intelligence
             </span>
           </div>
+          {/* Create Account – the main heading (largest) */}
           <h1
             id="signup-title"
-            className="text-2xl font-bold text-white tracking-tight mt-2"
+            className="text-2xl font-bold text-white tracking-tight mt-3"
           >
             Create Account
           </h1>
@@ -98,7 +103,9 @@ const Signup = () => {
           </p>
         </div>
 
-        {/* Form Container */}
+        {/* ============================================================
+            FORM CONTAINER
+            ============================================================ */}
         <div className="px-6 pb-8">
           {/* Error Alert */}
           {error && (
@@ -147,7 +154,7 @@ const Signup = () => {
             </Card>
           ) : (
             <>
-              {/* Signup Form */}
+              {/* Signup Form – header removed in the component */}
               <SignupForm
                 onSuccess={handleSuccess}
                 onError={handleError}

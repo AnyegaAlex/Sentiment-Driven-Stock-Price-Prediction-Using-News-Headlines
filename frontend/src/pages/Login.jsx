@@ -4,11 +4,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ChevronRight, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useErrorHandler } from '@/utils/errorHandler';
-import TfcLogo from '@/assets/Primary Icon White.svg';// Import your TFC logo
+import TfcLogo from '@/assets/Primary Icon White.svg';
 
 /**
  * Production-Ready Login Page
- * 
+ *
  * Features:
  * - Clean, accessible UI with dark mode only
  * - Proper auth hook integration
@@ -23,14 +23,14 @@ const Login = () => {
   const navigate = useNavigate();
   const { login, isAuthenticated, isLoading: authLoading } = useAuth();
   const { error: authError, handleError, clearError } = useErrorHandler();
-  
+
   // Form state
   const [formData, setFormData] = useState({
     username: '',
     password: '',
     rememberMe: false,
   });
-  
+
   // UI state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -51,7 +51,9 @@ const Login = () => {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      const user = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
+      const user = JSON.parse(
+        localStorage.getItem('user') || sessionStorage.getItem('user') || '{}'
+      );
       console.log('[Login] Already authenticated, redirecting. User:', user);
       if (user.onboarded) {
         navigate('/dashboard', { replace: true });
@@ -64,11 +66,10 @@ const Login = () => {
   // Handle input changes
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
-    // Clear errors when user types
     if (error) setError(null);
     if (authError) clearError();
   };
@@ -76,13 +77,9 @@ const Login = () => {
   // Handle login submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    console.log('[Login] Form submitted.');
 
-    // Validate
     if (!formData.username || !formData.password) {
       setError('Please enter both username and password.');
-      console.log('[Login] Validation failed: missing fields');
       return;
     }
 
@@ -92,14 +89,11 @@ const Login = () => {
     setLoginSuccess(false);
 
     try {
-      console.log('[Login] Calling login() with trimmed username and password.');
       const result = await login(
         formData.username.trim(),
         formData.password,
         formData.rememberMe
       );
-
-      console.log('[Login] Login result:', result);
 
       if (!result.success) {
         throw new Error(result.error);
@@ -108,29 +102,22 @@ const Login = () => {
       setLoginSuccess(true);
 
       if (result.user) {
-        console.log('[Login] User data received:', {
-          id: result.user.id,
-          onboarded: result.user.onboarded,
-          email_verified: result.user.email_verified
-        });
-
         setTimeout(() => {
           if (result.user.onboarded) {
-            console.log('[Login] Redirecting to dashboard...');
             navigate('/dashboard', { replace: true });
           } else {
-            console.log('[Login] Redirecting to onboarding...');
             navigate('/onboarding', { replace: true });
           }
         }, 200);
       }
     } catch (err) {
       console.error('[Login] ❌ Login error caught:', err);
-      
+
       let errorMessage = err.message || 'Login failed. Please try again.';
-      
+
       if (err.code === 403 && errorMessage.includes('verify your email')) {
-        errorMessage = 'Please verify your email before logging in. Check your inbox for the verification link.';
+        errorMessage =
+          'Please verify your email before logging in. Check your inbox for the verification link.';
         setSuccessMessage('Verification email sent. Please check your inbox.');
       } else if (err.code === 429) {
         const retryAfter = err.retryAfter || 60;
@@ -140,23 +127,19 @@ const Login = () => {
       } else if (err.code === 'NETWORK_ERROR') {
         errorMessage = 'Network error. Please check your internet connection.';
       }
-      
+
       setError(errorMessage);
       handleError(err, { context: 'login' });
       setLoading(false);
     } finally {
       if (!loginSuccess) {
-        console.log('[Login] Login not successful, setting loading false.');
         setLoading(false);
-      } else {
-        console.log('[Login] Login successful, keeping loading true during redirect.');
       }
     }
   };
 
   // Handle demo login
   const handleDemoLogin = () => {
-    console.log('[Login] Demo login clicked.');
     setIsDemo(true);
     setFormData({
       username: import.meta.env.VITE_DEMO_USERNAME || 'demo@tickflow.com',
@@ -185,7 +168,9 @@ const Login = () => {
       aria-labelledby="login-title"
     >
       <div className="w-full max-w-md bg-black transition-all duration-300">
-        {/* Header with Logo & Brand Name */}
+        {/* ============================================================
+            HEADER – Logo + Brand + Subtitle + Welcome
+            ============================================================ */}
         <div className="space-y-3 text-center pt-8 pb-4">
           <div className="flex flex-col items-center">
             <img
@@ -193,16 +178,16 @@ const Login = () => {
               alt="TFC"
               className="h-14 w-14 mb-2 opacity-80"
             />
-            <span className="text-2xl font-bold text-white tracking-tight">
+            <span className="text-lg font-semibold text-white tracking-tight">
               Tickflow Intelligence
             </span>
-            <span className="text-xs text-gray-500 mt-0.5">
+            <span className="text-[10px] text-gray-500 mt-0.5 tracking-wide">
               Hybrid LSTM + FinBERT Stock Intelligence
             </span>
           </div>
           <h1
             id="login-title"
-            className="text-2xl font-bold text-white tracking-tight mt-2"
+            className="text-2xl font-bold text-white tracking-tight mt-3"
           >
             Welcome Back
           </h1>
@@ -211,15 +196,25 @@ const Login = () => {
           </p>
         </div>
 
-        {/* Form Container */}
+        {/* ============================================================
+            FORM CONTAINER
+            ============================================================ */}
         <div className="px-6 pb-8">
           {/* Success Message */}
           {successMessage && (
             <div className="mb-4 rounded-md border border-green-400 bg-green-400/10 p-4">
               <div className="flex">
                 <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  <svg
+                    className="h-5 w-5 text-green-400"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                      clipRule="evenodd"
+                    />
                   </svg>
                 </div>
                 <div className="ml-3">
@@ -236,21 +231,32 @@ const Login = () => {
             <div className="mb-4 rounded-md border border-red-400 bg-red-400/10 p-4">
               <div className="flex">
                 <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  <svg
+                    className="h-5 w-5 text-red-400"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                      clipRule="evenodd"
+                    />
                   </svg>
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-red-400">
-                    {error}
-                  </p>
+                  <p className="text-sm font-medium text-red-400">{error}</p>
                 </div>
               </div>
             </div>
           )}
 
           {/* Login Form */}
-          <form id="login-form" className="space-y-6" onSubmit={handleSubmit} noValidate>
+          <form
+            id="login-form"
+            className="space-y-6"
+            onSubmit={handleSubmit}
+            noValidate
+          >
             <div className="space-y-4">
               <div>
                 <label
@@ -316,7 +322,10 @@ const Login = () => {
                 onChange={handleChange}
                 disabled={loading}
               />
-              <label htmlFor="rememberMe" className="ml-2 block text-sm text-gray-400 cursor-pointer">
+              <label
+                htmlFor="rememberMe"
+                className="ml-2 block text-sm text-gray-400 cursor-pointer"
+              >
                 Remember me
               </label>
             </div>
@@ -377,9 +386,13 @@ const Login = () => {
           <div className="mt-6 pt-4 border-t border-gray-800">
             <p className="text-[10px] text-center text-gray-500">
               By signing in, you agree to our{' '}
-              <Link to="/terms" className="hover:text-white transition-colors">Terms of Service</Link>
-              {' '}and{' '}
-              <Link to="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
+              <Link to="/terms" className="hover:text-white transition-colors">
+                Terms of Service
+              </Link>{' '}
+              and{' '}
+              <Link to="/privacy" className="hover:text-white transition-colors">
+                Privacy Policy
+              </Link>
             </p>
             <p className="text-[10px] text-center text-gray-500 mt-1">
               Secured with industry‑standard encryption
