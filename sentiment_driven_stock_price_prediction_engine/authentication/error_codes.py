@@ -1,5 +1,5 @@
 """
-Error codes for Tickflow Sentiment API.
+Error codes for Tickflow Intelligence API.
 
 All error codes are grouped by category and include:
 - Numeric code (unique identifier)
@@ -26,7 +26,7 @@ from typing import Dict, Tuple, Optional
 
 class ErrorCodes:
     """
-    Centralized error codes for the Tickflow Sentiment API.
+    Centralized error codes for the Tickflow Intelligence API.
     
     Categories:
     - Authentication: 1000-1999

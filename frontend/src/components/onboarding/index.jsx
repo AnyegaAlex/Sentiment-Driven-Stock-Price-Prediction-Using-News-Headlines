@@ -28,6 +28,7 @@ import { Alert } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import TfcLogo from '@/assets/Primary Icon White.svg'; // Import your TFC logo
 
 import Step1_Profile from './Step1_Profile';
 import Step2_Preferences from './Step2_Preferences';
@@ -342,11 +343,22 @@ const Onboarding = () => {
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white">
-            Set up your account
-          </h1>
+          {/* Logo & Brand Name */}
+          <div className="flex flex-col items-center mb-4">
+            <img
+              src={TfcLogo}
+              alt="TFC"
+              className="h-14 w-14 mb-3 opacity-80"
+            />
+            <h1 className="text-3xl font-bold text-white">
+              Tickflow Intelligence
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Hybrid LSTM + FinBERT Stock Intelligence
+            </p>
+          </div>
           <p className="text-gray-400 mt-2">
-            This takes about two minutes.
+            Set up your account – it takes about two minutes.
           </p>
         </div>
 

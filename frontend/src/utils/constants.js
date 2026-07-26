@@ -1,4 +1,4 @@
-export const APP_NAME = 'Tickflow Sentiment';
+export const APP_NAME = 'Tickflow Intelligence';
 export const COMPANY_NAME = 'Tickflow Capital';
 export const TAGLINE = 'AI-Powered Financial News Intelligence';
 

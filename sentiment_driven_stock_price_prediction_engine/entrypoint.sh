@@ -6,7 +6,7 @@ mkdir -p /app/logs /app/staticfiles /app/media
 touch /app/logs/app.log
 
 echo "=========================================="
-echo "Tickflow Sentiment - Starting up..."
+echo "Tickflow Intelligence - Starting up..."
 echo "=========================================="
 
 # Wait for database to be ready

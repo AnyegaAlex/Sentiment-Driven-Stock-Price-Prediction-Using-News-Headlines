@@ -1,5 +1,5 @@
 /**
- * Production API Client for Tickflow Sentiment
+ * Production API Client for Tickflow Intelligence
  * 
  * Features:
  * - JWT token authentication with automatic refresh

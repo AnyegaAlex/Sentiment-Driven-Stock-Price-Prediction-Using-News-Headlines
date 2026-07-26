@@ -1,5 +1,5 @@
 """
-Management command to generate API keys for Tickflow Sentiment.
+Management command to generate API keys for Tickflow Intelligence.
 
 Supports:
 - Creating keys for specific users

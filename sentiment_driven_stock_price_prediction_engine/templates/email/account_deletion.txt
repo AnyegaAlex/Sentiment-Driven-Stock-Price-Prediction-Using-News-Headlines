@@ -1,9 +1,9 @@
-Tickflow Sentiment - Account Deletion
+Tickflow Intelligence - Account Deletion
 =====================================
 
 Hi {{ user.username }},
 
-You requested to delete your Tickflow Sentiment account.
+You requested to delete your Tickflow Intelligence account.
 
 Your account is scheduled for deletion on {{ scheduled_for }}.
 

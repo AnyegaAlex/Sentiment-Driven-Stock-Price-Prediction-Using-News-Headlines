@@ -1,25 +1,23 @@
+// BrandNameCard.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Radar } from 'lucide-react';
 import PropTypes from 'prop-types';
 import { useDashboard } from '@/context/DashboardContext';
 import { cn } from '@/lib/utils';
 
+// Use the white version for dark theme
+import TfcLogo from '@/assets/Primary Icon White.svg';
+
 const propTypes = {
-  /** Custom icon component (defaults to Radar) */
   logo: PropTypes.elementType,
-  /** Additional CSS classes */
   className: PropTypes.string,
-  /** Destination URL (defaults to /dashboard) */
   to: PropTypes.string,
-  /** Custom click handler (overrides default) */
   onClearSymbol: PropTypes.func,
-  /** Icon stroke width */
   strokeWidth: PropTypes.number,
 };
 
 const BrandNameCard = ({
-  logo: LogoIcon = Radar,
+  logo: LogoIcon = TfcLogo,
   className = '',
   to = '/dashboard',
   onClearSymbol,
@@ -45,19 +43,19 @@ const BrandNameCard = ({
         'transition-opacity hover:opacity-80',
         className
       )}
-      aria-label="Tickflow Sentiment – LSTM + FinBERT Stock Prediction Platform"
+      aria-label="Tickflow Intelligence – Hybrid LSTM + FinBERT Stock Prediction Platform"
     >
-      <LogoIcon
-        className="h-9 w-9 text-gray-400 transition-colors duration-200 group-hover:text-white flex-shrink-0"
-        strokeWidth={strokeWidth}
-        aria-hidden="true"
+      <img
+        src={LogoIcon}
+        alt="TFC"
+        className="h-9 w-9 flex-shrink-0 opacity-80 group-hover:opacity-100 transition-opacity duration-200"
       />
       <div className="flex flex-col leading-tight min-w-0">
         <span className="text-lg font-semibold text-white tracking-tight truncate">
-          Tickflow Sentiment
+          Tickflow Intelligence
         </span>
         <span className="text-xs font-medium text-gray-400 tracking-wide truncate">
-          LSTM + FinBERT Stock Predictions
+          Hybrid LSTM + FinBERT Stock Intelligence
         </span>
       </div>
     </Link>

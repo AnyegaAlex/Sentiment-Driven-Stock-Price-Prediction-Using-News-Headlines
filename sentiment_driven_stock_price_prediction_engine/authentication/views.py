@@ -1,5 +1,5 @@
 """
-Authentication and account management views for Tickflow Sentiment.
+Authentication and account management views for Tickflow Intelligence.
 
 This module provides REST API endpoints for:
 - Registration, login, email verification (link + 6-digit code)

@@ -1,5 +1,5 @@
 """
-Custom throttles for Tickflow Sentiment.
+Custom throttles for Tickflow Intelligence.
 
 Provides rate limiting for:
 - Anonymous users (IP-based)

@@ -1,4 +1,4 @@
-Tickflow Sentiment - Welcome
+Tickflow Intelligence - Welcome
 ============================
 
 Hi {{ user.username }},
@@ -11,7 +11,7 @@ Get started at:
 Complete your onboarding:
 {{ onboarding_url }}
 
-With Tickflow Sentiment, you can:
+With Tickflow Intelligence, you can:
 - Get real-time stock predictions based on news sentiment
 - Track your past predictions and review accuracy
 - Set up alerts for price moves and news events

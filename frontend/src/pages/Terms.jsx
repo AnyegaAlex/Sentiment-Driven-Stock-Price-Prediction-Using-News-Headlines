@@ -25,13 +25,13 @@ const Terms = () => {
           <p className="text-gray-500">Last updated: {new Date().toLocaleDateString()}</p>
           
           <h2>Acceptance of Terms</h2>
-          <p>By using Tickflow Sentiment, you agree to these terms and conditions.</p>
+          <p>By using Tickflow Intelligence, you agree to these terms and conditions.</p>
           
           <h2>Use of Service</h2>
           <p>You may use the service for personal and commercial purposes in accordance with these terms.</p>
           
           <h2>Intellectual Property</h2>
-          <p>All content and code in Tickflow Sentiment is open-source under the MIT License.</p>
+          <p>All content and code in Tickflow Intelligence is open-source under the MIT License.</p>
           
           <h2>Disclaimer</h2>
           <p>This platform provides LSTM + FinBERT-driven financial intelligence for informational purposes only. It is not financial advice.</p>

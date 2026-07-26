@@ -1,9 +1,9 @@
-Tickflow Sentiment - Email Verification
+Tickflow Intelligence - Email Verification
 ========================================
 
 Hi {{ user.username }},
 
-Welcome to Tickflow Sentiment! Please verify your email address to start using
+Welcome to Tickflow Intelligence! Please verify your email address to start using
 AI-powered financial intelligence.
 
 Verify your email:

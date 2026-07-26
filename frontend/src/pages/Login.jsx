@@ -1,9 +1,10 @@
 // src/pages/Login.jsx
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Radar, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronRight, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useErrorHandler } from '@/utils/errorHandler';
+import TfcLogo from '@/assets/Primary Icon White.svg';// Import your TFC logo
 
 /**
  * Production-Ready Login Page
@@ -184,19 +185,24 @@ const Login = () => {
       aria-labelledby="login-title"
     >
       <div className="w-full max-w-md bg-black transition-all duration-300">
-        {/* Header */}
+        {/* Header with Logo & Brand Name */}
         <div className="space-y-3 text-center pt-8 pb-4">
-          <div className="flex items-center justify-center gap-2.5">
-            <div className="p-2.5 rounded-xl bg-gray-800">
-              <Radar className="h-8 w-8 text-gray-400" strokeWidth={1.8} />
-            </div>
+          <div className="flex flex-col items-center">
+            <img
+              src={TfcLogo}
+              alt="TFC"
+              className="h-14 w-14 mb-2 opacity-80"
+            />
             <span className="text-2xl font-bold text-white tracking-tight">
-              Tickflow Sentiment
+              Tickflow Intelligence
+            </span>
+            <span className="text-xs text-gray-500 mt-0.5">
+              Hybrid LSTM + FinBERT Stock Intelligence
             </span>
           </div>
           <h1
             id="login-title"
-            className="text-2xl font-bold text-white tracking-tight"
+            className="text-2xl font-bold text-white tracking-tight mt-2"
           >
             Welcome Back
           </h1>

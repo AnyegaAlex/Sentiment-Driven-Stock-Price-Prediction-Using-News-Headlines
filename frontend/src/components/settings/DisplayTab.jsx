@@ -1,5 +1,5 @@
 /**
- * Display Tab – Tickflow Sentiment
+ * Display Tab – Tickflow Intelligence
  * 
  * Phase 1 implementation:
  * - Default risk profile, hold time, and view
