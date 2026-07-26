@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { api } from '@/services/api';
-import { AlertCircle, CheckCircle, ArrowLeft, Radar } from 'lucide-react';
+import { AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import TfcLogo from '@/assets/Primary Icon White.svg'; 
 
 const ResetPassword = () => {
   const [email, setEmail] = useState('');
@@ -70,10 +71,19 @@ const ResetPassword = () => {
     <div className="min-h-screen flex items-center justify-center bg-black px-4">
       <Card className="w-full max-w-md shadow-xl border border-gray-800 bg-gray-900">
         <CardHeader className="text-center pt-8">
-          <div className="flex justify-center mb-4">
-            <div className="p-3 rounded-xl bg-gray-800">
-              <Radar className="h-10 w-10 text-gray-400" strokeWidth={1.8} />
-            </div>
+          {/* Logo & Brand Name */}
+          <div className="flex flex-col items-center mb-4">
+            <img
+              src={TfcLogo}
+              alt="TFC"
+              className="h-14 w-14 mb-2 opacity-80"
+            />
+            <span className="text-lg font-semibold text-white tracking-tight">
+              Tickflow Intelligence
+            </span>
+            <span className="text-[10px] text-gray-500 mt-0.5 tracking-wide">
+              Hybrid LSTM + FinBERT Stock Intelligence
+            </span>
           </div>
           <CardTitle className="text-2xl font-bold text-white">Reset Password</CardTitle>
           <CardDescription className="text-gray-400">
