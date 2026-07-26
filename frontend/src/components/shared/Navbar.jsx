@@ -1,9 +1,6 @@
 // components/Navbar.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Menu, X, Radar } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import PropTypes from 'prop-types';
 
@@ -13,17 +10,14 @@ const propTypes = {
 };
 
 const NAV_LINKS = [
-  { name: 'Features', href: '#features' },
-  { name: 'Documentation', href: '/docs' },
+  { name: 'Documentation', href: 'https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki' },
+  { name: 'API Reference', href: 'https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/' },
   { name: 'GitHub', href: 'https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines' },
 ];
 
 const Navbar = ({ variant = 'public' }) => {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const menuRef = useRef(null);
 
   // Scroll effect
@@ -55,28 +49,15 @@ const Navbar = ({ variant = 'public' }) => {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen]);
 
-  const handleLogout = useCallback(async () => {
-    setIsLoggingOut(true);
-    try {
-      await logout();
-      navigate('/');
-    } catch (error) {
-      console.error('Logout failed:', error);
-    } finally {
-      setIsLoggingOut(false);
-      setIsOpen(false);
-    }
-  }, [logout, navigate]);
-
-  const isExternalLink = (href) => href.startsWith('http') || href.startsWith('#');
+  const isExternalLink = (href) => href.startsWith('http');
 
   return (
     <nav
       className={cn(
         'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
         scrolled
-          ? 'bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800'
-          : 'bg-transparent'
+          ? 'bg-black border-b border-gray-800'
+          : 'bg-transparent border-transparent'
       )}
       aria-label="Main navigation"
       ref={menuRef}
@@ -84,10 +65,15 @@ const Navbar = ({ variant = 'public' }) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md">
-            <Radar className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-            <span className="text-xl font-bold text-gray-900 dark:text-white">
+          <Link 
+            to="/" 
+            className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded-md min-h-[44px] px-2"
+          >
+            <span className="text-xl font-bold text-white tracking-tight">
               Tickflow Sentiment
+            </span>
+            <span className="text-xs text-gray-500 bg-gray-900 px-2 py-0.5 rounded border border-gray-800">
+              v2.4
             </span>
           </Link>
 
@@ -102,7 +88,7 @@ const Navbar = ({ variant = 'public' }) => {
                     href={link.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition"
+                    className="text-sm text-gray-400 hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] inline-flex items-center px-2"
                   >
                     {link.name}
                   </a>
@@ -114,10 +100,10 @@ const Navbar = ({ variant = 'public' }) => {
                   to={link.href}
                   className={({ isActive }) =>
                     cn(
-                      'text-sm transition',
+                      'text-sm transition min-h-[44px] inline-flex items-center px-2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
                       isActive
-                        ? 'text-blue-600 dark:text-blue-400 font-medium'
-                        : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+                        ? 'text-white font-medium'
+                        : 'text-gray-400 hover:text-white'
                     )
                   }
                   aria-current={({ isActive }) => (isActive ? 'page' : undefined)}
@@ -129,31 +115,30 @@ const Navbar = ({ variant = 'public' }) => {
 
             {variant === 'public' ? (
               <>
-                <Link to="/login">
-                  <Button variant="ghost" size="sm" className="text-gray-600 dark:text-gray-300">
-                    Sign In
-                  </Button>
-                </Link>
-                <Link to="/signup">
-                  <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
-                    Get Started
-                  </Button>
-                </Link>
+                <a
+                  href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
+                  className="text-sm text-gray-400 hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] inline-flex items-center px-2"
+                >
+                  Sign In
+                </a>
+                <a
+                  href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
+                  className="inline-block bg-white text-black px-4 py-2 rounded-md font-medium text-sm hover:bg-gray-200 transition min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                >
+                  Get API Key
+                </a>
               </>
             ) : (
               <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-600 dark:text-gray-300">
-                  {user?.username}
+                <span className="text-sm text-gray-400">
+                  {/* user?.username – handled by auth context if needed */}
                 </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleLogout}
-                  disabled={isLoggingOut}
-                  className="text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
+                <button
+                  className="text-sm text-gray-400 hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] inline-flex items-center px-2"
+                  // onClick={handleLogout}
                 >
-                  {isLoggingOut ? 'Logging out...' : 'Logout'}
-                </Button>
+                  Logout
+                </button>
               </div>
             )}
           </div>
@@ -161,12 +146,24 @@ const Navbar = ({ variant = 'public' }) => {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="md:hidden p-2 rounded-md text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="md:hidden p-2 rounded-md text-gray-400 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label={isOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={isOpen}
             aria-controls="mobile-menu"
           >
-            {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            <span className="sr-only">{isOpen ? 'Close' : 'Open'} menu</span>
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              {isOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
           </button>
         </div>
       </div>
@@ -175,7 +172,7 @@ const Navbar = ({ variant = 'public' }) => {
       {isOpen && (
         <div
           id="mobile-menu"
-          className="md:hidden bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-4 space-y-3"
+          className="md:hidden bg-black border-b border-gray-800 px-4 py-4 space-y-3"
           role="menu"
           aria-label="Mobile navigation"
         >
@@ -188,7 +185,7 @@ const Navbar = ({ variant = 'public' }) => {
                   href={link.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                  className="block text-sm text-gray-400 hover:text-white min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded px-2"
                   onClick={() => setIsOpen(false)}
                   role="menuitem"
                 >
@@ -202,10 +199,10 @@ const Navbar = ({ variant = 'public' }) => {
                 to={link.href}
                 className={({ isActive }) =>
                   cn(
-                    'block text-sm transition',
+                    'block text-sm transition min-h-[44px] flex items-center rounded px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
                     isActive
-                      ? 'text-blue-600 dark:text-blue-400 font-medium'
-                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+                      ? 'text-white font-medium'
+                      : 'text-gray-400 hover:text-white'
                   )
                 }
                 onClick={() => setIsOpen(false)}
@@ -219,31 +216,29 @@ const Navbar = ({ variant = 'public' }) => {
 
           {variant === 'public' ? (
             <>
-              <Link
-                to="/login"
-                className="block text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+              <a
+                href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
+                className="block text-sm text-gray-400 hover:text-white min-h-[44px] flex items-center rounded px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 onClick={() => setIsOpen(false)}
                 role="menuitem"
               >
                 Sign In
-              </Link>
-              <Link
-                to="/signup"
-                className="block text-sm font-medium text-blue-600 dark:text-blue-400"
+              </a>
+              <a
+                href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
+                className="block text-sm font-medium text-white bg-gray-800 px-4 py-2 rounded-md text-center min-h-[44px] flex items-center justify-center hover:bg-gray-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 onClick={() => setIsOpen(false)}
                 role="menuitem"
               >
-                Get Started
-              </Link>
+                Get API Key
+              </a>
             </>
           ) : (
             <button
-              onClick={handleLogout}
-              disabled={isLoggingOut}
-              className="block text-sm text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 w-full text-left"
+              className="block text-sm text-gray-400 hover:text-white w-full text-left min-h-[44px] flex items-center rounded px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
               role="menuitem"
             >
-              {isLoggingOut ? 'Logging out...' : 'Logout'}
+              Logout
             </button>
           )}
         </div>

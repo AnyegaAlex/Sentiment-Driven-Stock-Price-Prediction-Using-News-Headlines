@@ -24,7 +24,7 @@ const ResetPassword = () => {
       setStatus('sent');
     } catch (err) {
       setStatus('error');
-      setErrorMessage(err.response?.data?.message || 'Something went wrong. Please try again.');
+      setErrorMessage(err.response?.data?.message || 'Failed to send reset link. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -32,14 +32,14 @@ const ResetPassword = () => {
 
   if (status === 'sent') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 px-4">
-        <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm">
+      <div className="min-h-screen flex items-center justify-center bg-black px-4">
+        <Card className="w-full max-w-md shadow-xl border border-gray-800 bg-gray-900">
           <CardHeader className="text-center pt-8">
             <div className="flex justify-center mb-4">
-              <CheckCircle className="h-12 w-12 text-green-500" />
+              <CheckCircle className="h-12 w-12 text-green-400" />
             </div>
-            <CardTitle className="text-2xl font-bold">Check Your Email</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-2xl font-bold text-white">Check Your Email</CardTitle>
+            <CardDescription className="text-gray-400">
               If an account exists with this email, you'll receive a password reset link.
             </CardDescription>
           </CardHeader>
@@ -47,11 +47,15 @@ const ResetPassword = () => {
             <p className="text-sm text-gray-500 text-center">
               Didn't receive anything? Check your spam folder or try again.
             </p>
-            <Button variant="outline" className="w-full" onClick={() => setStatus(null)}>
+            <Button 
+              variant="outline" 
+              className="w-full min-h-[44px] border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white"
+              onClick={() => setStatus(null)}
+            >
               Try Again
             </Button>
-            <Link to="/login">
-              <Button variant="ghost" className="w-full">
+            <Link to="/login" className="block">
+              <Button variant="ghost" className="w-full min-h-[44px] text-gray-400 hover:text-white hover:bg-gray-800">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Login
               </Button>
@@ -63,14 +67,16 @@ const ResetPassword = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 px-4">
-      <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm">
+    <div className="min-h-screen flex items-center justify-center bg-black px-4">
+      <Card className="w-full max-w-md shadow-xl border border-gray-800 bg-gray-900">
         <CardHeader className="text-center pt-8">
           <div className="flex justify-center mb-4">
-            <Radar className="h-12 w-12 text-blue-600 dark:text-blue-400" />
+            <div className="p-3 rounded-xl bg-gray-800">
+              <Radar className="h-10 w-10 text-gray-400" strokeWidth={1.8} />
+            </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Reset Password</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-2xl font-bold text-white">Reset Password</CardTitle>
+          <CardDescription className="text-gray-400">
             Enter your email address and we'll send you a reset link.
           </CardDescription>
         </CardHeader>
@@ -82,19 +88,27 @@ const ResetPassword = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              className="min-h-[44px] bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500"
             />
             {status === 'error' && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <span className="ml-2">{errorMessage}</span>
+              <Alert variant="destructive" className="border-red-400 bg-red-400/10 text-red-400">
+                <AlertCircle className="h-4 w-4 text-red-400" />
+                <span className="ml-2 text-red-400">{errorMessage}</span>
               </Alert>
             )}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button 
+              type="submit" 
+              className="w-full min-h-[44px] bg-white text-black hover:bg-gray-200 focus:ring-gray-500 focus:ring-offset-black"
+              disabled={loading}
+            >
               {loading ? 'Sending...' : 'Send Reset Link'}
             </Button>
           </form>
           <div className="mt-4 text-center">
-            <Link to="/login" className="text-sm text-blue-600 hover:underline dark:text-blue-400">
+            <Link 
+              to="/login" 
+              className="text-sm text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+            >
               Back to Login
             </Link>
           </div>

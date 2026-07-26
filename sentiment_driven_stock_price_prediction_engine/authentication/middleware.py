@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Exempt paths (no authentication required)
 PUBLIC_PATHS = [
+    '/',
     # Admin & Monitoring
     '/admin/',
     '/health/',
@@ -221,7 +222,6 @@ class RateLimitHeadersMiddleware:
         if hasattr(request, 'api_key_obj') and request.api_key_obj:
             try:
                 # Get rate limit from settings or use default
-                from rest_framework.settings import api_settings
                 throttle_classes = api_settings.DEFAULT_THROTTLE_CLASSES
                 
                 # Get rate from settings

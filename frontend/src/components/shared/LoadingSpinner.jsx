@@ -1,11 +1,10 @@
-// components/shared/LoadingSpinner.jsx
 import React from 'react';
 import PropTypes from 'prop-types';
 import { cn } from '@/lib/utils';
 
 const propTypes = {
   size: PropTypes.oneOf(['sm', 'md', 'lg', 'xl']),
-  color: PropTypes.oneOf(['blue', 'gray', 'white', 'primary']),
+  color: PropTypes.oneOf(['gray', 'white']),
   className: PropTypes.string,
   containerClassName: PropTypes.string,
   label: PropTypes.string,
@@ -16,7 +15,7 @@ const propTypes = {
 
 const LoadingSpinner = ({
   size = 'md',
-  color = 'blue',
+  color = 'gray',
   className = '',
   containerClassName = '',
   label = '',
@@ -34,13 +33,11 @@ const LoadingSpinner = ({
   };
 
   const colorMap = {
-    blue: '#3b82f6',
-    gray: '#6b7280',
-    white: '#ffffff',
-    primary: '#3b82f6',
+    gray: '#9CA3AF', // gray-400
+    white: '#FFFFFF',
   };
 
-  const borderColor = customColor || colorMap[color] || colorMap.blue;
+  const borderColor = customColor || colorMap[color] || colorMap.gray;
   const sizeStyle = sizeMap[size] || sizeMap.md;
 
   // Inline styles - guaranteed to work
@@ -67,7 +64,7 @@ const LoadingSpinner = ({
   const content = label ? (
     <div className="flex flex-col items-center gap-3">
       {spinner}
-      <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
+      <p className="text-sm text-gray-400">{label}</p>
     </div>
   ) : (
     spinner
@@ -78,7 +75,7 @@ const LoadingSpinner = ({
       <div
         className={cn(
           'fixed inset-0 z-50 flex items-center justify-center',
-          'bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm',
+          'bg-black/90',
           containerClassName
         )}
         role="dialog"
@@ -104,6 +101,6 @@ const LoadingSpinner = ({
 
 LoadingSpinner.propTypes = propTypes;
 
-// ✅ Export both ways – supports default and named imports
+// Export both ways – supports default and named imports
 export default LoadingSpinner;
 export { LoadingSpinner };

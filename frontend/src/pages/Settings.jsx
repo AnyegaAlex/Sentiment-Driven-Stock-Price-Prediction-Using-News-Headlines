@@ -23,7 +23,7 @@ import DeveloperTab from '@/components/settings/DeveloperTab';
 
 
 // ============================================================
-// ✅ VALUE MAPS for backend compatibility
+// VALUE MAPS for backend compatibility
 // ============================================================
 const RISK_MAP = {
   'conservative': 'conservative',
@@ -69,7 +69,6 @@ const Settings = () => {
   // ---- Profile Update ----
   const profileMutation = useMutation({
     mutationFn: async (data) => {
-      // ✅ FIX: Use correct endpoint '/auth/profile/'
       const response = await apiClient.patch('/auth/profile/', data);
       return response.data;
     },
@@ -82,14 +81,11 @@ const Settings = () => {
   // ---- Preferences Update ----
   const preferencesMutation = useMutation({
     mutationFn: async (data) => {
-      // ✅ FIX: Map values before sending
       const mappedData = {
         investment_goal: GOAL_MAP[data.investment_goal] || data.investment_goal || 'growth',
         risk_tolerance: RISK_MAP[data.risk_tolerance] || data.risk_tolerance || 'moderate',
         experience_level: EXPERIENCE_MAP[data.experience_level] || data.experience_level || 'beginner',
-        // ✅ Allow 'system' for theme
         theme: data.theme || 'system',
-        // Notification settings
         email_notifications: data.email_notifications,
         price_alerts: data.price_alerts,
         news_alerts: data.news_alerts,
@@ -110,7 +106,6 @@ const Settings = () => {
     setSaveStatus({ type: 'saving', message: 'Saving...' });
 
     try {
-      // ✅ FIX: Update profile
       await profileMutation.mutateAsync({
         first_name: formData.first_name || '',
         last_name: formData.last_name || '',
@@ -118,7 +113,6 @@ const Settings = () => {
         bio: formData.bio || '',
       });
       
-      // ✅ FIX: Update preferences with mapped values
       await preferencesMutation.mutateAsync({
         language: formData.language || 'en',
         timezone: formData.timezone || 'UTC',
@@ -136,7 +130,7 @@ const Settings = () => {
       console.error('[Settings] Save error:', error);
       setSaveStatus({
         type: 'error',
-        message: error.response?.data?.error || error.response?.data?.message || 'Failed to save settings',
+        message: error.response?.data?.error || error.response?.data?.message || 'Failed to save settings. Please try again.',
       });
     } finally {
       setTimeout(() => setSaveStatus(null), 3000);
@@ -147,7 +141,6 @@ const Settings = () => {
     setSaveStatus({ type: 'saving', message: 'Saving...' });
 
     try {
-      // ✅ FIX: Map values before saving
       const mappedData = {
         investment_goal: GOAL_MAP[formData.investment_goal] || formData.investment_goal || 'growth',
         risk_tolerance: RISK_MAP[formData.risk_tolerance] || formData.risk_tolerance || 'moderate',
@@ -166,7 +159,7 @@ const Settings = () => {
       console.error('[Settings] Preferences save error:', error);
       setSaveStatus({
         type: 'error',
-        message: error.response?.data?.error || error.response?.data?.message || 'Failed to save preferences',
+        message: error.response?.data?.error || error.response?.data?.message || 'Failed to save preferences. Please try again.',
       });
     } finally {
       setTimeout(() => setSaveStatus(null), 3000);
@@ -177,9 +170,9 @@ const Settings = () => {
   if (isLoading) {
     return (
       <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-12 w-full" />
-        <Skeleton className="h-96 w-full" />
+        <Skeleton className="h-8 w-48 bg-gray-800" />
+        <Skeleton className="h-12 w-full bg-gray-800" />
+        <Skeleton className="h-96 w-full bg-gray-800" />
       </div>
     );
   }
@@ -188,16 +181,20 @@ const Settings = () => {
   if (error) {
     return (
       <div className="max-w-5xl mx-auto p-4 md:p-6">
-        <Card className="border-red-200 dark:border-red-800">
+        <Card className="border border-red-400 bg-gray-900">
           <CardContent className="p-6 text-center">
-            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-white">
               Failed to Load Settings
             </h3>
-            <p className="text-gray-500 dark:text-gray-400 mt-2">
-              {error.message || 'Unable to load your preferences'}
+            <p className="text-gray-400 mt-2">
+              {error.message || 'Unable to load your preferences. Please try again.'}
             </p>
-            <Button onClick={() => refetch()} variant="outline" className="mt-4">
+            <Button 
+              onClick={() => refetch()} 
+              variant="outline" 
+              className="mt-4 border-white text-white hover:bg-white hover:text-black min-h-[44px]"
+            >
               Retry
             </Button>
           </CardContent>
@@ -216,41 +213,32 @@ const Settings = () => {
   ];
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
+    <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6 bg-black text-white">
       {/* Page Header */}
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <h1 className="text-2xl font-bold text-white">Settings</h1>
+        <p className="text-sm text-gray-400">
           Manage your account preferences and settings
         </p>
       </div>
 
       {/* Save Status */}
       {saveStatus && (
-        <Alert className={cn(
-          'animate-slide-down',
+        <div className={cn(
+          'flex items-center gap-2 p-4 rounded-lg border animate-slide-down',
           saveStatus.type === 'success' 
-            ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800'
+            ? 'border-green-400 bg-green-400/10 text-green-400'
             : saveStatus.type === 'error'
-            ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'
-            : 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800'
+            ? 'border-red-400 bg-red-400/10 text-red-400'
+            : 'border-gray-500 bg-gray-800/50 text-gray-300'
         )}>
-          {saveStatus.type === 'success' && <CheckCircle className="h-4 w-4 text-green-500" />}
-          {saveStatus.type === 'error' && <AlertCircle className="h-4 w-4 text-red-500" />}
+          {saveStatus.type === 'success' && <CheckCircle className="h-4 w-4 flex-shrink-0" />}
+          {saveStatus.type === 'error' && <AlertCircle className="h-4 w-4 flex-shrink-0" />}
           {saveStatus.type === 'saving' && (
-            <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+            <div className="h-4 w-4 flex-shrink-0 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
           )}
-          <span className={cn(
-            'ml-2',
-            saveStatus.type === 'success' 
-              ? 'text-green-700 dark:text-green-400'
-              : saveStatus.type === 'error'
-              ? 'text-red-700 dark:text-red-400'
-              : 'text-blue-700 dark:text-blue-400'
-          )}>
-            {saveStatus.message}
-          </span>
-        </Alert>
+          <span>{saveStatus.message}</span>
+        </div>
       )}
 
       {/* Tabs */}
@@ -260,12 +248,12 @@ const Settings = () => {
         className="space-y-6"
         aria-label="Settings navigation"
       >
-        <TabsList className="w-full justify-start bg-transparent gap-1 border-b border-gray-200 dark:border-gray-700 rounded-none p-0 h-auto">
+        <TabsList className="w-full justify-start bg-transparent gap-1 border-b border-gray-800 rounded-none p-0 h-auto">
           {tabs.map((tab) => (
             <TabsTrigger
               key={tab.id}
               value={tab.id}
-              className="px-4 py-2 data-[state=active]:border-b-2 data-[state=active]:border-blue-600 data-[state=active]:bg-transparent rounded-none"
+              className="px-4 py-2 text-gray-400 hover:text-white data-[state=active]:border-b-2 data-[state=active]:border-white data-[state=active]:text-white data-[state=active]:bg-transparent rounded-none min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
             >
               <tab.icon className="h-4 w-4 mr-2" />
               {tab.label}
@@ -273,7 +261,7 @@ const Settings = () => {
           ))}
         </TabsList>
 
-        <TabsContent value="general">
+        <TabsContent value="general" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
           <GeneralTab 
             preferences={preferences} 
             onSave={handleGeneralSave}
@@ -281,7 +269,7 @@ const Settings = () => {
           />
         </TabsContent>
 
-        <TabsContent value="notifications">
+        <TabsContent value="notifications" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
           <NotificationsTab 
             preferences={preferences} 
             onSave={(data) => handlePreferencesSave(data, 'notifications')}
@@ -289,7 +277,7 @@ const Settings = () => {
           />
         </TabsContent>
 
-        <TabsContent value="display">
+        <TabsContent value="display" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
           <DisplayTab 
             preferences={preferences} 
             onSave={(data) => handlePreferencesSave(data, 'display')}
@@ -297,15 +285,15 @@ const Settings = () => {
           />
         </TabsContent>
 
-        <TabsContent value="security">
+        <TabsContent value="security" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
           <SecurityTab user={user} />
         </TabsContent>
 
-        <TabsContent value="developer">
+        <TabsContent value="developer" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
           <DeveloperTab />
         </TabsContent>
 
-        <TabsContent value="account">
+        <TabsContent value="account" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
           <AccountTab />
         </TabsContent>
       </Tabs>

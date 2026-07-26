@@ -9,9 +9,9 @@ import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
-import { AlertCircle, X } from 'lucide-react';
+import { AlertCircle, X, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import SymbolSearchCard from '@/components/header/SymbolSearchCard';
+import SymbolSearchCard from '@/components/Header/SymbolSearchCard';
 
 const POPULAR_STOCKS = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'NVDA', 'META', 'NFLX', 'JPM', 'IBM'];
 const MAX_WATCHLIST = 20;
@@ -101,31 +101,31 @@ const Step3_Watchlist = ({
   return (
     <div className={cn('space-y-6', className)}>
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        <h2 className="text-2xl font-bold text-white mb-2">
           Build your watchlist
         </h2>
-        <p className="text-gray-600 dark:text-gray-400">
+        <p className="text-gray-400">
           Add stocks you want to track. You can always update this later.
         </p>
       </div>
 
       {/* Error / Success messages */}
       {error && (
-        <Alert variant="destructive" className="animate-slide-down">
-          <AlertCircle className="h-4 w-4" />
+        <Alert variant="destructive" className="border border-red-400 bg-red-400/10 text-red-400 animate-slide-down">
+          <AlertCircle className="h-4 w-4 text-red-400" />
           <span className="ml-2">{error}</span>
         </Alert>
       )}
       {success && (
-        <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
-          <span className="text-green-700 dark:text-green-300">{success}</span>
+        <Alert className="border border-green-400 bg-green-400/10 text-green-400">
+          <span>{success}</span>
         </Alert>
       )}
 
       <div className="space-y-6">
         {/* Search */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label className="block text-sm font-medium text-gray-300 mb-2">
             Search stocks
           </label>
           <SymbolSearchCard 
@@ -133,7 +133,7 @@ const Step3_Watchlist = ({
             disabled={isLoading}
             placeholder="Search by symbol or name..."
           />
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-sm text-gray-500 mt-1">
             {watchlist.length} / {MAX_WATCHLIST} stocks added
           </p>
         </div>
@@ -142,13 +142,13 @@ const Step3_Watchlist = ({
         {watchlist.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <h3 className="text-sm font-medium text-gray-300">
                 Your watchlist ({watchlist.length})
               </h3>
               <button
                 type="button"
                 onClick={clearWatchlist}
-                className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                className="text-xs text-red-400 hover:text-red-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] px-2"
                 disabled={isLoading}
               >
                 Clear all
@@ -158,14 +158,14 @@ const Step3_Watchlist = ({
               {watchlist.map((symbol) => (
                 <div
                   key={symbol}
-                  className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-3 py-2 rounded-full"
+                  className="flex items-center gap-2 bg-gray-800 text-gray-300 px-3 py-2 rounded-full border border-gray-700"
                   role="listitem"
                 >
-                  <span className="font-semibold">{symbol}</span>
+                  <span className="font-semibold text-white">{symbol}</span>
                   <button
                     type="button"
                     onClick={() => removeFromWatchlist(symbol)}
-                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 transition-colors"
+                    className="text-gray-500 hover:text-gray-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] min-w-[44px] flex items-center justify-center"
                     aria-label={`Remove ${symbol}`}
                     disabled={isLoading}
                   >
@@ -179,7 +179,7 @@ const Step3_Watchlist = ({
 
         {/* Popular stocks */}
         <div>
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+          <h3 className="text-sm font-medium text-gray-300 mb-3">
             Popular stocks
           </h3>
           <div className="flex flex-wrap gap-2">
@@ -192,15 +192,15 @@ const Step3_Watchlist = ({
                   onClick={() => addToWatchlist(symbol)}
                   disabled={isAdded || isLoading}
                   className={cn(
-                    'px-4 py-2 rounded-lg border-2 text-sm transition-all',
+                    'px-4 py-2 rounded-lg border-2 text-sm transition-all min-h-[44px]',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
                     isAdded
-                      ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 cursor-default'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800',
-                    'focus:outline-none focus:ring-2 focus:ring-blue-500'
+                      ? 'border-green-400 bg-green-400/10 text-green-400 cursor-default'
+                      : 'border-gray-800 text-gray-400 hover:border-gray-600 hover:bg-gray-800 hover:text-white'
                   )}
                   aria-pressed={isAdded}
                 >
-                  {symbol} {isAdded && '✓'}
+                  {symbol} {isAdded && <Check className="inline-block w-4 h-4 ml-1" />}
                 </button>
               );
             })}
@@ -214,6 +214,7 @@ const Step3_Watchlist = ({
           onClick={handleContinue}
           disabled={watchlist.length === 0 || isLoading}
           size="lg"
+          className="min-h-[44px] bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         >
           {isLoading ? 'Saving...' : 'Continue'}
         </Button>
@@ -222,7 +223,7 @@ const Step3_Watchlist = ({
           variant="ghost"
           onClick={onSkip}
           disabled={isLoading}
-          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          className="min-h-[44px] text-gray-400 hover:text-white hover:bg-gray-800 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         >
           Skip
         </Button>

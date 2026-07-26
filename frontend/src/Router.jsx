@@ -7,10 +7,11 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const NewsAnalysis = lazy(() => import('./pages/NewsAnalysis'));
 const PredictionHistory = lazy(() => import('./pages/PredictionHistory'));
 
-// Simple fallback (no external dependency)
+// Loading fallback with brand-compliant colors
 const LoadingFallback = () => (
   <div className="flex items-center justify-center h-64">
-    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500" />
+    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-500" />
+    <span className="sr-only">Loading page...</span>
   </div>
 );
 

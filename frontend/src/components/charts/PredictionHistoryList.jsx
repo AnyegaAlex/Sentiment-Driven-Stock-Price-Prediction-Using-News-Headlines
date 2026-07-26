@@ -26,7 +26,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
 import {
   ChevronLeft,
   ChevronRight,
@@ -49,29 +48,29 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const MOVEMENT_CONFIG = {
   up: {
-    badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25',
+    badge: 'bg-green-400/20 text-green-400 border-green-400/30',
     icon: TrendingUp,
     label: 'Up',
-    color: 'text-emerald-400',
+    color: 'text-green-400',
   },
   down: {
-    badge: 'bg-rose-500/15 text-rose-300 border-rose-500/25',
+    badge: 'bg-red-400/20 text-red-400 border-red-400/30',
     icon: TrendingDown,
     label: 'Down',
-    color: 'text-rose-400',
+    color: 'text-red-400',
   },
   neutral: {
-    badge: 'bg-blue-500/15 text-blue-300 border-blue-500/25',
+    badge: 'bg-gray-700/50 text-gray-400 border-gray-700/50',
     icon: Minus,
     label: 'Neutral',
-    color: 'text-blue-400',
+    color: 'text-gray-400',
   },
 };
 
 const CONFIDENCE_LEVELS = {
-  high: { label: 'High', color: 'text-emerald-400', bg: 'bg-emerald-500/15' },
-  medium: { label: 'Medium', color: 'text-yellow-400', bg: 'bg-yellow-500/15' },
-  low: { label: 'Low', color: 'text-rose-400', bg: 'bg-rose-500/15' },
+  high: { label: 'High', color: 'text-green-400', bg: 'bg-green-400/20' },
+  medium: { label: 'Medium', color: 'text-gray-400', bg: 'bg-gray-700/50' },
+  low: { label: 'Low', color: 'text-red-400', bg: 'bg-red-400/20' },
 };
 
 // ============================================================================
@@ -109,7 +108,7 @@ const MovementBadge = ({ movement }) => {
   const config = MOVEMENT_CONFIG[movement] || MOVEMENT_CONFIG.neutral;
   const Icon = config.icon;
   return (
-    <Badge className={cn('px-3 py-1 text-sm font-semibold', config.badge)}>
+    <Badge className={cn('px-3 py-1 text-sm font-semibold border', config.badge)}>
       <Icon className="mr-1.5 h-3.5 w-3.5" />
       {config.label}
     </Badge>
@@ -136,13 +135,14 @@ const SentimentScore = ({ score }) => {
   const normalized = ((score + 1) / 2) * 100;
   const isPositive = score > 0.2;
   const isNegative = score < -0.2;
-  const color = isPositive ? 'text-emerald-400' : isNegative ? 'text-rose-400' : 'text-blue-400';
+  const color = isPositive ? 'text-green-400' : isNegative ? 'text-red-400' : 'text-gray-400';
+  const barColor = isPositive ? 'bg-green-400' : isNegative ? 'bg-red-400' : 'bg-gray-500';
   return (
     <div className="flex items-center gap-3">
       <span className={cn('text-sm font-medium', color)}>{label}</span>
       <div className="w-16 h-1.5 rounded-full bg-gray-700">
         <div
-          className={cn('h-full rounded-full', isPositive ? 'bg-emerald-400' : isNegative ? 'bg-rose-400' : 'bg-blue-400')}
+          className={cn('h-full rounded-full', barColor)}
           style={{ width: `${Math.min(100, Math.max(0, normalized))}%` }}
         />
       </div>
@@ -170,7 +170,7 @@ const PaginationControls = ({ currentPage, totalPages, onPageChange }) => (
         size="sm"
         onClick={() => onPageChange(1)}
         disabled={currentPage === 1}
-        className="border-gray-700 bg-gray-800/50 hover:bg-gray-800 text-gray-300 min-h-[44px] min-w-[44px]"
+        className="border-gray-700 bg-gray-800/50 hover:bg-gray-800 text-gray-300 min-h-[44px] min-w-[44px] focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         aria-label="First page"
       >
         <ChevronsLeft className="h-4 w-4" />
@@ -180,7 +180,7 @@ const PaginationControls = ({ currentPage, totalPages, onPageChange }) => (
         size="sm"
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
-        className="border-gray-700 bg-gray-800/50 hover:bg-gray-800 text-gray-300 min-h-[44px] min-w-[44px]"
+        className="border-gray-700 bg-gray-800/50 hover:bg-gray-800 text-gray-300 min-h-[44px] min-w-[44px] focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         aria-label="Previous page"
       >
         <ChevronLeft className="h-4 w-4" />
@@ -193,7 +193,7 @@ const PaginationControls = ({ currentPage, totalPages, onPageChange }) => (
         size="sm"
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
-        className="border-gray-700 bg-gray-800/50 hover:bg-gray-800 text-gray-300 min-h-[44px] min-w-[44px]"
+        className="border-gray-700 bg-gray-800/50 hover:bg-gray-800 text-gray-300 min-h-[44px] min-w-[44px] focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         aria-label="Next page"
       >
         <ChevronRight className="h-4 w-4" />
@@ -203,7 +203,7 @@ const PaginationControls = ({ currentPage, totalPages, onPageChange }) => (
         size="sm"
         onClick={() => onPageChange(totalPages)}
         disabled={currentPage === totalPages}
-        className="border-gray-700 bg-gray-800/50 hover:bg-gray-800 text-gray-300 min-h-[44px] min-w-[44px]"
+        className="border-gray-700 bg-gray-800/50 hover:bg-gray-800 text-gray-300 min-h-[44px] min-w-[44px] focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         aria-label="Last page"
       >
         <ChevronsRight className="h-4 w-4" />
@@ -322,37 +322,37 @@ const PredictionHistoryList = ({
           <TableHeader>
             <TableRow className="border-gray-800 hover:bg-gray-800/50">
               <TableHead
-                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px]"
+                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 onClick={() => handleSort('date')}
               >
                 <span className="flex items-center">Date {getSortIcon('date')}</span>
               </TableHead>
               <TableHead
-                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px]"
+                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 onClick={() => handleSort('stock_symbol')}
               >
                 <span className="flex items-center">Symbol {getSortIcon('stock_symbol')}</span>
               </TableHead>
               <TableHead
-                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px]"
+                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 onClick={() => handleSort('predicted_movement')}
               >
                 <span className="flex items-center">Movement {getSortIcon('predicted_movement')}</span>
               </TableHead>
               <TableHead
-                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px]"
+                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 onClick={() => handleSort('confidence')}
               >
                 <span className="flex items-center">Confidence {getSortIcon('confidence')}</span>
               </TableHead>
               <TableHead
-                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px]"
+                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 onClick={() => handleSort('sentiment_score')}
               >
                 <span className="flex items-center">Sentiment {getSortIcon('sentiment_score')}</span>
               </TableHead>
               <TableHead
-                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px]"
+                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 onClick={() => handleSort('source')}
               >
                 <span className="flex items-center">Source {getSortIcon('source')}</span>
@@ -495,20 +495,20 @@ EmptyState.propTypes = {
 const ErrorDisplay = ({ error, onRetry, className }) => (
   <div
     className={cn(
-      'rounded-md border border-rose-500/30 bg-rose-500/10 p-6',
+      'rounded-md border border-red-400/30 bg-red-400/10 p-6',
       className
     )}
   >
     <Alert variant="destructive" className="border-0 bg-transparent">
-      <AlertCircle className="h-5 w-5 text-rose-400" />
-      <AlertTitle className="text-rose-300 font-semibold">Failed to load predictions</AlertTitle>
-      <AlertDescription className="text-rose-200/80 text-sm">{error}</AlertDescription>
+      <AlertCircle className="h-5 w-5 text-red-400" />
+      <AlertTitle className="text-white font-semibold">Failed to load predictions</AlertTitle>
+      <AlertDescription className="text-gray-400 text-sm">{error}</AlertDescription>
       {onRetry && (
         <Button
           variant="outline"
           size="sm"
           onClick={onRetry}
-          className="mt-3 border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 min-h-[44px]"
+          className="mt-3 border-red-400/30 bg-red-400/10 hover:bg-red-400/20 text-red-400 min-h-[44px] focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         >
           Retry
         </Button>

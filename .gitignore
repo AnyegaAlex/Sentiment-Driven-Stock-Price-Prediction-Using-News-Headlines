@@ -88,4 +88,5 @@ version.txt
 .env
 .env.local
 .env.development
-.env.production
+.env.productionSentiment-Driven-Stock-Price-Prediction-Using-News-Headlines.wiki/
+sentiment_driven_stock_price_prediction_engine/stock-prediction-analytics/

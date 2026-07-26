@@ -1,5 +1,3 @@
-// frontend/src/components/Header/UserMenu.jsx
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -79,7 +77,7 @@ const UserMenu = () => {
       label: 'Logout', 
       onClick: handleLogout, 
       type: 'button',
-      className: 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20',
+      className: 'text-red-400 hover:bg-red-400/10',
       disabled: isLoggingOut,
     },
   ];
@@ -89,7 +87,7 @@ const UserMenu = () => {
       <button
         ref={buttonRef}
         onClick={toggleDropdown}
-        className="flex items-center justify-center w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        className="flex items-center justify-center w-9 h-9 rounded-full bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-black"
         aria-label="User menu"
         aria-expanded={isOpen}
         aria-haspopup="true"
@@ -101,16 +99,16 @@ const UserMenu = () => {
       {isOpen && (
         <div
           id="user-menu-dropdown"
-          className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50"
+          className="absolute right-0 mt-2 w-48 bg-gray-900 rounded-lg shadow-lg border border-gray-800 py-1 z-50"
           role="menu"
           aria-label="User menu"
         >
           {/* User Info */}
-          <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700">
-            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+          <div className="px-4 py-2 border-b border-gray-800">
+            <p className="text-sm font-medium text-white truncate">
               {user.username}
             </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+            <p className="text-xs text-gray-400 truncate">
               {user.email}
             </p>
           </div>
@@ -119,7 +117,7 @@ const UserMenu = () => {
           {menuItems.map((item) => {
             const baseClassName = cn(
               'flex items-center gap-3 px-4 py-2 text-sm w-full transition-colors',
-              'focus:outline-none focus:bg-gray-50 dark:focus:bg-gray-700',
+              'focus:outline-none focus:bg-gray-800',
               item.className
             );
 
@@ -131,7 +129,7 @@ const UserMenu = () => {
                   disabled={item.disabled}
                   className={cn(
                     baseClassName,
-                    'hover:bg-gray-100 dark:hover:bg-gray-700',
+                    'hover:bg-gray-800',
                     item.disabled && 'opacity-50 cursor-not-allowed'
                   )}
                   role="menuitem"
@@ -153,7 +151,7 @@ const UserMenu = () => {
                 onClick={() => setIsOpen(false)}
                 className={cn(
                   baseClassName,
-                  'hover:bg-gray-100 dark:hover:bg-gray-700'
+                  'hover:bg-gray-800 text-gray-300 hover:text-white'
                 )}
                 role="menuitem"
               >

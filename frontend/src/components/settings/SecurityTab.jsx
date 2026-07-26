@@ -68,7 +68,7 @@ const SecurityTab = ({ user }) => {
       ];
       setSessions(mockSessions);
     } catch (err) {
-      setError(err.message || 'Failed to load sessions');
+      setError(err.message || 'Failed to load sessions. Please try again.');
       console.error('[SecurityTab] Error fetching sessions:', err);
     } finally {
       setLoading(false);
@@ -89,7 +89,7 @@ const SecurityTab = ({ user }) => {
       // Remove session from list
       setSessions(prev => prev.filter(s => s.id !== sessionId));
     } catch (err) {
-      setError(err.message || 'Failed to revoke session');
+      setError(err.message || 'Failed to revoke session. Please try again.');
       console.error('[SecurityTab] Error revoking session:', err);
       setTimeout(() => setError(null), 3000);
     } finally {
@@ -110,7 +110,7 @@ const SecurityTab = ({ user }) => {
       // Keep only current session
       setSessions(prev => prev.filter(s => s.current));
     } catch (err) {
-      setError(err.message || 'Failed to revoke sessions');
+      setError(err.message || 'Failed to revoke sessions. Please try again.');
       console.error('[SecurityTab] Error revoking all sessions:', err);
       setTimeout(() => setError(null), 3000);
     }
@@ -134,68 +134,72 @@ const SecurityTab = ({ user }) => {
   // ---- Loading State ----
   if (loading) {
     return (
-      <Card>
+      <Card className="bg-gray-900 border border-gray-800">
         <CardHeader>
-          <CardTitle>Security Settings</CardTitle>
-          <CardDescription>Manage your account security</CardDescription>
+          <CardTitle className="text-white">Security Settings</CardTitle>
+          <CardDescription className="text-gray-400">Manage your account security</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-20 w-full bg-gray-800" />
+          <Skeleton className="h-20 w-full bg-gray-800" />
+          <Skeleton className="h-40 w-full bg-gray-800" />
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card>
+    <Card className="bg-gray-900 border border-gray-800">
       <CardHeader>
-        <CardTitle>Security Settings</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-white">Security Settings</CardTitle>
+        <CardDescription className="text-gray-400">
           Manage your account security
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Error Alert */}
         {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <span className="ml-2">{error}</span>
+          <Alert variant="destructive" className="border border-red-400/30 bg-red-400/10 text-red-400">
+            <AlertCircle className="h-4 w-4 text-red-400" />
+            <span className="ml-2 text-red-400">{error}</span>
           </Alert>
         )}
 
         {/* Change Password */}
-        <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between p-4 rounded-lg border border-gray-800 bg-gray-900">
           <div className="flex items-start gap-3">
-            <Lock className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+            <Lock className="h-5 w-5 text-gray-400 mt-0.5" />
             <div>
-              <h4 className="text-sm font-medium text-gray-900 dark:text-white">Password</h4>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <h4 className="text-sm font-medium text-white">Password</h4>
+              <p className="text-sm text-gray-400">
                 Change your password regularly to keep your account secure
               </p>
             </div>
           </div>
-          <Button variant="outline" onClick={() => setIsPasswordModalOpen(true)}>
+          <Button 
+            variant="outline" 
+            onClick={() => setIsPasswordModalOpen(true)}
+            className="min-h-[44px] border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white focus-visible:ring-gray-500 focus-visible:ring-offset-black"
+          >
             Change Password
           </Button>
         </div>
 
         {/* Two-Factor Authentication – placeholder */}
-        <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700 opacity-75">
+        <div className="flex items-center justify-between p-4 rounded-lg border border-gray-800 bg-gray-900 opacity-75">
           <div className="flex items-start gap-3">
-            <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+            <Shield className="h-5 w-5 text-gray-400 mt-0.5" />
             <div>
-              <h4 className="text-sm font-medium text-gray-900 dark:text-white">
+              <h4 className="text-sm font-medium text-white">
                 Two-Factor Authentication
               </h4>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-gray-400">
                 Coming soon – add an extra layer of security
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Badge variant="outline" className="text-gray-400 border-gray-300 dark:border-gray-600">
+            <Badge variant="outline" className="text-gray-400 border-gray-700">
               Coming Soon
             </Badge>
             <Switch
@@ -203,18 +207,19 @@ const SecurityTab = ({ user }) => {
               onCheckedChange={setIs2FAEnabled}
               disabled
               aria-label="Two-factor authentication (coming soon)"
+              className="data-[state=checked]:bg-white data-[state=unchecked]:bg-gray-700 min-h-[44px] min-w-[44px]"
             />
           </div>
         </div>
 
         {/* Active Sessions */}
-        <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="p-4 rounded-lg border border-gray-800 bg-gray-900">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-start gap-3">
-              <Monitor className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+              <Monitor className="h-5 w-5 text-gray-400 mt-0.5" />
               <div>
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white">Active Sessions</h4>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <h4 className="text-sm font-medium text-white">Active Sessions</h4>
+                <p className="text-sm text-gray-400">
                   Devices signed in to your account
                 </p>
               </div>
@@ -224,7 +229,7 @@ const SecurityTab = ({ user }) => {
                 variant="outline"
                 size="sm"
                 onClick={handleRevokeAllOthers}
-                className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                className="min-h-[44px] border-gray-700 text-red-400 hover:bg-red-400/10 hover:text-red-300 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
               >
                 <LogOut className="h-4 w-4 mr-1" />
                 Revoke All Others
@@ -234,7 +239,7 @@ const SecurityTab = ({ user }) => {
 
           <div className="space-y-3">
             {sessions.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+              <p className="text-sm text-gray-500 text-center py-4">
                 No active sessions found.
               </p>
             ) : (
@@ -244,36 +249,36 @@ const SecurityTab = ({ user }) => {
                   className={cn(
                     "flex items-center justify-between p-3 rounded-lg",
                     session.current 
-                      ? "bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800"
-                      : "bg-gray-50 dark:bg-gray-800/50"
+                      ? "bg-gray-800 border border-gray-700"
+                      : "bg-gray-800/50 border border-gray-800"
                   )}
                 >
                   <div className="flex items-center gap-3">
                     <div className={cn(
                       "p-2 rounded-lg",
                       session.current 
-                        ? "bg-blue-100 dark:bg-blue-900/30"
-                        : "bg-white dark:bg-gray-700"
+                        ? "bg-gray-700"
+                        : "bg-gray-800"
                     )}>
                       <Monitor className={cn(
                         "h-4 w-4",
                         session.current 
-                          ? "text-blue-600 dark:text-blue-400"
+                          ? "text-gray-300"
                           : "text-gray-500"
                       )} />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">
+                        <span className="text-sm font-medium text-white">
                           {session.device}
                         </span>
                         {session.current && (
-                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                          <Badge className="bg-green-400/20 text-green-400 border-0">
                             Current
                           </Badge>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                      <div className="flex items-center gap-3 text-xs text-gray-400">
                         <span>{session.location}</span>
                         <span>•</span>
                         <span className="flex items-center gap-1">
@@ -289,7 +294,7 @@ const SecurityTab = ({ user }) => {
                       size="sm"
                       onClick={() => handleRevokeSession(session.id)}
                       disabled={revokingId === session.id}
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      className="min-h-[44px] min-w-[44px] text-red-400 hover:text-red-300 hover:bg-red-400/10 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
                     >
                       {revokingId === session.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -303,9 +308,9 @@ const SecurityTab = ({ user }) => {
             )}
           </div>
 
-          <Alert className="mt-4 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
-            <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            <span className="text-sm text-blue-700 dark:text-blue-300 ml-2">
+          <Alert className="mt-4 border border-gray-700 bg-gray-800 text-gray-300">
+            <AlertCircle className="h-4 w-4 text-gray-400" />
+            <span className="text-sm text-gray-400 ml-2">
               If you see a session you don't recognize, revoke it immediately and change your password.
             </span>
           </Alert>

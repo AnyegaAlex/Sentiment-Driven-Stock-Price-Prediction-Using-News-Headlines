@@ -67,8 +67,8 @@ const PersonaSelection = ({
   };
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 dark:text-white text-center">
+    <div className="space-y-6 bg-black">
+      <h2 className="text-2xl font-bold text-white text-center">
         What is your primary focus?
       </h2>
       
@@ -79,11 +79,11 @@ const PersonaSelection = ({
             onClick={() => handleSelect(persona.id)}
             className={cn(
               'p-4 border-2 rounded-xl transition-all text-left flex items-start gap-4',
-              'hover:border-blue-400 dark:hover:border-blue-500',
-              'focus:outline-none focus:ring-2 focus:ring-blue-500',
+              'hover:border-gray-600',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
               selected === persona.id
-                ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
-                : 'border-gray-200 dark:border-gray-700'
+                ? 'border-white bg-gray-800'
+                : 'border-gray-800'
             )}
             disabled={isLoading}
             aria-pressed={selected === persona.id}
@@ -91,14 +91,14 @@ const PersonaSelection = ({
             <persona.icon className={cn(
               'h-6 w-6 flex-shrink-0 mt-1',
               selected === persona.id
-                ? 'text-blue-600 dark:text-blue-400'
-                : 'text-gray-500 dark:text-gray-400'
+                ? 'text-white'
+                : 'text-gray-500'
             )} />
             <div>
-              <div className="font-semibold text-gray-900 dark:text-white">
+              <div className="font-semibold text-white">
                 {persona.label}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="text-sm text-gray-400">
                 {persona.description}
               </div>
             </div>
@@ -111,6 +111,7 @@ const PersonaSelection = ({
           onClick={handleContinue}
           disabled={!selected || isLoading}
           size="lg"
+          className="min-h-[44px] bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         >
           {isLoading ? 'Saving...' : 'Continue'}
         </Button>
@@ -118,7 +119,7 @@ const PersonaSelection = ({
           variant="ghost"
           onClick={onSkip}
           disabled={isLoading}
-          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          className="min-h-[44px] text-gray-400 hover:text-white hover:bg-gray-800 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         >
           Skip
         </Button>

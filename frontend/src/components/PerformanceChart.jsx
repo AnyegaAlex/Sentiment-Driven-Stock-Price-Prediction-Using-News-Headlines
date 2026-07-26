@@ -27,8 +27,8 @@ const PerformanceChart = ({ data }) => {
       {
         label: 'F1 Score (%)',
         data: f1Values,
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        borderColor: '#9CA3AF', // gray-400
+        backgroundColor: 'rgba(156, 163, 175, 0.1)',
         tension: 0.4,
         fill: true,
       },
@@ -52,21 +52,33 @@ const PerformanceChart = ({ data }) => {
         beginAtZero: true,
         max: 100,
         ticks: {
+          color: '#9CA3AF',
           callback: (value) => `${value}%`,
+        },
+        grid: {
+          color: 'rgba(55, 65, 81, 0.3)',
+        },
+      },
+      x: {
+        ticks: {
+          color: '#9CA3AF',
+        },
+        grid: {
+          display: false,
         },
       },
     },
   };
 
   return (
-    <Card>
+    <Card className="bg-gray-900 border border-gray-800">
       <CardHeader>
-        <CardTitle className="text-sm font-medium text-muted-foreground">
+        <CardTitle className="text-sm font-medium text-gray-400">
           F1 Score Trend (Last 30 Days)
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[200px]">
+        <div className="h-[200px]" role="img" aria-label="F1 Score trend chart showing performance over 4 weeks">
           <Line data={chartData} options={options} />
         </div>
       </CardContent>

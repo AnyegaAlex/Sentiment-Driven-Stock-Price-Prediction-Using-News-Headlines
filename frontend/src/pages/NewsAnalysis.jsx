@@ -33,9 +33,9 @@ const SENTIMENT_FILTERS = [
 ];
 
 const SENTIMENT_ICONS = {
-  positive: <AiFillSmile className="w-5 h-5 text-green-600 dark:text-green-400" />,
-  neutral: <AiFillMeh className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />,
-  negative: <AiFillFrown className="w-5 h-5 text-red-600 dark:text-red-400" />,
+  positive: <AiFillSmile className="w-5 h-5 text-green-400" />,
+  neutral: <AiFillMeh className="w-5 h-5 text-gray-400" />,
+  negative: <AiFillFrown className="w-5 h-5 text-red-400" />,
 };
 
 const PLACEHOLDER_IMAGE = "/placeholder-news.jpg";
@@ -93,14 +93,13 @@ const NewsAnalysis = () => {
     enabled: !!selectedSymbol,
   });
 
-  // ✅ Build symbol options – includes current selected symbol
+  // Build symbol options – includes current selected symbol
   const symbolOptions = useMemo(() => {
     const options = availableSymbols.map(sym => ({
       value: typeof sym === 'string' ? sym : sym.symbol,
       label: typeof sym === 'string' ? sym : (sym.name || sym.symbol),
     }));
     
-    // ✅ If selectedSymbol is not in options, add it
     if (selectedSymbol && !options.some(opt => opt.value === selectedSymbol)) {
       options.unshift({
         value: selectedSymbol,
@@ -118,7 +117,6 @@ const NewsAnalysis = () => {
     return found?.label || symbol;
   }, [symbolOptions]);
 
-  // Get symbol display name
   const symbolDisplayName = useMemo(() => {
     return getSymbolName(selectedSymbol);
   }, [selectedSymbol, getSymbolName]);
@@ -189,7 +187,7 @@ const NewsAnalysis = () => {
         </div>
         {phrases.length > 5 && (
           <button
-            className="text-primary hover:underline font-medium text-sm self-start"
+            className="text-gray-400 hover:text-white font-medium text-sm self-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black min-h-[44px] px-2"
             onClick={() => toggleExpandPhrases(index)}
             aria-expanded={isExpanded}
           >
@@ -202,16 +200,15 @@ const NewsAnalysis = () => {
 
   // Get badge class
   const getBadgeClass = useCallback((type, value) => {
-    const base = "dark:bg-opacity-20 dark:text-opacity-90";
     if (type === "sentiment") {
-      if (value === "positive") return `${base} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`;
-      if (value === "negative") return `${base} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`;
-      return `${base} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`;
+      if (value === "positive") return "bg-green-400/20 text-green-400";
+      if (value === "negative") return "bg-red-400/20 text-red-400";
+      return "bg-gray-700 text-gray-300";
     }
     if (type === "reliability") {
-      if (value >= 80) return `${base} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`;
-      if (value >= 50) return `${base} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`;
-      return `${base} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`;
+      if (value >= 80) return "bg-green-400/20 text-green-400";
+      if (value >= 50) return "bg-gray-700 text-gray-300";
+      return "bg-red-400/20 text-red-400";
     }
     return "";
   }, []);
@@ -224,15 +221,15 @@ const NewsAnalysis = () => {
   const showEmptyState = !isLoading && !hasError && filteredNews.length === 0;
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 bg-black text-white">
       {/* Header */}
       <div className="text-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <h1 className="text-2xl font-bold text-white">
           News Analysis for {symbolDisplayName}
         </h1>
         {selectedSymbol && (
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Latest news and sentiment for {symbolDisplayName}
+          <p className="text-sm text-gray-400 mt-1">
+            FinBERT sentiment analysis on latest news for {symbolDisplayName}
           </p>
         )}
       </div>
@@ -244,22 +241,22 @@ const NewsAnalysis = () => {
           onValueChange={handleSymbolChange}
           disabled={isLoading}
         >
-          <SelectTrigger className="w-full sm:w-[220px] dark:bg-gray-800 dark:border-gray-700">
+          <SelectTrigger className="w-full sm:w-[220px] bg-gray-900 border-gray-800 text-white min-h-[44px]">
             <SelectValue placeholder={
               symbolsLoading ? "Loading symbols..." : 
               symbolOptions.length ? "Select Symbol" : "No symbols available"
             } />
           </SelectTrigger>
-          <SelectContent className="dark:bg-gray-800 dark:border-gray-700 max-h-60">
+          <SelectContent className="bg-gray-900 border-gray-800 text-white">
             {symbolOptions.map((option) => (
               <SelectItem
                 key={option.value}
                 value={option.value}
-                className="dark:hover:bg-gray-700"
+                className="focus:bg-gray-800 focus:text-white text-gray-400 hover:text-white min-h-[44px]"
               >
-                <span className="font-medium">{option.value}</span>
+                <span className="font-medium text-white">{option.value}</span>
                 {option.label !== option.value && (
-                  <span className="text-gray-400 ml-2">– {option.label}</span>
+                  <span className="text-gray-500 ml-2">– {option.label}</span>
                 )}
               </SelectItem>
             ))}
@@ -271,15 +268,15 @@ const NewsAnalysis = () => {
           onValueChange={setSentimentFilter}
           disabled={isLoading}
         >
-          <SelectTrigger className="w-full sm:w-[180px] dark:bg-gray-800 dark:border-gray-700">
+          <SelectTrigger className="w-full sm:w-[180px] bg-gray-900 border-gray-800 text-white min-h-[44px]">
             <SelectValue placeholder="Filter Sentiment" />
           </SelectTrigger>
-          <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
+          <SelectContent className="bg-gray-900 border-gray-800 text-white">
             {SENTIMENT_FILTERS.map((filter) => (
               <SelectItem 
                 key={filter.value} 
                 value={filter.value}
-                className="dark:hover:bg-gray-700"
+                className="focus:bg-gray-800 focus:text-white text-gray-400 hover:text-white min-h-[44px]"
               >
                 {filter.label}
               </SelectItem>
@@ -288,7 +285,7 @@ const NewsAnalysis = () => {
         </Select>
 
         {filteredNews.length > 0 && (
-          <Badge variant="outline" className="text-sm">
+          <Badge variant="outline" className="text-sm border-gray-700 text-gray-400">
             {filteredNews.length} article{filteredNews.length > 1 ? 's' : ''}
           </Badge>
         )}
@@ -298,8 +295,8 @@ const NewsAnalysis = () => {
       {isLoading && (
         <div className="flex justify-center items-center h-64">
           <div className="text-center">
-            <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
-            <p className="mt-4 text-gray-500 dark:text-gray-400">
+            <Loader2 className="w-12 h-12 animate-spin text-gray-400 mx-auto" />
+            <p className="mt-4 text-gray-400">
               {symbolsLoading ? 'Loading symbols...' : 'Loading news...'}
             </p>
           </div>
@@ -308,18 +305,18 @@ const NewsAnalysis = () => {
 
       {/* Error State */}
       {hasError && !isLoading && (
-        <Alert variant="destructive" className="mb-8 max-w-md mx-auto">
-          <AlertTitle className="flex items-center gap-2">
-            <Info className="h-4 w-4" />
-            Error Loading News
+        <Alert variant="destructive" className="mb-8 max-w-md mx-auto border-red-400 bg-gray-900 text-white">
+          <AlertTitle className="flex items-center gap-2 text-white">
+            <Info className="h-4 w-4 text-red-400" />
+            Failed to Load News
           </AlertTitle>
-          <AlertDescription className="mt-2">
-            {newsError?.message || symbolsError?.message || 'Failed to fetch news. Please try again.'}
+          <AlertDescription className="mt-2 text-gray-300">
+            {newsError?.message || symbolsError?.message || 'Unable to fetch news for this symbol. Please try again.'}
           </AlertDescription>
           <Button 
             variant="outline" 
             onClick={handleRetry}
-            className="mt-3"
+            className="mt-3 border-white text-white hover:bg-white hover:text-black min-h-[44px]"
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Retry
@@ -329,15 +326,15 @@ const NewsAnalysis = () => {
 
       {/* Empty State */}
       {showEmptyState && (
-        <Alert className="mb-8 max-w-md mx-auto dark:bg-gray-800 dark:border-gray-700">
-          <Newspaper className="h-5 w-5 text-gray-400 mx-auto mb-2" />
-          <AlertTitle className="text-center">No News Found</AlertTitle>
-          <AlertDescription className="text-center dark:text-gray-400">
+        <div className="mb-8 max-w-md mx-auto bg-gray-900 border border-gray-800 rounded-lg p-6 text-center">
+          <Newspaper className="h-8 w-8 text-gray-500 mx-auto mb-3" />
+          <h4 className="text-lg font-semibold text-white mb-1">No News Found</h4>
+          <p className="text-gray-400">
             {selectedSymbol 
               ? `No news articles found for ${symbolDisplayName}. Try adjusting your filters or check back later.`
               : 'Select a symbol to view news articles.'}
-          </AlertDescription>
-        </Alert>
+          </p>
+        </div>
       )}
 
       {/* News Grid */}
@@ -346,7 +343,7 @@ const NewsAnalysis = () => {
           {filteredNews.map((item, index) => (
             <Card
               key={`${item.url}-${index}`}
-              className="h-full flex flex-col transition-shadow hover:shadow-lg dark:bg-gray-800 dark:border-gray-700"
+              className="h-full flex flex-col transition-shadow hover:shadow-lg bg-gray-900 border border-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
             >
               {/* Image */}
               {item.banner_image_url ? (
@@ -361,38 +358,38 @@ const NewsAnalysis = () => {
                   }}
                 />
               ) : (
-                <div className="w-full h-48 bg-muted dark:bg-gray-700 flex items-center justify-center rounded-t-lg">
-                  <Newspaper className="w-12 h-12 text-muted-foreground dark:text-gray-500" />
+                <div className="w-full h-48 bg-gray-800 flex items-center justify-center rounded-t-lg">
+                  <Newspaper className="w-12 h-12 text-gray-600" />
                 </div>
               )}
 
               <CardContent className="p-4 flex flex-col gap-4 flex-1">
-                <CardTitle className="text-base font-semibold dark:text-white line-clamp-2">
+                <CardTitle className="text-base font-semibold text-white line-clamp-2">
                   <a
                     href={item.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="hover:underline inline-flex items-start gap-1"
+                    className="hover:text-gray-300 inline-flex items-start gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                   >
                     {item.title || 'Untitled Article'}
                     <ExternalLink className="inline-block w-3 h-3 mt-0.5 flex-shrink-0" />
                   </a>
                 </CardTitle>
 
-                <CardDescription className="text-sm line-clamp-3 dark:text-gray-400">
+                <CardDescription className="text-sm text-gray-400 line-clamp-3">
                   {truncateText(item.summary, 150)}
                 </CardDescription>
 
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="space-y-0.5">
-                    <p className="text-muted-foreground dark:text-gray-500">Source</p>
-                    <p className="font-medium dark:text-gray-300 truncate">
+                    <p className="text-gray-500">Source</p>
+                    <p className="font-medium text-gray-300 truncate">
                       {item.source || "Unknown"}
                     </p>
                   </div>
                   <div className="space-y-0.5">
-                    <p className="text-muted-foreground dark:text-gray-500">Published</p>
-                    <p className="font-medium dark:text-gray-300">
+                    <p className="text-gray-500">Published</p>
+                    <p className="font-medium text-gray-300">
                       {formatDate(item.published_at)}
                     </p>
                   </div>
@@ -400,15 +397,15 @@ const NewsAnalysis = () => {
 
                 {item.source_reliability !== undefined && (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground dark:text-gray-500">Reliability:</span>
+                    <span className="text-sm text-gray-500">Reliability:</span>
                     <Badge className={getBadgeClass("reliability", item.source_reliability)}>
                       {item.source_reliability}%
                     </Badge>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Info className="w-4 h-4 text-muted-foreground cursor-pointer" />
+                        <Info className="w-4 h-4 text-gray-500 cursor-pointer" />
                       </TooltipTrigger>
-                      <TooltipContent side="top" sideOffset={4} className="max-w-[200px] dark:bg-gray-900">
+                      <TooltipContent side="top" sideOffset={4} className="max-w-[200px] bg-gray-900 border border-gray-800 text-white">
                         Source reliability score based on historical accuracy.
                       </TooltipContent>
                     </Tooltip>
@@ -417,7 +414,7 @@ const NewsAnalysis = () => {
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground dark:text-gray-500">Sentiment:</span>
+                    <span className="text-sm text-gray-500">Sentiment:</span>
                     {SENTIMENT_ICONS[item.sentiment] || SENTIMENT_ICONS.neutral}
                     <Badge className={getBadgeClass("sentiment", item.sentiment)}>
                       {item.sentiment?.charAt(0)?.toUpperCase() + item.sentiment?.slice(1) || "Unknown"}
@@ -426,30 +423,30 @@ const NewsAnalysis = () => {
 
                   {item.confidence !== undefined && (
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground dark:text-gray-500">Confidence:</span>
-                      <div className="flex-1 relative h-2 rounded bg-gray-200 dark:bg-gray-700">
+                      <span className="text-sm text-gray-500">Confidence:</span>
+                      <div className="flex-1 relative h-2 rounded bg-gray-800">
                         <div
-                          className="absolute top-0 left-0 h-full rounded bg-primary transition-all"
+                          className="absolute top-0 left-0 h-full rounded bg-green-400 transition-all"
                           style={{ width: `${Math.min(100, Math.round(item.confidence * 100))}%` }}
                         />
                       </div>
-                      <span className="text-xs w-12 text-right dark:text-gray-400">
+                      <span className="text-xs w-12 text-right text-gray-400">
                         {Math.round(item.confidence * 100)}%
                       </span>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Info className="w-4 h-4 text-muted-foreground cursor-pointer" />
+                          <Info className="w-4 h-4 text-gray-500 cursor-pointer" />
                         </TooltipTrigger>
-                        <TooltipContent side="top" sideOffset={4} className="max-w-[200px] dark:bg-gray-900">
-                          Model confidence in sentiment analysis.
+                        <TooltipContent side="top" sideOffset={4} className="max-w-[200px] bg-gray-900 border border-gray-800 text-white">
+                          LSTM model confidence in sentiment analysis.
                         </TooltipContent>
                       </Tooltip>
                     </div>
                   )}
                 </div>
 
-                <div className="pt-2 border-t border-border dark:border-gray-700">
-                  <h4 className="text-sm font-medium mb-2 dark:text-gray-300">Key Phrases</h4>
+                <div className="pt-2 border-t border-gray-800">
+                  <h4 className="text-sm font-medium mb-2 text-gray-300">Key Phrases</h4>
                   {renderKeyPhrases(item, index)}
                 </div>
               </CardContent>

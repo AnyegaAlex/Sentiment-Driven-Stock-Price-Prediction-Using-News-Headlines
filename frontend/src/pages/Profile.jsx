@@ -115,12 +115,12 @@ const UserAvatar = ({ username, className }) => {
   return (
     <div
       className={cn(
-        'flex h-20 w-20 items-center justify-center rounded-full border-2 border-blue-500/30 bg-gradient-to-br from-blue-500/20 to-purple-500/20',
+        'flex h-20 w-20 items-center justify-center rounded-full border-2 border-gray-700 bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
         className
       )}
       aria-label={`Avatar for ${username || 'User'}`}
     >
-      <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+      <span className="text-2xl font-bold text-gray-300">
         {initials}
       </span>
     </div>
@@ -139,18 +139,18 @@ UserAvatar.propTypes = {
 const StatCard = ({ icon: Icon, label, value, subtitle, className }) => (
   <div
     className={cn(
-      'flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800/50',
+      'flex items-center gap-3 rounded-xl border border-gray-800 bg-gray-900 p-4',
       className
     )}
   >
-    <div className="rounded-lg bg-blue-50 p-2 dark:bg-blue-900/30">
-      <Icon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+    <div className="rounded-lg bg-gray-800 p-2">
+      <Icon className="h-5 w-5 text-gray-400" />
     </div>
     <div>
-      <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-      <p className="text-lg font-semibold text-gray-900 dark:text-white">{value}</p>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="text-lg font-semibold text-white">{value}</p>
       {subtitle && (
-        <p className="text-xs text-gray-400 dark:text-gray-500">{subtitle}</p>
+        <p className="text-xs text-gray-500">{subtitle}</p>
       )}
     </div>
   </div>
@@ -173,7 +173,7 @@ const ActionButton = ({ icon: Icon, label, onClick, variant = 'outline', loading
     variant={variant}
     onClick={onClick}
     disabled={loading}
-    className="flex min-w-[140px] flex-1 items-center gap-2"
+    className="flex min-w-[140px] flex-1 items-center gap-2 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
   >
     {loading ? (
       <span className="flex items-center gap-2">
@@ -202,10 +202,10 @@ ActionButton.propTypes = {
  * PreferenceBadge – Displays a single user preference
  */
 const PreferenceBadge = ({ label, value, icon: Icon }) => (
-  <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 dark:border-gray-700 dark:bg-gray-800/50">
-    {Icon && <Icon className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />}
-    <span className="text-xs text-gray-500 dark:text-gray-400">{label}:</span>
-    <span className="text-xs font-medium text-gray-900 dark:text-white">{value}</span>
+  <div className="flex items-center gap-2 rounded-lg border border-gray-800 bg-gray-800/50 px-3 py-1.5">
+    {Icon && <Icon className="h-3.5 w-3.5 text-gray-500" />}
+    <span className="text-xs text-gray-500">{label}:</span>
+    <span className="text-xs font-medium text-white">{value}</span>
   </div>
 );
 
@@ -240,8 +240,6 @@ const Profile = () => {
   } = useQuery({
     queryKey: ['profile'],
     queryFn: async () => {
-      // The API returns the user object directly
-      // apiClient already unwraps the response
       return await apiClient.get('/auth/profile/');
     },
     staleTime: 10 * 60 * 1000,
@@ -329,29 +327,29 @@ const Profile = () => {
 
   if (isLoading && !profile) {
     return (
-      <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
+      <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6 bg-black">
         <div className="flex items-center gap-4">
-          <Skeleton className="h-20 w-20 rounded-full" />
+          <Skeleton className="h-20 w-20 rounded-full bg-gray-800" />
           <div className="flex-1 space-y-2">
-            <Skeleton className="h-6 w-48" />
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-6 w-48 bg-gray-800" />
+            <Skeleton className="h-4 w-32 bg-gray-800" />
+            <Skeleton className="h-4 w-40 bg-gray-800" />
           </div>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-24 rounded-xl bg-gray-800" />
+          <Skeleton className="h-24 rounded-xl bg-gray-800" />
+          <Skeleton className="h-24 rounded-xl bg-gray-800" />
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Skeleton className="h-32 rounded-xl" />
-          <Skeleton className="h-32 rounded-xl" />
+          <Skeleton className="h-32 rounded-xl bg-gray-800" />
+          <Skeleton className="h-32 rounded-xl bg-gray-800" />
         </div>
         <div className="flex flex-wrap gap-3">
-          <Skeleton className="h-10 w-32" />
-          <Skeleton className="h-10 w-32" />
-          <Skeleton className="h-10 w-32" />
-          <Skeleton className="h-10 w-32" />
+          <Skeleton className="h-12 w-32 bg-gray-800" />
+          <Skeleton className="h-12 w-32 bg-gray-800" />
+          <Skeleton className="h-12 w-32 bg-gray-800" />
+          <Skeleton className="h-12 w-32 bg-gray-800" />
         </div>
       </div>
     );
@@ -363,18 +361,22 @@ const Profile = () => {
 
   if (error && !profile) {
     return (
-      <div className="mx-auto max-w-4xl p-4 md:p-6">
-        <Card className="border-red-200 dark:border-red-800">
+      <div className="mx-auto max-w-4xl p-4 md:p-6 bg-black">
+        <Card className="border border-red-400 bg-gray-900">
           <CardContent className="p-6 text-center">
             <div className="flex flex-col items-center gap-4">
-              <AlertCircle className="h-12 w-12 text-red-500" />
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              <AlertCircle className="h-12 w-12 text-red-400" />
+              <h3 className="text-lg font-semibold text-white">
                 Failed to Load Profile
               </h3>
-              <p className="text-gray-500 dark:text-gray-400">
-                {error.message || 'Please try again later.'}
+              <p className="text-gray-400">
+                {error.message || 'Unable to load your profile. Please try again.'}
               </p>
-              <Button onClick={() => refetch()} variant="outline">
+              <Button 
+                onClick={() => refetch()} 
+                variant="outline"
+                className="border-white text-white hover:bg-white hover:text-black min-h-[44px]"
+              >
                 Retry
               </Button>
             </div>
@@ -389,14 +391,14 @@ const Profile = () => {
   // ============================================================================
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
+    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6 bg-black text-white">
       {/* ============================================================
           Page Header
           ============================================================ */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Profile</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <h1 className="text-2xl font-bold text-white">Profile</h1>
+          <p className="text-sm text-gray-400">
             Manage your account information and settings
           </p>
         </div>
@@ -404,7 +406,7 @@ const Profile = () => {
           variant="outline"
           size="sm"
           onClick={handleSettings}
-          className="gap-2"
+          className="gap-2 border-white text-white hover:bg-white hover:text-black min-h-[44px]"
         >
           <Settings className="h-4 w-4" />
           Settings
@@ -414,7 +416,7 @@ const Profile = () => {
       {/* ============================================================
           User Info Card
           ============================================================ */}
-      <Card>
+      <Card className="bg-gray-900 border border-gray-800">
         <CardContent className="p-6">
           <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center">
             {/* Avatar */}
@@ -423,36 +425,36 @@ const Profile = () => {
             {/* User Info */}
             <div className="flex-1 space-y-2">
               <div className="flex flex-wrap items-center gap-3">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                <h2 className="text-xl font-semibold text-white">
                   {displayName}
                 </h2>
                 {data.tier && data.tier !== 'free' && (
                   <Badge
                     variant="outline"
-                    className="border-amber-200 bg-gradient-to-r from-amber-50 to-amber-100 capitalize dark:border-amber-800 dark:from-amber-900/20 dark:to-amber-800/20"
+                    className="border-gray-700 bg-gray-800 text-gray-300 capitalize"
                   >
-                    <Star className="mr-1 h-3 w-3 text-amber-500" />
+                    <Star className="mr-1 h-3 w-3 text-gray-400" />
                     {data.tier} Plan
                   </Badge>
                 )}
                 {personaLabel && (
                   <Badge
                     variant="outline"
-                    className="border-purple-200 bg-purple-50 capitalize dark:border-purple-800 dark:bg-purple-900/20"
+                    className="border-gray-700 bg-gray-800 text-gray-300 capitalize"
                   >
-                    <Users className="mr-1 h-3 w-3" />
+                    <Users className="mr-1 h-3 w-3 text-gray-400" />
                     {personaLabel}
                   </Badge>
                 )}
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                <span className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+                <span className="flex items-center gap-1 text-sm text-gray-400">
                   <User className="h-3.5 w-3.5" />
                   @{data.username || 'username'}
                 </span>
-                <span className="hidden text-gray-300 dark:text-gray-600 sm:inline">•</span>
-                <span className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+                <span className="hidden text-gray-600 sm:inline">•</span>
+                <span className="flex items-center gap-1 text-sm text-gray-400">
                   <Mail className="h-3.5 w-3.5" />
                   {data.email || 'email@example.com'}
                 </span>
@@ -460,46 +462,46 @@ const Profile = () => {
 
               <div className="flex flex-wrap items-center gap-2">
                 {data.email_verified ? (
-                  <Badge className="border-green-200 bg-green-100 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">
+                  <Badge className="bg-green-400/20 text-green-400 border-0">
                     <CheckCircle className="mr-1 h-3 w-3" />
                     Verified
                   </Badge>
                 ) : (
                   <Badge
                     variant="outline"
-                    className="border-yellow-300 text-yellow-600 dark:border-yellow-700 dark:text-yellow-400"
+                    className="border-gray-700 text-gray-400"
                   >
                     <AlertCircle className="mr-1 h-3 w-3" />
                     Unverified
                   </Badge>
                 )}
                 {data.onboarded && (
-                  <Badge className="border-blue-200 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                  <Badge className="bg-gray-700 text-gray-300 border-0">
                     <Award className="mr-1 h-3 w-3" />
                     Onboarded
                   </Badge>
                 )}
-                <Badge variant="outline" className="text-gray-500 dark:text-gray-400">
+                <Badge variant="outline" className="text-gray-400 border-gray-700">
                   <Calendar className="mr-1 h-3 w-3" />
                   Member since {memberSince}
                 </Badge>
               </div>
 
               {data.nickname && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  <span className="text-xs text-gray-400 dark:text-gray-500">Nickname:</span> {data.nickname}
+                <p className="text-sm text-gray-400">
+                  <span className="text-xs text-gray-500">Nickname:</span> {data.nickname}
                 </p>
               )}
 
               {data.bio && (
-                <p className="mt-2 border-t border-gray-100 pt-2 text-sm text-gray-600 dark:border-gray-800 dark:text-gray-400">
+                <p className="mt-2 border-t border-gray-800 pt-2 text-sm text-gray-400">
                   {data.bio}
                 </p>
               )}
 
               {isDeletionPending && (
-                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
-                  <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
+                <div className="mt-3 rounded-lg border border-red-400 bg-red-400/10 p-3">
+                  <div className="flex items-center gap-2 text-sm text-red-400">
                     <AlertTriangle className="h-4 w-4" />
                     <span>
                       Account deletion scheduled for <strong>{deletionDate}</strong>. 
@@ -545,20 +547,20 @@ const Profile = () => {
           Watchlist Section
           ============================================================ */}
       {data.watchlist && data.watchlist.length > 0 && (
-        <Card>
+        <Card className="bg-gray-900 border border-gray-800">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                <Activity className="h-4 w-4 text-blue-500" />
+              <CardTitle className="flex items-center gap-2 text-sm font-medium text-white">
+                <Activity className="h-4 w-4 text-gray-400" />
                 Watchlist
               </CardTitle>
-              <CardDescription>Stocks you're tracking</CardDescription>
+              <CardDescription className="text-gray-400">Stocks you're tracking</CardDescription>
             </div>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => navigate('/dashboard')}
-              className="gap-1 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+              className="gap-1 text-gray-400 hover:text-white hover:bg-gray-800 min-h-[44px]"
             >
               <Plus className="h-4 w-4" />
               Add More
@@ -570,13 +572,13 @@ const Profile = () => {
                 <Badge
                   key={symbol}
                   variant="secondary"
-                  className="cursor-default border border-gray-200 px-3 py-1.5 font-mono text-sm transition-colors hover:bg-blue-50 dark:border-gray-700 dark:hover:bg-blue-900/30"
+                  className="cursor-default border border-gray-700 bg-gray-800 px-3 py-1.5 font-mono text-sm text-gray-300"
                 >
                   {symbol}
                 </Badge>
               ))}
             </div>
-            <p className="mt-3 text-xs text-gray-400">
+            <p className="mt-3 text-xs text-gray-500">
               {data.watchlist.length} {data.watchlist.length === 1 ? 'stock' : 'stocks'} being tracked
             </p>
           </CardContent>
@@ -587,13 +589,13 @@ const Profile = () => {
           Preferences Section
           ============================================================ */}
       {(investmentGoal || riskTolerance || experienceLevel) && (
-        <Card>
+        <Card className="bg-gray-900 border border-gray-800">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm font-medium">
-              <Target className="h-4 w-4 text-blue-500" />
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-white">
+              <Target className="h-4 w-4 text-gray-400" />
               Preferences
             </CardTitle>
-            <CardDescription>Your investment profile and preferences</CardDescription>
+            <CardDescription className="text-gray-400">Your investment profile and preferences</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
@@ -668,14 +670,14 @@ const Profile = () => {
       {/* ============================================================
           Security Notice
           ============================================================ */}
-      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+      <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
         <div className="flex items-start gap-3">
-          <Lock className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+          <Lock className="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400" />
           <div>
-            <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
+            <p className="text-sm font-medium text-white">
               Account Security
             </p>
-            <p className="text-xs text-blue-600 dark:text-blue-400">
+            <p className="text-xs text-gray-400">
               For your security, sensitive actions require password verification.
               You can change your password, view your API key, or manage your account in Settings.
             </p>

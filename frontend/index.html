@@ -1,22 +1,46 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sentiment-Driven Stock Prediction</title>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-9J5C2GHZG0"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-9J5C2GHZG0');
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+  <!-- ===== Primary Meta ===== -->
+  <title>Tickflow Sentiment – LSTM + FinBERT Stock Prediction</title>
+  <meta name="description" content="Open-source platform combining LSTM neural networks, FinBERT sentiment analysis, and 7 technical indicators for directional stock predictions with confidence scoring." />
+  <meta name="theme-color" content="#000000" />
+
+  <!-- ===== Open Graph / Social ===== -->
+  <meta property="og:title" content="Tickflow Sentiment – LSTM Stock Prediction Platform" />
+  <meta property="og:description" content="LSTM + FinBERT + 7 Technical Indicators (SMA-50, SMA-200, RSI, Bollinger Bands, Support/Resistance, Pivot Points, Volatility, Volume)" />
+  <meta property="og:url" content="https://sentiment-driven-stock-price-predic.vercel.app/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://sentiment-driven-stock-price-predic.vercel.app/og-image.png" />
+
+  <!-- ===== Twitter Card ===== -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Tickflow Sentiment – LSTM Stock Prediction" />
+  <meta name="twitter:description" content="FinBERT sentiment + LSTM neural network for stock direction prediction." />
+
+  <!-- ===== Icons ===== -->
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+  <!-- ===== Fonts ===== -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- ===== Scripts ===== -->
+  <script src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX" async></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-XXXXXXXXXX');
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
 </html>

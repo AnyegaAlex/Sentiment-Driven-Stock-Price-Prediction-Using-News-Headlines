@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import NotFound from './NotFound';
 
 describe('NotFound', () => {
-  it('renders 404 message and link', () => {
+  it('renders 404 message and link to dashboard', () => {
     render(
       <BrowserRouter>
         <NotFound />

@@ -54,7 +54,7 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
         onClose();
       }, 1500);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to change password');
+      setError(err.response?.data?.error || 'Failed to change password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -62,17 +62,19 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md border border-gray-800 bg-gray-900 text-white">
         <DialogHeader>
-          <DialogTitle>Change Password</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-white">Change Password</DialogTitle>
+          <DialogDescription className="text-gray-400">
             Enter your current password and choose a new one
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="old_password">Current Password</Label>
+            <Label htmlFor="old_password" className="text-gray-300">
+              Current Password
+            </Label>
             <div className="relative">
               <Input
                 id="old_password"
@@ -81,11 +83,13 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
                 onChange={(e) => setForm({ ...form, old_password: e.target.value })}
                 placeholder="Enter current password"
                 required
+                className="min-h-[44px] bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500 focus:ring-offset-black"
               />
               <button
                 type="button"
                 onClick={() => setShowPasswords({ ...showPasswords, old: !showPasswords.old })}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded p-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                aria-label={showPasswords.old ? 'Hide password' : 'Show password'}
               >
                 {showPasswords.old ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -93,7 +97,9 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="new_password">New Password</Label>
+            <Label htmlFor="new_password" className="text-gray-300">
+              New Password
+            </Label>
             <div className="relative">
               <Input
                 id="new_password"
@@ -103,11 +109,13 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
                 placeholder="Enter new password"
                 required
                 minLength={8}
+                className="min-h-[44px] bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500 focus:ring-offset-black"
               />
               <button
                 type="button"
                 onClick={() => setShowPasswords({ ...showPasswords, new: !showPasswords.new })}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded p-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                aria-label={showPasswords.new ? 'Hide new password' : 'Show new password'}
               >
                 {showPasswords.new ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -116,7 +124,9 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="new_password2">Confirm New Password</Label>
+            <Label htmlFor="new_password2" className="text-gray-300">
+              Confirm New Password
+            </Label>
             <div className="relative">
               <Input
                 id="new_password2"
@@ -125,11 +135,13 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
                 onChange={(e) => setForm({ ...form, new_password2: e.target.value })}
                 placeholder="Confirm new password"
                 required
+                className="min-h-[44px] bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500 focus:ring-offset-black"
               />
               <button
                 type="button"
                 onClick={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded p-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                aria-label={showPasswords.confirm ? 'Hide confirmation' : 'Show confirmation'}
               >
                 {showPasswords.confirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -137,26 +149,35 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
           </div>
 
           {error && (
-            <Alert variant="destructive" className="animate-slide-down">
-              <AlertCircle className="h-4 w-4" />
+            <Alert variant="destructive" className="border border-red-400 bg-red-400/10 text-red-400">
+              <AlertCircle className="h-4 w-4 text-red-400" />
               <span className="ml-2">{error}</span>
             </Alert>
           )}
 
           {success && (
-            <Alert className="bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800 animate-slide-down">
-              <CheckCircle className="h-4 w-4 text-green-500" />
-              <span className="ml-2 text-green-700 dark:text-green-400">
+            <Alert className="border border-green-400 bg-green-400/10 text-green-400">
+              <CheckCircle className="h-4 w-4 text-green-400" />
+              <span className="ml-2 text-green-400">
                 Password changed successfully!
               </span>
             </Alert>
           )}
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
+          <DialogFooter className="flex flex-col sm:flex-row gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="min-h-[44px] border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white focus-visible:ring-gray-500 focus-visible:ring-offset-black"
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="min-h-[44px] bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
+            >
               {loading ? 'Changing...' : 'Change Password'}
             </Button>
           </DialogFooter>

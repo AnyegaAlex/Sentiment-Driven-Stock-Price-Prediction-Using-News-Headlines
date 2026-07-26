@@ -5,7 +5,7 @@
  * - Lazy loading with Suspense for code splitting
  * - Proper route protection with tier-based access
  * - Clean layout management
- * - Theme and analytics integration
+ * - Analytics integration
  * - Error boundaries
  * - Optimized bundle size
  * 
@@ -84,35 +84,15 @@ const queryClient = new QueryClient({
 const PageLoader = () => <LoadingSpinner fullScreen label="Loading page..." />;
 
 // ============================================================================
-// Theme Hook
+// Theme – Always Dark Mode
 // ============================================================================
 
-function useDeviceThemeClass() {
+function useEnforceDarkMode() {
   useEffect(() => {
     const root = document.documentElement;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    
-    const apply = (isDark) => {
-      root.classList.toggle("dark", Boolean(isDark));
-    };
-    
-    apply(mq.matches);
-
-    const handler = (e) => apply(e.matches);
-    
-    if (mq.addEventListener) {
-      mq.addEventListener("change", handler);
-    } else {
-      mq.addListener(handler);
-    }
-
-    return () => {
-      if (mq.removeEventListener) {
-        mq.removeEventListener("change", handler);
-      } else {
-        mq.removeListener(handler);
-      }
-    };
+    root.classList.add('dark');
+    // Remove any light-mode classes if present
+    root.classList.remove('light');
   }, []);
 }
 
@@ -176,10 +156,10 @@ const AppContent = () => {
     }
   };
 
-  // ✅ Auth routes (no header/footer)
+  // Auth routes (no header/footer)
   if (isAuthRoute(location.pathname)) {
     return (
-      <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen flex flex-col bg-black">
         <Suspense fallback={<PageLoader />}>
           <main className="flex-grow flex items-center justify-center px-4">
             <ErrorBoundary>
@@ -211,10 +191,10 @@ const AppContent = () => {
     );
   }
 
-  // ✅ Landing page
+  // Landing page
   if (location.pathname === '/') {
     return (
-      <div className="min-h-screen flex flex-col">
+      <div className="min-h-screen flex flex-col bg-black">
         <ErrorBoundary>
           <Suspense fallback={<PageLoader />}>
             <AnalyticsTracker />
@@ -227,9 +207,9 @@ const AppContent = () => {
     );
   }
 
-  // ✅ Protected routes (full layout)
+  // Protected routes (full layout)
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-black">
       <Header onSymbolSelect={handleSymbolSelect} />
       <main
         className="flex-grow max-w-[1450px] w-full mx-auto px-5 md:px-8"
@@ -329,7 +309,7 @@ const AppContent = () => {
 // ============================================================================
 
 const App = () => {
-  useDeviceThemeClass();
+  useEnforceDarkMode();
 
   // Initialize Google Analytics
   useEffect(() => {

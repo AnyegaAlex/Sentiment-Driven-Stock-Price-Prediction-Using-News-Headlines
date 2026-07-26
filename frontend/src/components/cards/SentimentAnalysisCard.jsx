@@ -1,4 +1,3 @@
-// components/cards/SentimentAnalysisCard.jsx
 /**
  * SentimentAnalysisCard
  *
@@ -85,7 +84,7 @@ const TIME_RANGE_OPTIONS = [
  */
 const TimeRangeSelector = ({ timeRange, onChange }) => (
   <div
-    className="flex gap-1 rounded-lg border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-800"
+    className="flex gap-1 rounded-lg border border-gray-800 bg-gray-900 p-1"
     role="radiogroup"
     aria-label="Select time range"
   >
@@ -97,11 +96,11 @@ const TimeRangeSelector = ({ timeRange, onChange }) => (
         onClick={() => onChange(option.value)}
         aria-pressed={timeRange === option.value}
         className={cn(
-          'min-h-[36px] px-3 py-1.5 text-xs font-medium transition-all sm:min-h-[44px] sm:px-4 sm:text-sm',
-          'hover:bg-gray-200 dark:hover:bg-gray-700',
+          'min-h-[44px] px-3 py-1.5 text-xs font-medium transition-all sm:px-4 sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
+          'hover:bg-gray-800 hover:text-white',
           timeRange === option.value
-            ? 'bg-gray-200 text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100'
-            : 'text-gray-500 dark:text-gray-400'
+            ? 'bg-gray-800 text-white shadow-sm'
+            : 'text-gray-400'
         )}
       >
         {option.label}
@@ -127,12 +126,12 @@ const SentimentMetric = ({ icon: Icon, label, value, trend, variant }) => {
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Icon className={cn('h-4 w-4 sm:h-5 sm:w-5', config.text)} aria-hidden="true" />
-          <span className="text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">{label}</span>
+          <span className="text-xs font-medium text-gray-400 sm:text-sm">{label}</span>
         </div>
         <Badge className={cn('text-xs font-medium', config.badge)}>{value}%</Badge>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-xl font-bold text-gray-900 dark:text-gray-50 sm:text-2xl font-mono">{value}%</span>
+        <span className="text-xl font-bold text-white sm:text-2xl font-mono">{value}%</span>
         {TrendIcon && (
           <div className="flex items-center gap-1">
             <TrendIcon className={cn('h-3 w-3 sm:h-4 sm:w-4', config.text)} aria-hidden="true" />
@@ -141,14 +140,14 @@ const SentimentMetric = ({ icon: Icon, label, value, trend, variant }) => {
         )}
       </div>
       <div
-        className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+        className="mt-3 h-2 overflow-hidden rounded-full bg-gray-800"
         role="progressbar"
         aria-valuenow={value}
         aria-valuemin={0}
         aria-valuemax={100}
       >
         <div
-          className={cn('h-full rounded-full transition-all duration-500', config.bg.replace('/30', '/50'))}
+          className={cn('h-full rounded-full transition-all duration-500', config.bg.replace('/20', '/50'))}
           style={{ width: `${Math.min(value, 100)}%` }}
         />
       </div>
@@ -171,12 +170,12 @@ const SourceMetric = ({ label, value, icon: Icon, variant = 'neutral', truncate 
   const config = COLOR_SCHEMES[variant];
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-2 sm:p-3 dark:border-gray-700 dark:bg-gray-800/50">
+    <div className="rounded-lg border border-gray-800 bg-gray-900 p-2 sm:p-3">
       <div className="mb-1 flex items-center gap-2">
-        <Icon className={cn('h-3 w-3 sm:h-4 sm:w-4', config?.text || 'text-gray-400')} aria-hidden="true" />
-        <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
+        <Icon className={cn('h-3 w-3 sm:h-4 sm:w-4', config?.text || 'text-gray-500')} aria-hidden="true" />
+        <span className="text-xs text-gray-500">{label}</span>
       </div>
-      <p className={cn('text-base font-bold text-gray-900 dark:text-gray-50 sm:text-lg font-mono', truncate && 'truncate')} title={typeof value === 'string' ? value : String(value)}>
+      <p className={cn('text-base font-bold text-white sm:text-lg font-mono', truncate && 'truncate')} title={typeof value === 'string' ? value : String(value)}>
         {value}
       </p>
     </div>
@@ -195,9 +194,9 @@ SourceMetric.propTypes = {
  * NewsSourceAnalysis – aggregated source reliability and count.
  */
 const NewsSourceAnalysis = ({ newsCount, sourceStats, reliabilityScore }) => (
-  <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 sm:p-4 dark:border-gray-700/50 dark:bg-gray-800/30">
-    <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-300 sm:text-sm">
-      <Newspaper className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+  <div className="rounded-xl border border-gray-800 bg-gray-900 p-3 sm:p-4">
+    <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold text-gray-300 sm:text-sm">
+      <Newspaper className="h-4 w-4 text-gray-500" aria-hidden="true" />
       News Source Analysis
     </h3>
     <div className="grid grid-cols-2 gap-2 sm:gap-3">
@@ -245,10 +244,10 @@ const RecentNewsList = ({ symbol }) => {
   if (isLoading) {
     return (
       <div className="space-y-2">
-        <Skeleton className="h-4 w-32 bg-gray-200 dark:bg-gray-800" />
+        <Skeleton className="h-4 w-32 bg-gray-800" />
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-12 w-full rounded-lg bg-gray-200 dark:bg-gray-800" />
+            <Skeleton key={i} className="h-12 w-full rounded-lg bg-gray-800" />
           ))}
         </div>
       </div>
@@ -256,14 +255,14 @@ const RecentNewsList = ({ symbol }) => {
   }
 
   if (error || !news.length) {
-    return <div className="text-xs text-gray-500 dark:text-gray-400">No recent news available</div>;
+    return <div className="text-xs text-gray-500">No recent news available</div>;
   }
 
   const headlines = news.slice(0, 3);
 
   return (
     <div className="space-y-2">
-      <h4 className="text-xs font-medium text-gray-600 dark:text-gray-400">Recent News</h4>
+      <h4 className="text-xs font-medium text-gray-400">Recent News</h4>
       <div className="space-y-1.5">
         {headlines.map((item, idx) => (
           <a
@@ -271,19 +270,19 @@ const RecentNewsList = ({ symbol }) => {
             href={item.url || '#'}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-start gap-2 rounded-lg border border-gray-200 bg-white p-2 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:bg-gray-700/50"
+            className="flex items-start gap-2 rounded-lg border border-gray-800 bg-gray-900 p-2 hover:bg-gray-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-800 dark:text-gray-200 line-clamp-2">
+              <p className="text-xs font-medium text-gray-300 line-clamp-2">
                 {item.title || 'Untitled'}
               </p>
-              <div className="mt-0.5 flex items-center gap-2 text-[10px] text-gray-500 dark:text-gray-400">
+              <div className="mt-0.5 flex items-center gap-2 text-[10px] text-gray-500">
                 <span>{item.source || 'Unknown'}</span>
-                <span className="h-1 w-1 rounded-full bg-gray-400" />
+                <span className="h-1 w-1 rounded-full bg-gray-600" />
                 <span>{item.date ? new Date(item.date).toLocaleDateString() : ''}</span>
               </div>
             </div>
-            <ExternalLink className="h-3 w-3 flex-shrink-0 text-gray-400" />
+            <ExternalLink className="h-3 w-3 flex-shrink-0 text-gray-500" />
           </a>
         ))}
       </div>
@@ -435,33 +434,33 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
       <CardSkeleton className={className}>
         <CardHeader className="pb-2">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <Skeleton className="h-6 w-48 bg-gray-200 dark:bg-gray-800" />
-            <Skeleton className="h-11 w-24 bg-gray-200 dark:bg-gray-800" />
+            <Skeleton className="h-6 w-48 bg-gray-800" />
+            <Skeleton className="h-11 w-24 bg-gray-800" />
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Skeleton className="h-5 w-24 bg-gray-200 dark:bg-gray-800" />
-            <Skeleton className="h-5 w-20 bg-gray-200 dark:bg-gray-800" />
-            <Skeleton className="h-5 w-24 bg-gray-200 dark:bg-gray-800" />
+            <Skeleton className="h-5 w-24 bg-gray-800" />
+            <Skeleton className="h-5 w-20 bg-gray-800" />
+            <Skeleton className="h-5 w-24 bg-gray-800" />
           </div>
         </CardHeader>
         <CardContent className="space-y-4 p-4">
           <div className="space-y-3">
             {[1, 2, 3].map((index) => (
-              <Skeleton key={index} className="h-[100px] rounded-xl bg-gray-200 dark:bg-gray-800" />
+              <Skeleton key={index} className="h-[100px] rounded-xl bg-gray-800" />
             ))}
           </div>
-          <Skeleton className="h-[200px] rounded-xl bg-gray-200 dark:bg-gray-800 sm:h-[250px]" />
-          <Skeleton className="h-[200px] rounded-xl bg-gray-200 dark:bg-gray-800 sm:h-[250px]" />
+          <Skeleton className="h-[200px] rounded-xl bg-gray-800 sm:h-[250px]" />
+          <Skeleton className="h-[200px] rounded-xl bg-gray-800 sm:h-[250px]" />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[1, 2, 3, 4].map((index) => (
-              <Skeleton key={index} className="h-20 rounded-lg bg-gray-200 dark:bg-gray-800" />
+              <Skeleton key={index} className="h-20 rounded-lg bg-gray-800" />
             ))}
           </div>
           <div className="space-y-2">
-            <Skeleton className="h-4 w-32 bg-gray-200 dark:bg-gray-800" />
-            <Skeleton className="h-12 w-full rounded-lg bg-gray-200 dark:bg-gray-800" />
-            <Skeleton className="h-12 w-full rounded-lg bg-gray-200 dark:bg-gray-800" />
-            <Skeleton className="h-12 w-full rounded-lg bg-gray-200 dark:bg-gray-800" />
+            <Skeleton className="h-4 w-32 bg-gray-800" />
+            <Skeleton className="h-12 w-full rounded-lg bg-gray-800" />
+            <Skeleton className="h-12 w-full rounded-lg bg-gray-800" />
+            <Skeleton className="h-12 w-full rounded-lg bg-gray-800" />
           </div>
         </CardContent>
       </CardSkeleton>
@@ -482,10 +481,10 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
     return (
       <CardWrapper className={className}>
         <CardHeader>
-          <CardTitle>Market Sentiment</CardTitle>
+          <CardTitle className="text-white">Market Sentiment</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="py-8 text-center text-gray-500 dark:text-gray-400">
+          <div className="py-8 text-center text-gray-400">
             No sentiment data available for {symbol}
           </div>
         </CardContent>
@@ -506,7 +505,7 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <SentimentIcon className={cn('h-5 w-5 sm:h-6 sm:w-6', COLOR_SCHEMES[sentimentVariant].text)} aria-hidden="true" />
-            <CardTitle className="text-base font-bold text-gray-900 dark:text-gray-50 sm:text-lg lg:text-xl">
+            <CardTitle className="text-base font-bold text-white sm:text-lg lg:text-xl">
               Market Sentiment
             </CardTitle>
             <UITooltip>
@@ -514,14 +513,14 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  className="h-8 w-8 p-0 text-gray-500 hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                   aria-label="More information about sentiment analysis"
                 >
                   <Info className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[300px] border-gray-800 bg-gray-900 text-gray-100">
-                <p className="text-sm">AI-powered sentiment analysis from news, social media, and expert opinions for {symbol}</p>
+              <TooltipContent side="top" className="max-w-[300px] border border-gray-800 bg-gray-900 text-white">
+                <p className="text-sm">FinBERT sentiment analysis from news headlines and market data for {symbol}</p>
               </TooltipContent>
             </UITooltip>
           </div>
@@ -531,10 +530,10 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
           <Badge variant="outline" className={cn('border-2', COLOR_SCHEMES[sentimentVariant].border)}>
             {sentimentLabel} Sentiment
           </Badge>
-          <Badge variant="outline" className="border-gray-200 bg-gray-50 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
+          <Badge variant="outline" className="border-gray-700 bg-gray-900 text-xs text-gray-400">
             Volatility: {metrics.volatility.toFixed(1)}%
           </Badge>
-          <Badge variant="outline" className="border-gray-200 bg-gray-50 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
+          <Badge variant="outline" className="border-gray-700 bg-gray-900 text-xs text-gray-400">
             <Calendar className="mr-1 h-3 w-3" aria-hidden="true" />
             {timeRange === '7d' ? '7 Days' : '30 Days'}
           </Badge>
@@ -562,9 +561,9 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
         </div>
 
         {historicalChartData && (
-          <div ref={chartContainerRef} className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700/50 dark:bg-gray-800/30">
-            <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-300 sm:text-sm">
-              <TrendingUp className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+          <div ref={chartContainerRef} className="rounded-xl border border-gray-800 bg-gray-900 p-3">
+            <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold text-gray-300 sm:text-sm">
+              <TrendingUp className="h-4 w-4 text-gray-500" aria-hidden="true" />
               Sentiment Trend
             </h3>
             <div className="h-[180px] sm:h-[220px] lg:h-[250px]">
@@ -573,9 +572,9 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
           </div>
         )}
 
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700/50 dark:bg-gray-800/30">
-          <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-300 sm:text-sm">
-            <BarChart3 className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+        <div className="rounded-xl border border-gray-800 bg-gray-900 p-3">
+          <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold text-gray-300 sm:text-sm">
+            <BarChart3 className="h-4 w-4 text-gray-500" aria-hidden="true" />
             Sentiment Distribution
           </h3>
           <div className="h-[180px] sm:h-[220px] lg:h-[250px]">
@@ -589,9 +588,15 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
                     max: 100,
                     grid: { color: 'rgba(75, 85, 99, 0.15)' },
                     ticks: {
-                      color: '#6b7280',
+                      color: '#9CA3AF',
                       font: { size: chartDimensions.width < 640 ? 9 : 11 },
                       callback: (value) => `${value}%`,
+                    },
+                  },
+                  x: {
+                    ticks: {
+                      color: '#9CA3AF',
+                      font: { size: chartDimensions.width < 640 ? 9 : 11 },
                     },
                   },
                 },
@@ -607,7 +612,7 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
         />
 
         {/* Recent News Section */}
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700/50 dark:bg-gray-800/30">
+        <div className="rounded-xl border border-gray-800 bg-gray-900 p-3">
           <RecentNewsList symbol={symbol} />
         </div>
       </CardContent>

@@ -1,4 +1,3 @@
-// components/BrandNameCard.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Radar } from 'lucide-react';
@@ -42,23 +41,23 @@ const BrandNameCard = ({
       onClick={handleClick}
       className={cn(
         'group flex items-center gap-2.5 no-underline',
-        'focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md',
+        'focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-black rounded-md',
         'transition-opacity hover:opacity-80',
         className
       )}
-      aria-label="Tickflow Sentiment – AI-Powered Financial News Intelligence"
+      aria-label="Tickflow Sentiment – LSTM + FinBERT Stock Prediction Platform"
     >
       <LogoIcon
-        className="h-9 w-9 text-blue-600 dark:text-blue-400 transition-colors duration-200 group-hover:text-blue-700 dark:group-hover:text-blue-300 flex-shrink-0"
+        className="h-9 w-9 text-gray-400 transition-colors duration-200 group-hover:text-white flex-shrink-0"
         strokeWidth={strokeWidth}
         aria-hidden="true"
       />
       <div className="flex flex-col leading-tight min-w-0">
-        <span className="text-lg font-semibold text-gray-900 dark:text-white tracking-tight truncate">
+        <span className="text-lg font-semibold text-white tracking-tight truncate">
           Tickflow Sentiment
         </span>
-        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 tracking-wide truncate">
-          AI-Powered Financial News Intelligence
+        <span className="text-xs font-medium text-gray-400 tracking-wide truncate">
+          LSTM + FinBERT Stock Predictions
         </span>
       </div>
     </Link>

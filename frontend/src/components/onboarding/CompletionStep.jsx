@@ -1,4 +1,3 @@
-// components/onboarding/CompletionStep.jsx
 import React from 'react';
 import PropTypes from 'prop-types';
 import { Button } from '@/components/ui/button';
@@ -37,21 +36,21 @@ const CompletionStep = ({
       analyst: 'Find sentiment data to support your investment theses.',
       student: 'Learn NLP in finance with live examples.',
     };
-    const personaMessage = personaMessages[persona] || 'Start analysing stocks with AI-powered sentiment.';
+    const personaMessage = personaMessages[persona] || 'Start analysing stocks with LSTM + FinBERT-powered sentiment.';
     return `${base} ${personaMessage}`;
   };
 
   return (
-    <div className={cn('text-center space-y-6', className)}>
-      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30">
-        <Check className="w-8 h-8 text-green-600 dark:text-green-400" />
+    <div className={cn('text-center space-y-6 bg-black', className)}>
+      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-400/20">
+        <Check className="w-8 h-8 text-green-400" />
       </div>
       
-      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+      <h2 className="text-2xl font-bold text-white">
         All set, {userName || 'Trader'}!
       </h2>
       
-      <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+      <p className="text-gray-400 max-w-md mx-auto">
         {getMessage()}
       </p>
       
@@ -60,6 +59,7 @@ const CompletionStep = ({
           onClick={onFinish}
           disabled={isLoading}
           size="lg"
+          className="min-h-[44px] bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         >
           {isLoading ? 'Loading...' : 'Go to Dashboard'}
         </Button>
@@ -67,7 +67,7 @@ const CompletionStep = ({
           variant="ghost"
           onClick={onSkip}
           disabled={isLoading}
-          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          className="min-h-[44px] text-gray-400 hover:text-white hover:bg-gray-800 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
         >
           Skip
         </Button>

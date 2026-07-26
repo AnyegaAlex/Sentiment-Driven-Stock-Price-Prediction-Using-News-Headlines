@@ -1,31 +1,34 @@
+// src/pages/LandingPage.jsx
 import React from 'react';
 import Navbar from '../components/shared/Navbar';
-import Hero from '../components/landing/Hero';
-import TrustedEngineering from '../components/landing/TrustedEngineering';
-import ProblemSection from '../components/landing/ProblemSection';
-import HowItWorks from '../components/landing/HowItWorks';
-import FeaturesGrid from '../components/landing/FeaturesGrid';
-import BuiltForSection from '../components/landing/BuiltForSection';
-import OpenSourceSection from '../components/landing/OpenSourceSection';
-import AboutSection from '../components/landing/AboutSection';
-import CTASection from '../components/landing/CTASection';
 import Footer from '../components/shared/Footer';
+
+// Landing components
+import Hero from '../components/landing/Hero';
+import Metrics from '../components/landing/Metrics';
+import HowItWorks from '../components/landing/HowItWorks';
+import TechnicalBreakdown from '../components/landing/TechnicalBreakdown';
+import APIDemo from '../components/landing/APIDemo';
+import Infrastructure from '../components/landing/Infrastructure';
+import Documentation from '../components/landing/Documentation';
+import OpenSource from '../components/landing/OpenSource';
+import CTASection from '../components/landing/CTASection';
 
 const LandingPage = () => {
   return (
-    <>
+    <div className="min-h-screen bg-black">
       <Navbar variant="public" />
       <Hero />
-      <TrustedEngineering />
-      <ProblemSection />
+      <Metrics />
       <HowItWorks />
-      <FeaturesGrid />
-      <BuiltForSection />
-      <OpenSourceSection />
-      <AboutSection />
+      <TechnicalBreakdown />
+      <APIDemo />
+      <Infrastructure />
+      <Documentation />
+      <OpenSource />
       <CTASection />
       <Footer />
-    </>
+    </div>
   );
 };
 

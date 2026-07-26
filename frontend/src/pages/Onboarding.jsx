@@ -11,7 +11,11 @@ const Onboarding = () => {
   if (!user) return <Navigate to="/login" />;
   if (isComplete) return <Navigate to="/dashboard" />;
 
-  return <OnboardingContainer />;
+  return (
+    <div className="min-h-screen bg-black">
+      <OnboardingContainer />
+    </div>
+  );
 };
 
 export default Onboarding;

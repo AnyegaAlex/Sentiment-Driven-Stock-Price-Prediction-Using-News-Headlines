@@ -1,4 +1,3 @@
-// components/Header/DateSelectorCard.jsx
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { CalendarIcon, X } from 'lucide-react';
@@ -56,19 +55,21 @@ const DateSelectorCard = ({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <div className="relative inline-block">  {/* Use div wrapper */}
+        <div className="relative inline-block">
           <Button
             variant="outline"
             disabled={disabled}
             className={cn(
               'w-full sm:w-auto justify-start text-left font-normal',
               'min-h-[44px] px-3 py-2 pr-10',
-              !hasDate && 'text-muted-foreground',
+              'border-gray-700 bg-gray-900 text-white hover:bg-gray-800 hover:text-white',
+              !hasDate && 'text-gray-500',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
               className
             )}
             aria-label={hasDate ? `Selected date: ${format(date, dateFormat)}` : placeholder}
           >
-            <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
+            <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0 text-gray-400" />
             <span className="flex-1 truncate">
               {hasDate ? format(date, dateFormat) : placeholder}
             </span>
@@ -77,7 +78,7 @@ const DateSelectorCard = ({
             <button
               type="button"
               onClick={handleClear}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-500 hover:text-gray-300 rounded-full hover:bg-gray-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
               aria-label="Clear date"
             >
               <X className="h-4 w-4" />
@@ -85,7 +86,7 @@ const DateSelectorCard = ({
           )}
         </div>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      <PopoverContent className="w-auto p-0 bg-gray-900 border-gray-800 text-white" align="start">
         <Calendar
           mode="single"
           selected={date}
@@ -94,7 +95,7 @@ const DateSelectorCard = ({
           minDate={minDate}
           maxDate={maxDate}
           disabled={disabled}
-          className="rounded-md border-0"
+          className="rounded-md border-0 bg-gray-900 text-white"
         />
       </PopoverContent>
     </Popover>

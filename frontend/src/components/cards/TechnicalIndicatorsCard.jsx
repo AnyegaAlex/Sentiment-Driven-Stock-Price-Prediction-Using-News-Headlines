@@ -1,4 +1,3 @@
-// components/cards/TechnicalIndicatorsCard.jsx
 /**
  * TechnicalIndicatorsCard
  *
@@ -76,7 +75,7 @@ const TIMEFRAME_OPTIONS = [
 
 const TimeframeSelector = ({ timeframe, onChange }) => (
   <div
-    className="flex gap-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-800/50"
+    className="flex gap-1 overflow-x-auto rounded-lg border border-gray-800 bg-gray-900 p-1"
     role="radiogroup"
     aria-label="Select timeframe"
   >
@@ -88,11 +87,11 @@ const TimeframeSelector = ({ timeframe, onChange }) => (
         onClick={() => onChange(option.value)}
         aria-pressed={timeframe === option.value}
         className={cn(
-          'min-h-[36px] flex-shrink-0 px-3 py-2 text-xs font-medium transition-all sm:min-h-[44px] sm:px-4 sm:text-sm',
-          'hover:bg-gray-200 dark:hover:bg-gray-700',
+          'min-h-[44px] flex-shrink-0 px-3 py-2 text-xs font-medium transition-all sm:px-4 sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
+          'hover:bg-gray-800 hover:text-white',
           timeframe === option.value
-            ? 'bg-gray-200 text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100'
-            : 'text-gray-500 dark:text-gray-400'
+            ? 'bg-gray-800 text-white shadow-sm'
+            : 'text-gray-400'
         )}
       >
         {option.label}
@@ -119,7 +118,7 @@ const TrendIndicator = ({ isUptrend, sma50, sma200, strength }) => {
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <CandlestickChart className={cn('h-5 w-5', config.text)} aria-hidden="true" />
-          <span className="text-base font-medium text-gray-600 dark:text-gray-400">Trend</span>
+          <span className="text-base font-medium text-gray-400">Trend</span>
         </div>
         <Badge className={cn('px-3 py-1.5 text-sm font-medium', config.badge)}>
           {hasData ? (
@@ -134,40 +133,40 @@ const TrendIndicator = ({ isUptrend, sma50, sma200, strength }) => {
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <div className="mb-2 text-sm text-gray-500 dark:text-gray-400">SMA 50</div>
-          <div className="text-xl font-bold text-gray-900 dark:text-gray-50 font-mono">
+          <div className="mb-2 text-sm text-gray-500">SMA 50</div>
+          <div className="text-xl font-bold text-white font-mono">
             {sma50 !== 0 ? `$${sma50.toFixed(2)}` : '—'}
           </div>
         </div>
         <div>
-          <div className="mb-2 text-sm text-gray-500 dark:text-gray-400">SMA 200</div>
-          <div className="text-xl font-bold text-gray-900 dark:text-gray-50 font-mono">
+          <div className="mb-2 text-sm text-gray-500">SMA 200</div>
+          <div className="text-xl font-bold text-white font-mono">
             {sma200 !== 0 ? `$${sma200.toFixed(2)}` : '—'}
           </div>
         </div>
       </div>
-      <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700/50">
+      <div className="mt-4 border-t border-gray-800 pt-4">
         <div className="mb-2 flex justify-between text-sm">
-          <span className="text-gray-500 dark:text-gray-400">Trend Strength</span>
+          <span className="text-gray-500">Trend Strength</span>
           <span className={config.text}>
             {hasData ? `${strength.toFixed(1)}%` : 'N/A'}
           </span>
         </div>
         {hasData ? (
           <div
-            className="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+            className="h-2 overflow-hidden rounded-full bg-gray-800"
             role="progressbar"
             aria-valuenow={Math.min(strength, 100)}
             aria-valuemin={0}
             aria-valuemax={100}
           >
             <div
-              className={cn('h-full rounded-full transition-all', config.bg.replace('/30', '/50'))}
+              className={cn('h-full rounded-full transition-all', config.bg.replace('/20', '/50'))}
               style={{ width: `${Math.min(strength, 100)}%` }}
             />
           </div>
         ) : (
-          <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700" />
+          <div className="h-2 rounded-full bg-gray-800" />
         )}
       </div>
     </div>
@@ -193,28 +192,28 @@ const MomentumIndicator = ({ rsi, isOversold, isOverbought }) => {
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Gauge className={cn('h-5 w-5', config.text)} aria-hidden="true" />
-          <span className="text-base font-medium text-gray-600 dark:text-gray-400">Momentum</span>
+          <span className="text-base font-medium text-gray-400">Momentum</span>
         </div>
         <Badge className={cn('px-3 py-1.5 text-sm font-medium', config.badge)}>{status}</Badge>
       </div>
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-500 dark:text-gray-400">RSI (14)</span>
+          <span className="text-sm text-gray-500">RSI (14)</span>
           <span className={cn('text-xl font-bold font-mono', config.text)}>{rsi.toFixed(1)}</span>
         </div>
         <div
-          className="relative h-2.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+          className="relative h-2.5 overflow-hidden rounded-full bg-gray-800"
           role="progressbar"
           aria-valuenow={Math.min(rsi, 100)}
           aria-valuemin={0}
           aria-valuemax={100}
         >
           <div
-            className={cn('absolute left-0 top-0 h-full rounded-full transition-all', config.bg.replace('/30', '/50'))}
+            className={cn('absolute left-0 top-0 h-full rounded-full transition-all', config.bg.replace('/20', '/50'))}
             style={{ width: `${Math.min(rsi, 100)}%` }}
           />
         </div>
-        <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+        <div className="flex justify-between text-xs text-gray-500">
           <span>Oversold (30)</span>
           <span>Neutral</span>
           <span>Overbought (70)</span>
@@ -245,11 +244,11 @@ const LevelCard = ({ label, value, type, distance }) => {
   const isZero = value === 0;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3 sm:p-4 dark:border-gray-700/50 dark:bg-gray-800/50">
+    <div className="rounded-lg border border-gray-800 bg-gray-900 p-3 sm:p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Icon className={cn('h-4 w-4', config.color.text)} aria-hidden="true" />
-          <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
+          <span className="text-sm text-gray-400">{label}</span>
         </div>
         {type !== 'current' && !isZero && (
           <Badge className={cn('text-xs font-medium', isAbove ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
@@ -257,10 +256,10 @@ const LevelCard = ({ label, value, type, distance }) => {
           </Badge>
         )}
         {type !== 'current' && isZero && (
-          <Badge variant="outline" className="text-xs text-gray-400">N/A</Badge>
+          <Badge variant="outline" className="text-xs text-gray-500 border-gray-700">N/A</Badge>
         )}
       </div>
-      <div className="text-lg font-bold text-gray-900 dark:text-gray-50 sm:text-xl font-mono">
+      <div className="text-lg font-bold text-white sm:text-xl font-mono">
         {isZero ? '—' : `$${value.toFixed(2)}`}
       </div>
     </div>
@@ -278,21 +277,21 @@ LevelCard.propTypes = {
 // KeyLevels – collapsible section
 // ----------------------------------------------------------------------------
 const KeyLevels = ({ current, support, resistance, distances, isOpen, onToggle }) => (
-  <div className="rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700/50 dark:bg-gray-800/30">
+  <div className="rounded-xl border border-gray-800 bg-gray-900">
     <button
       onClick={onToggle}
-      className="flex w-full items-center justify-between p-4 text-left hover:bg-gray-100 dark:hover:bg-gray-800/50 sm:p-5"
+      className="flex w-full items-center justify-between p-4 text-left hover:bg-gray-800/50 sm:p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black min-h-[44px]"
       aria-expanded={isOpen}
       aria-controls="key-levels-content"
     >
-      <h3 className="flex items-center gap-2 text-base font-semibold text-gray-700 dark:text-gray-300">
-        <Layers className="h-5 w-5 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+      <h3 className="flex items-center gap-2 text-base font-semibold text-gray-300">
+        <Layers className="h-5 w-5 text-gray-500" aria-hidden="true" />
         Key Support & Resistance
       </h3>
       {isOpen ? (
-        <ChevronUp className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+        <ChevronUp className="h-5 w-5 text-gray-500" />
       ) : (
-        <ChevronDown className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+        <ChevronDown className="h-5 w-5 text-gray-500" />
       )}
     </button>
     {isOpen && (
@@ -336,15 +335,15 @@ const PivotPoint = ({ label, value, current, type, className }) => {
   return (
     <div className={cn('rounded-lg border p-3 sm:p-4', config.bg, config.border, className)}>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">{label}</span>
+        <span className="text-xs font-medium text-gray-400 sm:text-sm">{label}</span>
         {!isZero && (
           <Badge className={cn('px-2 py-1 text-xs font-medium', isAbove ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
             {isAbove ? 'Above' : 'Below'}
           </Badge>
         )}
-        {isZero && <Badge variant="outline" className="text-xs text-gray-400">N/A</Badge>}
+        {isZero && <Badge variant="outline" className="text-xs text-gray-500 border-gray-700">N/A</Badge>}
       </div>
-      <div className="text-base font-bold text-gray-900 dark:text-gray-50 sm:text-lg font-mono">
+      <div className="text-base font-bold text-white sm:text-lg font-mono">
         {isZero ? '—' : `$${value.toFixed(2)}`}
       </div>
       {!isZero && (
@@ -380,21 +379,21 @@ const PivotPoints = ({ pivot, support, resistance, current, distance, isOpen, on
   ];
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700/50 dark:bg-gray-800/30">
+    <div className="rounded-xl border border-gray-800 bg-gray-900">
       <button
         onClick={onToggle}
-        className="flex w-full items-center justify-between p-4 text-left hover:bg-gray-100 dark:hover:bg-gray-800/50 sm:p-5"
+        className="flex w-full items-center justify-between p-4 text-left hover:bg-gray-800/50 sm:p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black min-h-[44px]"
         aria-expanded={isOpen}
         aria-controls="pivot-points-content"
       >
-        <h3 className="flex items-center gap-2 text-base font-semibold text-gray-700 dark:text-gray-300">
-          <Zap className="h-5 w-5 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+        <h3 className="flex items-center gap-2 text-base font-semibold text-gray-300">
+          <Zap className="h-5 w-5 text-gray-500" aria-hidden="true" />
           Pivot Points
         </h3>
         {isOpen ? (
-          <ChevronUp className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+          <ChevronUp className="h-5 w-5 text-gray-500" />
         ) : (
-          <ChevronDown className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+          <ChevronDown className="h-5 w-5 text-gray-500" />
         )}
       </button>
       {isOpen && (
@@ -412,9 +411,9 @@ const PivotPoints = ({ pivot, support, resistance, current, distance, isOpen, on
                   />
                 ))}
               </div>
-              <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700/50">
+              <div className="mt-4 border-t border-gray-800 pt-4">
                 <div className="flex items-center justify-between text-xs sm:text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">Current Position</span>
+                  <span className="text-gray-500">Current Position</span>
                   <Badge className={cn('px-3 py-1.5 text-xs font-medium sm:text-sm', distance >= 0 ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
                     {distance >= 0 ? '+' : ''}{distance.toFixed(1)}% from pivot
                   </Badge>
@@ -422,7 +421,7 @@ const PivotPoints = ({ pivot, support, resistance, current, distance, isOpen, on
               </div>
             </>
           ) : (
-            <div className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+            <div className="py-4 text-center text-sm text-gray-500">
               Pivot data unavailable
             </div>
           )}
@@ -550,25 +549,25 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
       <CardSkeleton className={className}>
         <CardHeader className="pb-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <Skeleton className="h-8 w-48 bg-gray-200 dark:bg-gray-800" />
-            <Skeleton className="h-11 w-40 bg-gray-200 dark:bg-gray-800" />
+            <Skeleton className="h-8 w-48 bg-gray-800" />
+            <Skeleton className="h-11 w-40 bg-gray-800" />
           </div>
           <div className="mt-3 flex gap-3">
-            <Skeleton className="h-6 w-28 bg-gray-200 dark:bg-gray-800" />
-            <Skeleton className="h-6 w-32 bg-gray-200 dark:bg-gray-800" />
+            <Skeleton className="h-6 w-28 bg-gray-800" />
+            <Skeleton className="h-6 w-32 bg-gray-800" />
           </div>
         </CardHeader>
         <CardContent className="space-y-6 p-4">
-          <Skeleton className="h-[200px] rounded-2xl bg-gray-200 dark:bg-gray-800 sm:h-[250px] lg:h-[300px]" />
-          <Skeleton className="h-48 rounded-xl bg-gray-200 dark:bg-gray-800" />
-          <Skeleton className="h-48 rounded-xl bg-gray-200 dark:bg-gray-800" />
+          <Skeleton className="h-[200px] rounded-2xl bg-gray-800 sm:h-[250px] lg:h-[300px]" />
+          <Skeleton className="h-48 rounded-xl bg-gray-800" />
+          <Skeleton className="h-48 rounded-xl bg-gray-800" />
           <div className="space-y-2">
-            <Skeleton className="h-10 w-full bg-gray-200 dark:bg-gray-800" />
-            <Skeleton className="h-48 rounded-xl bg-gray-200 dark:bg-gray-800" />
+            <Skeleton className="h-10 w-full bg-gray-800" />
+            <Skeleton className="h-48 rounded-xl bg-gray-800" />
           </div>
           <div className="space-y-2">
-            <Skeleton className="h-10 w-full bg-gray-200 dark:bg-gray-800" />
-            <Skeleton className="h-64 rounded-xl bg-gray-200 dark:bg-gray-800" />
+            <Skeleton className="h-10 w-full bg-gray-800" />
+            <Skeleton className="h-64 rounded-xl bg-gray-800" />
           </div>
         </CardContent>
       </CardSkeleton>
@@ -589,10 +588,10 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
     return (
       <CardWrapper className={className}>
         <CardHeader>
-          <CardTitle>Technical Analysis</CardTitle>
+          <CardTitle className="text-white">Technical Analysis</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="py-8 text-center text-gray-500 dark:text-gray-400">
+          <div className="py-8 text-center text-gray-400">
             No technical data available for {symbol}
           </div>
         </CardContent>
@@ -611,7 +610,7 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
       <CardHeader className="relative pb-3 sm:pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <CardTitle className="text-lg font-bold text-gray-900 dark:text-gray-50 sm:text-xl lg:text-2xl">
+            <CardTitle className="text-lg font-bold text-white sm:text-xl lg:text-2xl">
               Technical Analysis
             </CardTitle>
             <Tooltip>
@@ -619,13 +618,13 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  className="h-8 w-8 p-0 text-gray-500 hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                   aria-label="More information about technical indicators"
                 >
                   <Info className="h-5 w-5" aria-hidden="true" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[350px] border-gray-800 bg-gray-900 text-gray-100">
+              <TooltipContent side="top" className="max-w-[350px] border border-gray-800 bg-gray-900 text-white">
                 <p className="text-sm">Real-time technical indicators and price action analysis for {symbol}</p>
               </TooltipContent>
             </Tooltip>
@@ -633,11 +632,11 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
           <TimeframeSelector timeframe={timeframe} onChange={setTimeframe} />
         </div>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
-          <Badge variant="outline" className="border-gray-200 bg-gray-50 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
+          <Badge variant="outline" className="border-gray-700 bg-gray-900 text-xs text-gray-400">
             <TrendingUp className="mr-2 h-4 w-4" aria-hidden="true" />
             Volatility: {indicators.volatilityLevel}
           </Badge>
-          <Badge variant="outline" className="border-gray-200 bg-gray-50 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
+          <Badge variant="outline" className="border-gray-700 bg-gray-900 text-xs text-gray-400">
             <Zap className="mr-2 h-4 w-4" aria-hidden="true" />
             Trend Strength: {indicators.trendStrength > 0 ? `${indicators.trendStrength.toFixed(1)}%` : 'N/A'}
           </Badge>
@@ -649,13 +648,13 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
 
       <CardContent className="relative space-y-4 p-4 sm:space-y-6 sm:p-4">
         {chartData ? (
-          <div ref={chartContainerRef} className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700/50 dark:bg-gray-800/30 sm:rounded-2xl sm:p-4">
+          <div ref={chartContainerRef} className="rounded-xl border border-gray-800 bg-gray-900 p-3 sm:rounded-2xl sm:p-4">
             <div className="h-[200px] sm:h-[250px] lg:h-[300px]">
               <Line key={chartDimensions.width} data={chartData} options={getChartOptions(chartDimensions.width)} />
             </div>
           </div>
         ) : (
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500 dark:border-gray-700/50 dark:bg-gray-800/30 dark:text-gray-400">
+          <div className="rounded-xl border border-gray-800 bg-gray-900 p-6 text-center text-sm text-gray-500">
             No price history available for {symbol}
           </div>
         )}

@@ -6,7 +6,7 @@
  * - Email input with validation
  * - Rate limit handling
  * - Success/error states
- * - Dark mode support
+ * - Dark mode only
  * - Accessibility
  * 
  * @version 2.0.0
@@ -63,21 +63,21 @@ const ResendVerification = () => {
   };
 
   return (
-    <div className="w-full max-w-md backdrop-blur-sm bg-transparent transition-all duration-300">
+    <div className="w-full max-w-md bg-black transition-all duration-300">
       {/* Header */}
       <div className="space-y-3 text-center pt-8 pb-4">
         <div className="flex items-center justify-center gap-2.5">
-          <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 dark:from-blue-500/20 dark:to-purple-500/20">
-            <Radar className="h-8 w-8 text-blue-600 dark:text-blue-400" strokeWidth={1.8} />
+          <div className="p-2.5 rounded-xl bg-gray-800">
+            <Radar className="h-8 w-8 text-gray-400" strokeWidth={1.8} />
           </div>
-          <span className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+          <span className="text-2xl font-bold text-white tracking-tight">
             Tickflow Sentiment
           </span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+        <h1 className="text-2xl font-bold text-white tracking-tight">
           Resend Verification
         </h1>
-        <p className="text-gray-500 dark:text-gray-400 text-sm max-w-sm mx-auto">
+        <p className="text-gray-400 text-sm max-w-sm mx-auto">
           Enter your email address to receive a new verification link.
         </p>
       </div>
@@ -86,20 +86,20 @@ const ResendVerification = () => {
       <div className="px-6 pb-8">
         {/* Success Message */}
         {success && (
-          <div className="mb-4 rounded-md bg-green-50 dark:bg-green-900/20 p-4">
+          <div className="mb-4 rounded-md border border-green-400 bg-green-400/10 p-4">
             <div className="flex items-start gap-3">
               <CheckCircle className="h-5 w-5 text-green-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                <p className="text-sm font-medium text-green-400">
                   Verification email sent!
                 </p>
-                <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                <p className="text-sm text-green-400/80 mt-1">
                   Please check your inbox and click the verification link to activate your account.
                 </p>
                 <div className="mt-3 flex gap-3">
                   <button
                     onClick={() => navigate('/login')}
-                    className="text-sm font-medium text-green-700 dark:text-green-300 hover:underline"
+                    className="text-sm font-medium text-green-400 hover:text-green-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                   >
                     Go to Login
                   </button>
@@ -108,7 +108,7 @@ const ResendVerification = () => {
                       setSuccess(false);
                       setEmail('');
                     }}
-                    className="text-sm font-medium text-green-700 dark:text-green-300 hover:underline"
+                    className="text-sm font-medium text-green-400 hover:text-green-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                   >
                     Send Again
                   </button>
@@ -120,10 +120,10 @@ const ResendVerification = () => {
 
         {/* Error Message */}
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 dark:bg-red-900/20 p-4">
+          <div className="mb-4 rounded-md border border-red-400 bg-red-400/10 p-4">
             <div className="flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-sm font-medium text-red-800 dark:text-red-200">
+              <p className="text-sm font-medium text-red-400">
                 {error}
               </p>
             </div>
@@ -133,18 +133,18 @@ const ResendVerification = () => {
         <form onSubmit={handleSubmit} className="space-y-5" noValidate>
           {/* Email */}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-1">
               Email Address
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
               <input
                 id="email"
                 name="email"
                 type="email"
                 autoComplete="email"
                 required
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                className="w-full min-h-[44px] pl-10 pr-4 py-2.5 border border-gray-800 rounded-lg bg-gray-900 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all duration-200"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => {
@@ -157,7 +157,7 @@ const ResendVerification = () => {
               />
             </div>
             {touched && !email && (
-              <p id="email-error" className="mt-1 text-sm text-red-600 dark:text-red-400">
+              <p id="email-error" className="mt-1 text-sm text-red-400">
                 Email is required
               </p>
             )}
@@ -167,7 +167,7 @@ const ResendVerification = () => {
           <button
             type="submit"
             disabled={loading || success}
-            className="w-full flex items-center justify-center py-2.5 px-4 border border-transparent rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            className="w-full min-h-[44px] flex items-center justify-center py-2.5 px-4 border border-transparent rounded-lg text-sm font-medium text-black bg-white hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 focus:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
           >
             {loading ? (
               <>
@@ -187,7 +187,7 @@ const ResendVerification = () => {
         <div className="mt-6 text-center">
           <Link
             to="/login"
-            className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+            className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Login
@@ -195,8 +195,8 @@ const ResendVerification = () => {
         </div>
 
         {/* Trust Badge */}
-        <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-800">
-          <p className="text-[10px] text-center text-gray-400 dark:text-gray-500">
+        <div className="mt-6 pt-4 border-t border-gray-800">
+          <p className="text-[10px] text-center text-gray-500">
             If you don't receive the email within 5 minutes, check your spam folder.
           </p>
         </div>

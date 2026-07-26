@@ -33,24 +33,25 @@ ChartJS.register(
   annotationPlugin
 );
 
+// Brand-compliant chart colors
 const CHART_COLORS = {
   accuracy: {
-    bg: 'rgba(59, 130, 246, 0.5)',
-    border: 'rgb(59, 130, 246)',
-    hover: 'rgba(59, 130, 246, 0.7)'
+    bg: 'rgba(52, 211, 153, 0.5)',   // green-400 with opacity
+    border: '#34D399',               // green-400
+    hover: 'rgba(52, 211, 153, 0.7)'
   },
   f1Score: {
-    line: 'rgb(239, 68, 68)',
-    point: 'rgb(239, 68, 68)',
-    hover: 'rgb(220, 38, 38)'
+    line: '#9CA3AF',                 // gray-400
+    point: '#9CA3AF',
+    hover: '#6B7280'                 // gray-500
   },
   threshold: {
-    line: 'rgb(234, 179, 8)',
-    label: 'rgb(234, 179, 8)'
+    line: '#D1D5DB',                 // gray-300
+    label: '#D1D5DB'
   },
   grid: {
-    line: 'rgba(75, 85, 99, 0.2)',
-    text: 'rgb(156, 163, 175)'
+    line: 'rgba(55, 65, 81, 0.3)',   // gray-700 with opacity
+    text: '#9CA3AF'                  // gray-400
   }
 };
 
@@ -66,7 +67,7 @@ export const PerformanceChart = ({
   onRetry,
   ariaLabel = 'Model performance chart showing accuracy and F1 score over time'
 }) => {
-  // Responsive height: 300px on mobile, 400px on larger screens
+  // Responsive height: 250px on mobile, 300px on tablet, 400px on desktop
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   useEffect(() => {
     const handler = () => setWindowWidth(window.innerWidth);
@@ -131,7 +132,7 @@ export const PerformanceChart = ({
           backgroundColor: 'transparent',
           borderWidth: 2,
           pointBackgroundColor: CHART_COLORS.f1Score.point,
-          pointBorderColor: 'white',
+          pointBorderColor: '#FFFFFF',
           pointBorderWidth: 2,
           pointRadius: chartDimensions.width < 640 ? 2 : 3,
           pointHoverRadius: chartDimensions.width < 640 ? 4 : 5,
@@ -161,7 +162,7 @@ export const PerformanceChart = ({
           content: `Target: ${(threshold * 100).toFixed(0)}%`,
           display: true,
           position: 'end',
-          backgroundColor: 'rgba(17, 24, 39, 0.9)',
+          backgroundColor: 'rgba(0, 0, 0, 0.9)',
           color: CHART_COLORS.threshold.label,
           font: {
             size: isMobile ? 9 : 11,
@@ -199,7 +200,7 @@ export const PerformanceChart = ({
         title: {
           display: !!title,
           text: title,
-          color: 'rgb(243, 244, 246)',
+          color: '#FFFFFF',
           font: {
             size: isMobile ? 14 : 16,
             weight: '600'
@@ -211,10 +212,10 @@ export const PerformanceChart = ({
         tooltip: {
           mode: 'index',
           intersect: false,
-          backgroundColor: 'rgba(17, 24, 39, 0.95)',
-          titleColor: 'rgb(243, 244, 246)',
-          bodyColor: 'rgb(209, 213, 219)',
-          borderColor: 'rgba(75, 85, 99, 0.5)',
+          backgroundColor: 'rgba(0, 0, 0, 0.95)',
+          titleColor: '#FFFFFF',
+          bodyColor: '#D1D5DB',
+          borderColor: 'rgba(31, 41, 55, 0.5)',
           borderWidth: 1,
           padding: isMobile ? 6 : 8,
           titleFont: { size: isMobile ? 11 : 12 },
@@ -340,13 +341,18 @@ const SkeletonChart = ({ height }) => (
 );
 
 const ChartError = ({ error, onRetry }) => (
-  <Alert variant="destructive" className="h-full border-rose-500/30 bg-rose-500/10">
+  <Alert variant="destructive" className="h-full border-red-400/30 bg-red-400/10">
     <div className="flex flex-col items-center justify-center h-full text-center p-4">
-      <AlertCircle className="h-8 w-8 text-rose-400 mb-2" />
-      <AlertTitle className="text-rose-300 font-semibold mb-1">Failed to load chart</AlertTitle>
-      <AlertDescription className="text-rose-200/80 text-sm mb-3">{error}</AlertDescription>
+      <AlertCircle className="h-8 w-8 text-red-400 mb-2" />
+      <AlertTitle className="text-white font-semibold mb-1">Failed to load chart</AlertTitle>
+      <AlertDescription className="text-gray-400 text-sm mb-3">{error}</AlertDescription>
       {onRetry && (
-        <Button variant="outline" size="sm" onClick={onRetry} className="border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 min-h-[44px]">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={onRetry} 
+          className="border-red-400/30 bg-red-400/10 hover:bg-red-400/20 text-red-400 min-h-[44px] focus-visible:ring-gray-500 focus-visible:ring-offset-black"
+        >
           Retry
         </Button>
       )}
