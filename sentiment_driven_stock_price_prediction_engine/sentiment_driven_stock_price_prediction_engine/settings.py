@@ -46,6 +46,7 @@ required_hosts = [
     "127.0.0.1", 
     "0.0.0.0",
     "sentiment-driven-stock-price-prediction.onrender.com",
+    "tickflow-sentiment-staging.onrender.com",
     ".onrender.com",  # Allows any Render subdomain
 ]
 
@@ -279,6 +280,7 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://sentiment-driven-stock-price-p
 CORS_ALLOWED_ORIGINS = [
     FRONTEND_URL,
     "https://sentiment-driven-stock-price-predic.vercel.app",
+    "https://sentiment-driven-stock-price-pr-git-bce111-anyegaalexs-projects.vercel.app",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
@@ -330,6 +332,7 @@ CORS_PREFLIGHT_MAX_AGE = 86400
 CSRF_TRUSTED_ORIGINS = [
     FRONTEND_URL,
     "https://sentiment-driven-stock-price-predic.vercel.app",
+    "https://sentiment-driven-stock-price-pr-git-bce111-anyegaalexs-projects.vercel.app",
     "http://localhost:4173",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
