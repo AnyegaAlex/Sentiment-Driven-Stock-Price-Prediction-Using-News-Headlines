@@ -1,7 +1,7 @@
 # .github/workflows/deploy.yml
 # Deploy Tickflow Sentiment - CI/CD Pipeline
 # Backend: Render (Django), Frontend: Vercel (React)
-# Monitoring: Sentry (error tracking)
+# Monitoring: Sentry (error tracking))
 
 name: Deploy Tickflow Sentiment
 
