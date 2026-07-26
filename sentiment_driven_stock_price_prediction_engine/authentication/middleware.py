@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Exempt paths (no authentication required)
 PUBLIC_PATHS = [
+    '/',
     # Admin & Monitoring
     '/admin/',
     '/health/',
