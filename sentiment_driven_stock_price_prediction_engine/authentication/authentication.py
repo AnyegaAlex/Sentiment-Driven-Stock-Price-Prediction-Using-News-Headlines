@@ -1,5 +1,5 @@
 """
-DRF Authentication classes for Tickflow Sentiment.
+DRF Authentication classes for Tickflow Intelligence.
 
 Supports:
 - JWT Authentication (primary) via DRF Simple JWT

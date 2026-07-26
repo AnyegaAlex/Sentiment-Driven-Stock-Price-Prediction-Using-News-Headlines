@@ -1,5 +1,5 @@
 """
-Health check endpoints for Tickflow Sentiment.
+Health check endpoints for Tickflow Intelligence.
 Provides detailed service status for monitoring and load balancers.
 """
 

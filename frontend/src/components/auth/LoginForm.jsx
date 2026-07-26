@@ -7,6 +7,7 @@ import { Alert } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Eye, EyeOff, AlertCircle, LogIn, User, Lock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import TfcLogo from '@/assets/Primary Icon White.svg'; // Import your TFC logo
 
 /**
  * LoginForm – Production-ready authentication form.
@@ -114,6 +115,21 @@ export const LoginForm = () => {
 
   return (
     <form id="login-form" onSubmit={handleSubmit} className="space-y-4" noValidate>
+      {/* Logo & Brand Name */}
+      <div className="flex flex-col items-center mb-6">
+        <img
+          src={TfcLogo}
+          alt="TFC"
+          className="h-12 w-12 mb-2 opacity-80"
+        />
+        <span className="text-xl font-bold text-white tracking-tight">
+          Tickflow Intelligence
+        </span>
+        <span className="text-xs text-gray-500 mt-0.5">
+          Hybrid LSTM + FinBERT Stock Intelligence
+        </span>
+      </div>
+
       {/* Username Field */}
       <div className="space-y-1">
         <label htmlFor="login-username" className="sr-only">Username or Email</label>

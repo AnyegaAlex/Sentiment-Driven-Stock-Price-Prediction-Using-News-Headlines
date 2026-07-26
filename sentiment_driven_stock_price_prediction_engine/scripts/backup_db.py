@@ -1,5 +1,5 @@
 """
-Database backup script for Tickflow Sentiment.
+Database backup script for Tickflow Intelligence.
 Creates daily backups and uploads to S3 or local storage.
 """
 

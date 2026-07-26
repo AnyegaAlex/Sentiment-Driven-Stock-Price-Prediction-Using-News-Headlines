@@ -16,6 +16,7 @@
  */
 
 import React from 'react';
+import TfcLogo from '@/assets/Primary Icon White.svg'; // Import your TFC logo
 
 // ============================================================================
 // Constants
@@ -83,9 +84,17 @@ const Footer = () => {
           {/* Brand & Description */}
           <div className="lg:col-span-5 space-y-4">
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-white">
-                © {CURRENT_YEAR} Tickflow Capital
-              </p>
+              {/* Logo + Brand Name */}
+              <div className="flex items-center gap-3">
+                <img
+                  src={TfcLogo}
+                  alt="TFC"
+                  className="h-8 w-8 flex-shrink-0 opacity-80"
+                />
+                <p className="text-sm font-semibold text-white">
+                  Tickflow Intelligence
+                </p>
+              </div>
               <p className="text-sm text-gray-400 max-w-md leading-relaxed">
                 Open-source platform combining LSTM neural networks, FinBERT sentiment analysis, 
                 and technical indicators for directional stock predictions with confidence scoring.

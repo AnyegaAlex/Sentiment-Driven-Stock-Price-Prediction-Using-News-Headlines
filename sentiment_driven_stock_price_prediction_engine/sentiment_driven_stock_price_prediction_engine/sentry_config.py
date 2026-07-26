@@ -1,5 +1,5 @@
 """
-Sentry configuration for Tickflow Sentiment.
+Sentry configuration for Tickflow Intelligence.
 Provides error tracking, performance monitoring, and release tracking.
 
 Features:

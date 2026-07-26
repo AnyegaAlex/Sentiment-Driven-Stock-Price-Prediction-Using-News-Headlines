@@ -68,7 +68,7 @@ class Command(BaseCommand):
                 recent_accuracy = None
 
             # Build digest content (simplified – you can expand)
-            subject = 'Your Weekly Digest from Tickflow Sentiment'
+            subject = 'Your Weekly Digest from Tickflow Intelligence'
 
             html_content = f"""
             <h1>Weekly Digest for {user.username}</h1>

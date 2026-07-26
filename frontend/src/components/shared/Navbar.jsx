@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import PropTypes from 'prop-types';
+import TfcLogo from '@/assets/Primary Icon White.svg'; // Import your TFC logo
 
 const propTypes = {
   /** Layout variant: 'public' for landing, 'app' for dashboard */
@@ -64,17 +65,24 @@ const Navbar = ({ variant = 'public' }) => {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
+          {/* Logo – TFC icon + Tickflow Intelligence */}
           <Link 
             to="/" 
-            className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded-md min-h-[44px] px-2"
+            className="flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded-md min-h-[44px] px-2"
           >
-            <span className="text-xl font-bold text-white tracking-tight">
-              Tickflow Sentiment
-            </span>
-            <span className="text-xs text-gray-500 bg-gray-900 px-2 py-0.5 rounded border border-gray-800">
-              v2.4
-            </span>
+            <img
+              src={TfcLogo}
+              alt="TFC"
+              className="h-8 w-8 flex-shrink-0 opacity-80 hover:opacity-100 transition-opacity duration-200"
+            />
+            <div className="flex items-center gap-2">
+              <span className="text-xl font-bold text-white tracking-tight">
+                Tickflow Intelligence
+              </span>
+              <span className="text-xs text-gray-500 bg-gray-900 px-2 py-0.5 rounded border border-gray-800">
+                v2.4
+              </span>
+            </div>
           </Link>
 
           {/* Desktop Navigation */}

@@ -50,7 +50,7 @@ const ViewAPIKeyModal = ({ isOpen, onClose, apiKey: initialKey }) => {
         <DialogHeader>
           <DialogTitle className="text-white">API Key</DialogTitle>
           <DialogDescription className="text-gray-400">
-            Your API key for programmatic access to Tickflow Sentiment
+            Your API key for programmatic access to Tickflow Intelligence
           </DialogDescription>
         </DialogHeader>
 

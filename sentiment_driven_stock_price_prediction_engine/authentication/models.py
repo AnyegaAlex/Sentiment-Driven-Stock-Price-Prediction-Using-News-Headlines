@@ -1,5 +1,5 @@
 """
-Custom user model and related models for Tickflow Sentiment.
+Custom user model and related models for Tickflow Intelligence.
 
 This module defines:
 - User: Extends Django's AbstractUser with persona, tier, email verification,
@@ -123,7 +123,7 @@ class AuditLogActions:
 
 class User(AbstractUser):
     """
-    Custom user model for Tickflow Sentiment.
+    Custom user model for Tickflow Intelligence.
 
     Extends Django's AbstractUser with additional fields for:
         - Persona (trader, researcher, etc.)

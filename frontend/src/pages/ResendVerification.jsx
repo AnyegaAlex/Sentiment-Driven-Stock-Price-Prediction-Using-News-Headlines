@@ -71,7 +71,7 @@ const ResendVerification = () => {
             <Radar className="h-8 w-8 text-gray-400" strokeWidth={1.8} />
           </div>
           <span className="text-2xl font-bold text-white tracking-tight">
-            Tickflow Sentiment
+            Tickflow Intelligence
           </span>
         </div>
         <h1 className="text-2xl font-bold text-white tracking-tight">

@@ -36,13 +36,13 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 EMAIL_SUBJECTS = {
-    'verification': 'Verify your email for Tickflow Sentiment',
-    'welcome': 'Welcome to Tickflow Sentiment!',
-    'password_reset': 'Reset your Tickflow Sentiment password',
-    'email_change': 'Verify your new email address for Tickflow Sentiment',
-    'email_changed': 'Email address changed for Tickflow Sentiment',
-    'account_deletion': 'Account deletion requested for Tickflow Sentiment',
-    'security_alert': 'Security Alert: {action} for Tickflow Sentiment',
+    'verification': 'Verify your email for Tickflow Intelligence',
+    'welcome': 'Welcome to Tickflow Intelligence!',
+    'password_reset': 'Reset your Tickflow Intelligence password',
+    'email_change': 'Verify your new email address for Tickflow Intelligence',
+    'email_changed': 'Email address changed for Tickflow Intelligence',
+    'account_deletion': 'Account deletion requested for Tickflow Intelligence',
+    'security_alert': 'Security Alert: {action} for Tickflow Intelligence',
 }
 
 EMAIL_RATE_LIMIT = 3
@@ -474,7 +474,7 @@ def send_welcome_email(user, request):
         })
         
         plain_content = f"""
-Welcome to Tickflow Sentiment!
+Welcome to Tickflow Intelligence!
 
 We're excited to have you on board. Here's what you can do next:
 
@@ -600,7 +600,7 @@ def send_email_change_notification(user, old_email, new_email):
         html_content = f"""
         <h2>Email Address Changed</h2>
         <p>Hi {user.username},</p>
-        <p>Your Tickflow Sentiment email address was changed from <strong>{old_email}</strong> to <strong>{new_email}</strong>.</p>
+        <p>Your Tickflow Intelligence email address was changed from <strong>{old_email}</strong> to <strong>{new_email}</strong>.</p>
         <p>If you made this change, no action is required.</p>
         <p>If you did NOT make this change, please contact support immediately at support@tickflow.com</p>
         """
@@ -610,7 +610,7 @@ Email Address Changed
 
 Hi {user.username},
 
-Your Tickflow Sentiment email address was changed from {old_email} to {new_email}.
+Your Tickflow Intelligence email address was changed from {old_email} to {new_email}.
 
 If you made this change, no action is required.
 
@@ -658,7 +658,7 @@ Account Deletion Requested
 
 Hi {user.username},
 
-You requested to delete your Tickflow Sentiment account.
+You requested to delete your Tickflow Intelligence account.
 
 Your account is scheduled for deletion on {user.deletion_scheduled_for.strftime('%B %d, %Y')}.
 
@@ -728,7 +728,7 @@ def send_security_alert_email(user, action, ip_address, user_agent):
                 <div class="content">
                     <h2>Security Alert</h2>
                     <p>Hi {user.username},</p>
-                    <p>We detected a security event on your Tickflow Sentiment account:</p>
+                    <p>We detected a security event on your Tickflow Intelligence account:</p>
                     <div class="alert-box">
                         <ul style="margin: 0; padding-left: 20px;">
                             <li><strong>Action:</strong> {action_description}</li>
@@ -754,7 +754,7 @@ Security Alert
 
 Hi {user.username},
 
-We detected a security event on your Tickflow Sentiment account:
+We detected a security event on your Tickflow Intelligence account:
 
 Action: {action_description}
 IP Address: {ip_address}

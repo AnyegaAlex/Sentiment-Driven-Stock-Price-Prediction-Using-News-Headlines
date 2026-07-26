@@ -1,5 +1,5 @@
 /**
- * Account Tab – Tickflow Sentiment
+ * Account Tab – Tickflow Intelligence
  * 
  * Manages account-level actions including deletion.
  * 

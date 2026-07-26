@@ -1,5 +1,5 @@
 /**
- * Notifications Tab – Tickflow Sentiment
+ * Notifications Tab – Tickflow Intelligence
  * 
  * Manages user notification preferences.
  * 

@@ -1,5 +1,5 @@
 /**
- * Security Tab – Tickflow Sentiment
+ * Security Tab – Tickflow Intelligence
  * 
  * Phase 1 implementation:
  * - Change password (fully functional)
