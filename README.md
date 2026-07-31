@@ -1,4 +1,4 @@
-# Tickflow - AI Stock Intelligence Platform
+# Tickflow Intelligence - AI Stock Intelligence Platform
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/)
 [![Django](https://img.shields.io/badge/Django-5.1-brightgreen)](https://www.djangoproject.com/)
@@ -44,7 +44,7 @@
 
 ## Overview
 
-Tickflow is an AI-powered stock intelligence platform. It is the first open-source project from [Tickflow Capital](https://tickflowcapital.com/), a trading technology and quantitative research firm that deploys its own capital using the same systems it builds.
+Tickflow Intelligence is an AI-powered stock intelligence platform. It is the first open-source project from [Tickflow Capital](https://tickflowcapital.com/), a trading technology and quantitative research firm that deploys its own capital using the same systems it builds.
 
 **What the platform does:**
 - LSTM neural networks predict stock price movements with 63% accuracy
