@@ -247,7 +247,7 @@
 
             <p style="font-size: 14px; color: #6B7280;">
                 If you have any questions, contact us at&nbsp;
-                <a href="mailto:support@tickflow.com" style="color: #9CA3AF; text-decoration: underline;">info@tickflowcapital.com</a>
+                <a href="mailto:{{ contact_email }}" style="color: #9CA3AF; text-decoration: underline;">{{ contact_email }}</a>
             </p>
 
             <p style="font-size: 13px; color: #4B5563; margin-top: 8px;">
@@ -260,9 +260,9 @@
             <p>
                 &copy; {{ year }} Tickflow Capital. All rights reserved.<br>
                 Sent to {{ user.email }}<br>
-                <a href="https://sentiment-driven-stock-price-predic.vercel.app/privacy" target="_blank">Privacy Policy</a>
+                <a href="{{ frontend_url }}/privacy" target="_blank">Privacy Policy</a>
                 &nbsp;·&nbsp;
-                <a href="https://sentiment-driven-stock-price-predic.vercel.app/terms" target="_blank">Terms of Service</a>
+                <a href="{{ frontend_url }}/terms" target="_blank">Terms of Service</a>
             </p>
         </div>
     </div>

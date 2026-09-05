@@ -81,7 +81,7 @@ __all__ = [
 # RESPONSE HELPERS
 # ============================================================================
 
-def error_response(message, code=None, details=None, status_code=400, request_id=None):
+def error_response(message, code=None, details=None, status_code=400, request_id=None, **kwargs):
     """
     Standard error response format for all endpoints.
     
@@ -91,6 +91,7 @@ def error_response(message, code=None, details=None, status_code=400, request_id
         details (dict): Additional error details (field-level errors).
         status_code (int): HTTP status code.
         request_id (str): Request ID for tracking.
+        **kwargs: Any extra arguments are ignored (for compatibility).
     
     Returns:
         dict: Standardised error payload.
@@ -106,10 +107,14 @@ def error_response(message, code=None, details=None, status_code=400, request_id
         response['details'] = details
     if request_id:
         response['request_id'] = request_id
+    # Optionally include errors if passed (but only if you want to handle them)
+    # We ignore them to prevent TypeError, but if you want to include them:
+    if 'errors' in kwargs and kwargs['errors'] is not None:
+        response['errors'] = kwargs['errors']
     return response
 
 
-def success_response(data=None, message=None, code='SUCCESS', request_id=None):
+def success_response(data=None, message=None, code='SUCCESS', request_id=None, **kwargs):
     """
     Standard success response format.
     
@@ -118,6 +123,7 @@ def success_response(data=None, message=None, code='SUCCESS', request_id=None):
         message (str): Success message.
         code (str): Application-specific success code.
         request_id (str): Request ID for tracking.
+        **kwargs: Any extra arguments are ignored.
     
     Returns:
         dict: Standardised success payload.
@@ -311,7 +317,7 @@ def send_email_async(subject, to_email, html_content, plain_content=None, retry_
         
         for attempt in range(retry_count):
             try:
-                # ✅ CRITICAL FIX: Ensure plain_text is always defined
+                # plain_text is always defined
                 if plain_content is None:
                     plain_text = strip_html_tags(html_content)
                 else:

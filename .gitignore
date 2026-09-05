@@ -1,39 +1,30 @@
-# Django-specific
+# ============================================================
+# PYTHON / DJANGO
+# ============================================================
 __pycache__/
 *.py[cod]
-db.sqlite3
-*.log
-media/
-staticfiles/
-*.env
-migrations/
-
-data/
-# React-specific
-node_modules/
+*$py.class
+*.so
+*.egg-info/
+dist/
 build/
-# Environment variables
-.env
-.env.local
-.env.development
-.env.production
-.env.*.local
+.eggs/
+*.egg
 
-# OS-specific
-.DS_Store
-Thumbs.db
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+pyvenv.cfg
 
-# General
-*.bak
-*.swp
-
-# Ignore Python's site-packages
-*/site-packages/
-
-/Scripts
+# Databases
+*.db
+*.sqlite3
+db.sqlite3
 
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -41,52 +32,88 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Static & media files
+staticfiles/
+media/
+*.staticfiles
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+.env.*.local
+*.env
+
+# ============================================================
+# DJANGO SPECIFIC
+# ============================================================
+migrations/  # Consider adding if you don't want migrations in VCS
+# !migrations/__init__.py  # Uncomment to keep __init__.py
+
+# ============================================================
+# REACT / FRONTEND
+# ============================================================
+node_modules/
+build/
+dist/
+dist-ssr/
 *.local
 
-# Editor directories and files
-.vscode/*
+# ============================================================
+# HUGGING FACE / ML CACHE
+# ============================================================
+.cache/
+*.sentiment
+version.txt
+
+# ============================================================
+# MODEL FILES
+# ============================================================
+*.pkl
+*.pth
+*.pt
+*.h5
+*.onnx
+stock_price_model.pkl
+
+# ============================================================
+# TESTING & COVERAGE
+# ============================================================
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+*.cover
+*.py,cover
+
+# ============================================================
+# EDITOR & OS
+# ============================================================
+.vscode/
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
+Thumbs.db
+*.swp
+*.swo
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-# Ignore virtual environment
-*.pyc
-*.pyo
-__pycache__/
-env/
-venv/
+# ============================================================
+# OTHER
+# ============================================================
+*.bak
+*.tmp
 pyvenv.cfg
+/Scripts
 
-# Ignore node_modules for React
-node_modules/
-
-# Ignore build files
-dist/
-build/
-
-stock_price_model.pkl
-
-stock-sentiment-ui/
-
-.venv
-
-# Hugging Face cache
-.cache/
-sentiment_driven_stock_price_prediction_engine/cache/
-*.sentiment
-version.txt
-
-# Environment files
-.env
-.env.local
-.env.development
-.env.productionSentiment-Driven-Stock-Price-Prediction-Using-News-Headlines.wiki/
+# Exclude wiki (if it's a separate folder)
 sentiment_driven_stock_price_prediction_engine/stock-prediction-analytics/
+Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines.wiki/
+
+# React UI folder (if it exists)
+stock-sentiment-ui/

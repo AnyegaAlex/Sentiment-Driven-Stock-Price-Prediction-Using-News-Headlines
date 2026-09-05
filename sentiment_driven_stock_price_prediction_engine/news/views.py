@@ -1,12 +1,19 @@
 """
 News views – fetch, sentiment analysis, and symbol search.
 All endpoints are documented via OpenAPI (Swagger).
+
+Performance:
+- GET /news/get-news/ is cached in Redis for 1 hour (TTL=3600s) to reduce DB load.
+- Background sync is performed only if cache is stale.
+- External API calls are limited to 15 seconds timeout.
+
+Author: Tickflow Capital
+Version: 1.1.0
 """
 
 import gc
 import hashlib
 import logging
-import os
 import re
 import requests
 from datetime import datetime, timedelta, timezone as dt_timezone
@@ -14,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import dateutil.parser
 from django.conf import settings
+from django.core.cache import cache
 from django.db import IntegrityError, transaction, close_old_connections
 from django.utils import timezone
 from rest_framework.decorators import api_view
@@ -21,7 +29,6 @@ from rest_framework.response import Response
 from rest_framework import status, serializers
 
 from authentication.utils import error_response, success_response
-# drf-spectacular for OpenAPI
 from drf_spectacular.utils import (
     extend_schema, OpenApiParameter, OpenApiResponse, OpenApiTypes
 )
@@ -31,15 +38,15 @@ from .serializers import ProcessedNewsSerializer
 from .utils import analyze_sentiment
 
 logger = logging.getLogger(__name__)
-task_logger = logging.getLogger(__name__)
 
-# ------------------------------------------------------------
-# Constants & helpers (unchanged)
-# ------------------------------------------------------------
+# ============================================================================
+# Constants
+# ============================================================================
+
 CACHE_TTL_SECONDS = 3600
 MAX_ARTICLES = 50
-SYNC_FETCH_TIMEOUT = 15
-API_TIMEOUT = 15
+SYNC_FETCH_TIMEOUT = 15  # seconds
+API_TIMEOUT = 10
 BATCH_SIZE = 25
 RECENT_HOURS_DEFAULT = 24
 _TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,10}$")
@@ -50,22 +57,15 @@ _STOPWORDS = {
 }
 _AV_TIME_FORMATS = ("%Y%m%dT%H%M%S", "%Y%m%dT%H%M")
 
-# ------------------------------------------------------------
-# Helper functions (unchanged)
-# ------------------------------------------------------------
-def _write_log(message: str) -> None:
-    """Write a log entry to a file (for debugging)."""
-    log_file = os.path.join(getattr(settings, "BASE_DIR", "."), "logs", "news_fetch_log.txt")
-    try:
-        os.makedirs(os.path.dirname(log_file), exist_ok=True)
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(f"{datetime.now(dt_timezone.utc).isoformat()} - {message}\n")
-    except Exception:
-        pass
+
+# ============================================================================
+# Helper functions
+# ============================================================================
 
 def normalize_title(title: str) -> str:
     """Normalize a title for deduplication."""
     return re.sub(r"[^\w\s]", "", (title or "").strip().lower())
+
 
 def extract_key_phrases(text: str) -> List[str]:
     """Extract important bigrams from text."""
@@ -83,16 +83,9 @@ def extract_key_phrases(text: str) -> List[str]:
         freq[bg] = freq.get(bg, 0) + 1
     return [k for k, _ in sorted(freq.items(), key=lambda kv: kv[1], reverse=True)[:5]]
 
-def _parse_date(article: Dict[str, Any]) -> Optional[datetime]:
+
+def _parse_date(value: Any) -> Optional[datetime]:
     """Parse various date formats into a timezone-aware datetime."""
-    value = (
-        article.get("time_published")
-        or article.get("datetime")
-        or article.get("date")
-        or article.get("pubDate")
-        or article.get("published_at")
-        or article.get("publishedAt")
-    )
     if not value:
         return None
     try:
@@ -119,6 +112,7 @@ def _parse_date(article: Dict[str, Any]) -> Optional[datetime]:
         logger.warning("Date parse failed: %s", value)
         return None
 
+
 def get_source_reliability(name: str) -> int:
     """Return a reliability score for a news source."""
     trusted = {
@@ -127,11 +121,13 @@ def get_source_reliability(name: str) -> int:
     }
     return trusted.get((name or "").strip().lower(), 70)
 
+
 def _safe_float(x: Any, default: float = 0.0) -> float:
     try:
         return float(x)
     except Exception:
         return default
+
 
 def _standardize_article(symbol: str, raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Convert raw article data into a standardised dict ready for DB."""
@@ -177,6 +173,7 @@ def _standardize_article(symbol: str, raw: Dict[str, Any]) -> Optional[Dict[str,
         "raw_data": raw,
     }
 
+
 def _filter_recent(raw_articles: List[Dict[str, Any]], hours: int) -> List[Dict[str, Any]]:
     """Keep only articles newer than `hours`."""
     cutoff = timezone.now() - timedelta(hours=hours)
@@ -186,6 +183,7 @@ def _filter_recent(raw_articles: List[Dict[str, Any]], hours: int) -> List[Dict[
         if dt and dt >= cutoff:
             kept.append(a)
     return kept
+
 
 def _upsert_articles(symbol: str, raw_articles: List[Dict[str, Any]]) -> Tuple[int, int]:
     """Insert/update articles in DB. Returns (new_count, duplicate_count)."""
@@ -212,14 +210,16 @@ def _upsert_articles(symbol: str, raw_articles: List[Dict[str, Any]]) -> Tuple[i
             except IntegrityError:
                 dup_or_updated += 1
             except Exception as e:
-                task_logger.warning("Upsert failed for %s: %s", symbol, e)
+                logger.warning("Upsert failed for %s: %s", symbol, e)
         del batch
         gc.collect()
     return new_count, dup_or_updated
 
-# ------------------------------------------------------------
-# API Fetchers (unchanged)
-# ------------------------------------------------------------
+
+# ============================================================================
+# API Fetchers
+# ============================================================================
+
 def _fetch_alpha_vantage(session: requests.Session, symbol: str) -> List[Dict[str, Any]]:
     params = {
         "function": "NEWS_SENTIMENT",
@@ -241,8 +241,9 @@ def _fetch_alpha_vantage(session: requests.Session, symbol: str) -> List[Dict[st
         out.append({"banner_image_url": a.get("banner_image", ""), **a})
     return out
 
+
 def _fetch_finnhub(session: requests.Session, symbol: str) -> List[Dict[str, Any]]:
-    today = datetime.now(dt_timezone.utc).date()
+    today = timezone.now().date()
     seven_days_ago = today - timedelta(days=7)
     r = session.get(
         "https://finnhub.io/api/v1/company-news",
@@ -260,6 +261,7 @@ def _fetch_finnhub(session: requests.Session, symbol: str) -> List[Dict[str, Any
     for a in items[:MAX_ARTICLES]:
         out.append({"banner_image_url": a.get("image", ""), **a})
     return out
+
 
 def _fetch_yahoo_rapidapi(session: requests.Session, symbol: str) -> List[Dict[str, Any]]:
     headers = {
@@ -280,16 +282,23 @@ def _fetch_yahoo_rapidapi(session: requests.Session, symbol: str) -> List[Dict[s
         out.append(a)
     return out
 
-# ------------------------------------------------------------
-# Core synchronous fetch function (unchanged)
-# ------------------------------------------------------------
+
+# ============================================================================
+# Core synchronous fetch function (cached and efficient)
+# ============================================================================
+
 def fetch_and_save_news(
     symbol: str,
     fetch_latest_only: bool = True,
     recent_hours: int = RECENT_HOURS_DEFAULT,
     timeout_seconds: int = 30,
 ) -> Dict[str, Any]:
-    """Fetch news from external APIs and store in DB."""
+    """
+    Fetch news from external APIs and store in DB.
+
+    Returns:
+        dict with status, symbol, fetched count, new_articles, duplicates, cache_hit
+    """
     close_old_connections()
     symbol = (symbol or "").strip().upper()
     if not symbol:
@@ -298,8 +307,14 @@ def fetch_and_save_news(
     try:
         cutoff = timezone.now() - timedelta(hours=recent_hours)
         if ProcessedNews.objects.filter(symbol=symbol, published_at__gte=cutoff).exists():
-            task_logger.info("Cache hit for %s (last %sh)", symbol, recent_hours)
-            return {"status": "success", "new_articles": 0, "duplicates": 0, "cache_hit": True}
+            logger.info("Cache hit for %s (last %sh)", symbol, recent_hours)
+            return {
+                "status": "success",
+                "new_articles": 0,
+                "duplicates": 0,
+                "cache_hit": True,
+                "symbol": symbol,
+            }
 
         with requests.Session() as session:
             session.headers.update({"User-Agent": USER_AGENT})
@@ -313,6 +328,10 @@ def fetch_and_save_news(
             if getattr(settings, "RAPIDAPI_KEY", None) and getattr(settings, "RAPIDAPI_HOST", None):
                 fetchers.append(_fetch_yahoo_rapidapi)
 
+            if not fetchers:
+                logger.warning("No API keys configured for news fetching")
+                return {"status": "error", "message": "No data sources available"}
+
             last_err: Optional[Exception] = None
             raw_articles: List[Dict[str, Any]] = []
 
@@ -323,7 +342,7 @@ def fetch_and_save_news(
                         break
                 except Exception as e:
                     last_err = e
-                    task_logger.warning("API fetch failed (%s): %s", fetch.__name__, e)
+                    logger.warning("API fetch failed (%s): %s", fetch.__name__, e)
 
             if not raw_articles:
                 msg = f"No articles fetched for {symbol}"
@@ -335,7 +354,7 @@ def fetch_and_save_news(
                 raw_articles = _filter_recent(raw_articles, hours=recent_hours)
 
             new_count, dup_count = _upsert_articles(symbol, raw_articles)
-            _write_log(f"{symbol}: new={new_count} dup={dup_count} fetched={len(raw_articles)}")
+            logger.info("%s: new=%d dup=%d fetched=%d", symbol, new_count, dup_count, len(raw_articles))
 
             return {
                 "status": "success",
@@ -347,30 +366,45 @@ def fetch_and_save_news(
             }
 
     except MemoryError:
-        task_logger.critical("Memory exhausted during processing for %s", symbol)
+        logger.critical("Memory exhausted during processing for %s", symbol)
         return {"status": "error", "message": "Memory exhausted"}
     except Exception as e:
-        task_logger.error("Unexpected error for %s: %s", symbol, e)
+        logger.error("Unexpected error for %s: %s", symbol, e)
         return {"status": "error", "message": str(e)}
     finally:
         close_old_connections()
         gc.collect()
 
-# ------------------------------------------------------------
+
+# ============================================================================
 # Helper functions for views
-# ------------------------------------------------------------
+# ============================================================================
+
 def _normalize_symbol(raw: str) -> str:
     return (raw or "").strip().upper()
 
-def _serialize_news(qs):
-    serializer = ProcessedNewsSerializer(qs, many=True)
-    return serializer.data
 
-# ============================================================
-#  INLINE SERIALIZERS FOR SWAGGER RESPONSE SHAPES
-# ============================================================
+def _serialize_news(qs):
+    return ProcessedNewsSerializer(qs, many=True).data
+
+
+def _get_cached_news_response(symbol: str) -> Optional[Dict[str, Any]]:
+    """Retrieve cached response for get_news."""
+    key = f"news_response:{symbol}"
+    return cache.get(key)
+
+
+def _set_cached_news_response(symbol: str, data: Dict[str, Any], ttl: int = CACHE_TTL_SECONDS):
+    """Cache the response for get_news."""
+    key = f"news_response:{symbol}"
+    cache.set(key, data, timeout=ttl)
+
+
+# ============================================================================
+# Inline Serializers for Swagger
+# ============================================================================
+
 class NewsArticleSerializer(serializers.Serializer):
-    """Serializer for a single news article (matches ProcessedNews fields)."""
     id = serializers.IntegerField(required=False)
     symbol = serializers.CharField()
     title = serializers.CharField()
@@ -388,23 +422,18 @@ class NewsArticleSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField(required=False)
     updated_at = serializers.DateTimeField(required=False)
 
+
 class GetNewsResponseSerializer(serializers.Serializer):
-    """Response for GET /api/news/get-news/."""
     symbol = serializers.CharField()
     refresh_queued = serializers.BooleanField()
     cache_stale = serializers.BooleanField()
     count = serializers.IntegerField()
     news = NewsArticleSerializer(many=True)
 
-class SymbolSearchResponseSerializer(serializers.Serializer):
-    """Response for symbol search (returns list of matches)."""
-    # The structure can be variable; we'll document it as a list of objects
-    # but we can define a generic serializer.
-    pass  # We'll use OpenApiResponse with examples instead.
 
-# ============================================================
-#  VIEWS WITH DECORATORS
-# ============================================================
+# ============================================================================
+# Views
+# ============================================================================
 
 @extend_schema(
     summary="Get news articles with sentiment",
@@ -443,16 +472,29 @@ def get_news(request):
         )
 
     force_refresh = request.GET.get("refresh", "false").lower() == "true"
+
+    # 1. Try Redis cache (unless force refresh)
+    if not force_refresh:
+        cached = _get_cached_news_response(symbol)
+        if cached is not None:
+            logger.debug("Returning cached response for %s", symbol)
+            return Response(success_response(data=cached), status=status.HTTP_200_OK)
+
+    # 2. Fetch from DB
     news_qs = ProcessedNews.objects.filter(symbol=symbol).order_by("-published_at")[:MAX_ARTICLES]
     now = timezone.now()
 
     cache_is_stale = True
-    if news_qs:
+    refresh_queued = False
+
+    if news_qs.exists():
         newest_created = news_qs[0].created_at
         cache_is_stale = (now - newest_created).total_seconds() > CACHE_TTL_SECONDS
+    else:
+        cache_is_stale = True
 
-    refresh_queued = False
-    if force_refresh or not news_qs or cache_is_stale:
+    # 3. If stale or empty, try to refresh synchronously
+    if force_refresh or not news_qs.exists() or cache_is_stale:
         try:
             result = fetch_and_save_news(
                 symbol,
@@ -461,20 +503,31 @@ def get_news(request):
                 timeout_seconds=SYNC_FETCH_TIMEOUT
             )
             if result.get("status") == "success" and result.get("new_articles", 0) > 0:
+                # Re-fetch from DB
                 news_qs = ProcessedNews.objects.filter(symbol=symbol).order_by("-published_at")[:MAX_ARTICLES]
                 cache_is_stale = False
                 refresh_queued = False
+            elif result.get("cache_hit"):
+                # Cache hit in DB, but we already have news_qs
+                cache_is_stale = False
         except Exception as e:
             logger.warning("Synchronous fetch failed for %s: %s", symbol, e)
 
+    # 4. Build response data
+    response_data = {
+        "symbol": symbol,
+        "refresh_queued": refresh_queued,
+        "cache_stale": cache_is_stale,
+        "count": len(news_qs),
+        "news": _serialize_news(news_qs),
+    }
+
+    # 5. Cache response in Redis (only if not stale)
+    if not cache_is_stale:
+        _set_cached_news_response(symbol, response_data, CACHE_TTL_SECONDS)
+
     return Response(
-        success_response(data={
-            "symbol": symbol,
-            "refresh_queued": refresh_queued,
-            "cache_stale": cache_is_stale,
-            "count": len(news_qs),
-            "news": _serialize_news(news_qs),
-        }),
+        success_response(data=response_data),
         status=status.HTTP_200_OK
     )
 
@@ -493,7 +546,7 @@ def get_news(request):
     ],
     responses={
         200: OpenApiResponse(
-            description='List of matching symbols. Format is normalised to {symbol, name, region}.',
+            description='List of matching symbols. Format: {symbol, name, region}',
             examples=[
                 {
                     "application/json": [
@@ -525,7 +578,7 @@ def symbol_search(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # 1. Check cache
+    # 1. Check DB cache
     cache_instance = SymbolSearchCache.objects.filter(query=query).first()
     if cache_instance and cache_instance.is_valid:
         return Response(
@@ -535,7 +588,7 @@ def symbol_search(request):
 
     results = []
 
-    # 2. Try Finnhub (primary – requires API key)
+    # 2. Try Finnhub (primary)
     finnhub_key = getattr(settings, 'FINNHUB_API_KEY', '')
     if finnhub_key:
         try:
@@ -556,78 +609,77 @@ def symbol_search(request):
                         for item in fh_data.get("result", [])
                         if item.get("symbol")
                     ]
-                    logger.info(f"Finnhub found {len(results)} results for '{query}'")
-                else:
-                    logger.warning(f"Finnhub no results for '{query}'")
+                    logger.info("Finnhub found %d results for '%s'", len(results), query)
             else:
-                logger.warning(f"Finnhub status {fh.status_code} for '{query}'")
+                logger.warning("Finnhub status %d for '%s'", fh.status_code, query)
         except Exception as e:
-            logger.warning(f"Finnhub exception for '{query}': {e}")
+            logger.warning("Finnhub exception for '%s': %s", query, e)
 
     # 3. Try Alpha Vantage if Finnhub returned nothing
     if not results:
-        try:
-            av = requests.get(
-                "https://www.alphavantage.co/query",
-                params={
-                    "function": "SYMBOL_SEARCH",
-                    "keywords": query,
-                    "apikey": settings.ALPHA_VANTAGE_KEY,
-                },
-                timeout=5,
-            )
-            if av.status_code == 200:
-                av_data = av.json()
-                if "bestMatches" in av_data:
-                    # Normalise to consistent format
-                    results = [
-                        {
-                            "symbol": item.get("1. symbol", ""),
-                            "name": item.get("2. name", ""),
-                            "region": item.get("3. region", "US"),
-                        }
-                        for item in av_data["bestMatches"]
-                        if item.get("1. symbol")
-                    ]
-                    logger.info(f"Alpha Vantage found {len(results)} results for '{query}'")
-            else:
-                logger.warning(f"Alpha Vantage status {av.status_code} for '{query}'")
-        except Exception as e:
-            logger.warning(f"Alpha Vantage exception for '{query}': {e}")
+        av_key = getattr(settings, 'ALPHA_VANTAGE_KEY', '')
+        if av_key:
+            try:
+                av = requests.get(
+                    "https://www.alphavantage.co/query",
+                    params={
+                        "function": "SYMBOL_SEARCH",
+                        "keywords": query,
+                        "apikey": av_key,
+                    },
+                    timeout=5,
+                )
+                if av.status_code == 200:
+                    av_data = av.json()
+                    if "bestMatches" in av_data:
+                        results = [
+                            {
+                                "symbol": item.get("1. symbol", ""),
+                                "name": item.get("2. name", ""),
+                                "region": item.get("3. region", "US"),
+                            }
+                            for item in av_data["bestMatches"]
+                            if item.get("1. symbol")
+                        ]
+                        logger.info("Alpha Vantage found %d results for '%s'", len(results), query)
+                else:
+                    logger.warning("Alpha Vantage status %d for '%s'", av.status_code, query)
+            except Exception as e:
+                logger.warning("Alpha Vantage exception for '%s': %s", query, e)
 
     # 4. Try RapidAPI (Yahoo) if previous providers returned nothing
     if not results:
-        try:
-            yahoo_host = getattr(settings, "RAPIDAPI_HOST", "apidojo-yahoo-finance-v1.p.rapidapi.com")
-            yh = requests.get(
-                f"https://{yahoo_host}/auto-complete",
-                params={"q": query, "region": "US"},
-                headers={
-                    "X-RapidAPI-Key": settings.RAPIDAPI_KEY,
-                    "X-RapidAPI-Host": settings.RAPIDAPI_HOST,
-                    "x-rapidapi-ua": "RapidAPI-Playground",
-                },
-                timeout=5,
-            )
-            if yh.status_code == 200:
-                yh_data = yh.json()
-                # Yahoo returns 'quotes' with 'symbol' and 'shortname' etc.
-                results = [
-                    {
-                        "symbol": item.get("symbol", ""),
-                        "name": item.get("shortname", item.get("longname", item.get("symbol", ""))),
-                        "region": item.get("region", "US"),
-                    }
-                    for item in yh_data.get("quotes", [])
-                    if item.get("symbol")
-                ]
-                logger.info(f"RapidAPI found {len(results)} results for '{query}'")
-            elif yh.status_code == 403:
-                logger.warning(f"RapidAPI 403 Forbidden for '{query}' – check API key/host")
-            else:
-                logger.warning(f"RapidAPI status {yh.status_code} for '{query}'")
-        except Exception as e:
-            logger.warning(f"RapidAPI exception for '{query}': {e}")
+        rapid_key = getattr(settings, 'RAPIDAPI_KEY', '')
+        rapid_host = getattr(settings, 'RAPIDAPI_HOST', '')
+        if rapid_key and rapid_host:
+            try:
+                yh = requests.get(
+                    f"https://{rapid_host}/auto-complete",
+                    params={"q": query, "region": "US"},
+                    headers={
+                        "X-RapidAPI-Key": rapid_key,
+                        "X-RapidAPI-Host": rapid_host,
+                    },
+                    timeout=5,
+                )
+                if yh.status_code == 200:
+                    yh_data = yh.json()
+                    results = [
+                        {
+                            "symbol": item.get("symbol", ""),
+                            "name": item.get("shortname", item.get("longname", item.get("symbol", ""))),
+                            "region": item.get("region", "US"),
+                        }
+                        for item in yh_data.get("quotes", [])
+                        if item.get("symbol")
+                    ]
+                    logger.info("RapidAPI found %d results for '%s'", len(results), query)
+                elif yh.status_code == 403:
+                    logger.warning("RapidAPI 403 Forbidden for '%s' – check API key/host", query)
+                else:
+                    logger.warning("RapidAPI status %d for '%s'", yh.status_code, query)
+            except Exception as e:
+                logger.warning("RapidAPI exception for '%s': %s", query, e)
 
     # 5. Ultimate fallback: static list
     if not results:
@@ -638,7 +690,7 @@ def symbol_search(request):
             if query.upper() in sym
         ]
         if results:
-            logger.info(f"Returning {len(results)} static fallback results for '{query}'")
+            logger.info("Returning %d static fallback results for '%s'", len(results), query)
 
     # 6. Cache if we have results
     if results:
@@ -677,4 +729,5 @@ def symbol_search(request):
 )
 @api_view(["GET"])
 def get_analyzed_news(request):
-    return get_news(request)
+    # Pass the original Django HttpRequest to avoid DRF request wrapping twice
+    return get_news(request._request)

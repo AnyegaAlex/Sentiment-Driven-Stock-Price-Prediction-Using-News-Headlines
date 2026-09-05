@@ -349,6 +349,11 @@ class UserPreferences(models.Model):
         help_text="Whether to send news alert notifications."
     )
 
+    weekly_digest = models.BooleanField(
+        default=True,
+        help_text="Whether to send weekly digest emails."
+    )
+
     # Theme preference
     theme = models.CharField(
         max_length=20,

@@ -1,7 +1,13 @@
 # news/admin.py
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import ProcessedNews, SymbolSearchCache
+from django.utils import timezone
+from .models import ProcessedNews, SymbolSearchCache, StockSymbol
+
+
+# ============================================================================
+# PROCESSED NEWS ADMIN
+# ============================================================================
 
 @admin.register(ProcessedNews)
 class ProcessedNewsAdmin(admin.ModelAdmin):
@@ -10,8 +16,8 @@ class ProcessedNewsAdmin(admin.ModelAdmin):
         "truncated_title",
         "sentiment_with_color",
         "confidence_bar",
-        "provider",        
-        "source_name",     
+        "provider",
+        "source_name",
         "published_at",
         "is_recent_flag",
     )
@@ -19,7 +25,7 @@ class ProcessedNewsAdmin(admin.ModelAdmin):
     list_filter = (
         "symbol",
         "sentiment",
-        "provider",        
+        "provider",
         "published_at",
     )
 
@@ -48,7 +54,7 @@ class ProcessedNewsAdmin(admin.ModelAdmin):
                 "title",
                 "summary",
                 "url",
-                "provider",     
+                "provider",
                 "source_name",
             )
         }),
@@ -98,13 +104,25 @@ class ProcessedNewsAdmin(admin.ModelAdmin):
         return obj.is_recent
 
 
+# ============================================================================
+# SYMBOL SEARCH CACHE ADMIN
+# ============================================================================
+
 @admin.register(SymbolSearchCache)
 class SymbolSearchCacheAdmin(admin.ModelAdmin):
-    list_display = ("query", "results_count", "created_at", "expires_at", "is_valid_flag")
+    list_display = (
+        "query",
+        "results_count",
+        "created_at",
+        "expires_at",
+        "is_valid_flag",
+    )
+    # ✅ FIX: 'is_valid' is a property, not a DB field – removed from list_filter
     list_filter = ("created_at", "expires_at")
     search_fields = ("query",)
     readonly_fields = ("created_at",)
     date_hierarchy = "created_at"
+    ordering = ("-created_at",)
 
     @admin.display(description="# Results")
     def results_count(self, obj):
@@ -113,3 +131,54 @@ class SymbolSearchCacheAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description="Valid?", ordering="expires_at")
     def is_valid_flag(self, obj):
         return obj.is_valid
+
+    @admin.display(description="Expired?", boolean=True)
+    def is_expired_warning(self, obj):
+        return not obj.is_valid
+
+
+# ============================================================================
+# STOCK SYMBOL ADMIN
+# ============================================================================
+
+@admin.register(StockSymbol)
+class StockSymbolAdmin(admin.ModelAdmin):
+    list_display = (
+        "symbol",
+        "is_active",
+        "last_processed",
+        "hours_since_last_update",
+        "created_at",
+    )
+    list_filter = ("is_active", "last_processed")
+    search_fields = ("symbol",)
+    readonly_fields = ("created_at", "updated_at")
+    ordering = ("symbol",)
+    fieldsets = (
+        (None, {
+            "fields": ("symbol", "is_active")
+        }),
+        ("Processing", {
+            "fields": ("last_processed",)
+        }),
+        ("Timestamps", {
+            "fields": ("created_at", "updated_at"),
+            "classes": ("collapse",),
+        }),
+    )
+
+    @admin.display(description="Hours Since Update", ordering="last_processed")
+    def hours_since_last_update(self, obj):
+        return obj.hours_since_last_update
+
+    actions = ["mark_active", "mark_inactive"]
+
+    @admin.action(description="Mark selected symbols as active")
+    def mark_active(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f"{updated} symbol(s) marked as active.")
+
+    @admin.action(description="Mark selected symbols as inactive")
+    def mark_inactive(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f"{updated} symbol(s) marked as inactive.")

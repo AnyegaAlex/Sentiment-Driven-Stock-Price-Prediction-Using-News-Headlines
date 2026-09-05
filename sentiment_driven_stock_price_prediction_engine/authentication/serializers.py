@@ -305,7 +305,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     risk_tolerance = serializers.SerializerMethodField()
     experience_level = serializers.SerializerMethodField()
 
-    # ✅ New statistics fields
+    # statistics fields
     analyses_count = serializers.SerializerMethodField()
     predictions_count = serializers.SerializerMethodField()
     news_read_count = serializers.SerializerMethodField()
@@ -657,7 +657,7 @@ class UserPreferencesSerializer(serializers.ModelSerializer):
         return value
 
     def validate_theme(self, value: str) -> str:
-        """✅ FIXED: Validate theme is 'light', 'dark', or 'system'."""
+        """ Validate theme is 'light', 'dark', or 'system'."""
         if value not in ['light', 'dark', 'system']:
             raise serializers.ValidationError("Theme must be 'light', 'dark', or 'system'.")
         return value

@@ -1,4 +1,3 @@
-# lstm_predictor.py
 """
 LSTM‑based stock movement predictor with sentiment fallback.
 
@@ -9,11 +8,12 @@ This module:
 - When price data is insufficient or the model fails, it falls back to a direction
   derived from recent news sentiment, ensuring a prediction is always available.
 
-Usage:
-    from .lstm_predictor import get_lstm_predictor
-    predictor = get_lstm_predictor()
-    result = predictor.predict('AAPL', news_text='Apple releases new iPhone')
-    # result: {'prediction': 'UP', 'confidence': 82.5, 'success': True, ...}
+Performance:
+- Technical features are cached for 5 minutes per symbol to reduce yfinance calls.
+- Model is loaded once (singleton) to avoid repeated disk I/O.
+
+Author: Tickflow Capital
+Version: 1.1.0
 """
 
 import os
@@ -22,13 +22,29 @@ import torch
 import torch.nn as nn
 import numpy as np
 import yfinance as yf
-from datetime import datetime, timedelta
+from datetime import timedelta
 from django.conf import settings
+from django.core.cache import cache
+from django.utils import timezone
 
 # Import FinBERT sentiment (must be available in news.utils)
 from news.utils import analyze_sentiment
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+MODEL_INPUT_SIZE = 7      # sentiment + 6 technicals
+MODEL_HIDDEN_SIZE = 32    # as in training
+MODEL_OUTPUT_SIZE = 1     # probability of UP
+
+# Cache timeout for technical features (5 minutes)
+TECH_CACHE_TIMEOUT = 300
+
+# Fallback sentiment threshold
+SENTIMENT_THRESHOLD = 0.2
 
 # ============================================================================
 # 1. LSTM Model Architecture (must match training script)
@@ -37,9 +53,11 @@ logger = logging.getLogger(__name__)
 class LSTMModel(nn.Module):
     """
     Simple 1‑layer LSTM with a linear output head.
-    Input size: 7 (sentiment + 6 technicals)
-    Hidden size: 32 (as in training)
-    Output: 1 (sigmoid for probability of UP)
+
+    Args:
+        input_size (int): Number of input features.
+        hidden_size (int): Number of hidden units.
+        output_size (int): Number of output units (1 for binary classification).
     """
     def __init__(self, input_size: int, hidden_size: int, output_size: int):
         super(LSTMModel, self).__init__()
@@ -50,23 +68,32 @@ class LSTMModel(nn.Module):
         _, (hidden, _) = self.lstm(x)
         return self.fc(hidden[-1])
 
+
 # ============================================================================
-# 2. Feature Engineering (same as training pipeline)
+# 2. Feature Engineering (with caching)
 # ============================================================================
 
 def compute_lstm_features(symbol: str) -> dict:
     """
     Download historical price data and compute the 7 features required by the model.
 
+    Results are cached for 5 minutes per symbol to reduce yfinance calls.
+
     Args:
         symbol (str): Stock ticker (e.g., 'AAPL')
 
     Returns:
         dict: Contains 'MA7', 'MA21', 'STD21', 'RSI14', 'UpperBB', 'LowerBB', 'Close'
-        or None if insufficient data.
+        or None if insufficient data or error.
     """
+    cache_key = f"lstm_features_{symbol.upper()}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         # Download 2 years of daily data (enough for all indicators)
+        # Use timeout and retry logic via yfinance's built-in retry (it has some)
         data = yf.download(symbol, period="2y", progress=False, auto_adjust=True)
         if data.empty or len(data) < 200:
             logger.warning(f"Insufficient data for {symbol} to compute LSTM features")
@@ -93,24 +120,28 @@ def compute_lstm_features(symbol: str) -> dict:
             return None
 
         latest = df.iloc[-1]
-        return {
-            'MA7': latest['MA7'],
-            'MA21': latest['MA21'],
-            'STD21': latest['STD21'],
-            'RSI14': latest['RSI14'],
-            'UpperBB': latest['UpperBB'],
-            'LowerBB': latest['LowerBB'],
-            'Close': latest['Close'],
+        result = {
+            'MA7': float(latest['MA7']),
+            'MA21': float(latest['MA21']),
+            'STD21': float(latest['STD21']),
+            'RSI14': float(latest['RSI14']),
+            'UpperBB': float(latest['UpperBB']),
+            'LowerBB': float(latest['LowerBB']),
+            'Close': float(latest['Close']),
         }
+        cache.set(cache_key, result, TECH_CACHE_TIMEOUT)
+        return result
+
     except Exception as e:
         logger.error(f"Error computing LSTM features for {symbol}: {e}")
         return None
+
 
 # ============================================================================
 # 3. Sentiment Fallback
 # ============================================================================
 
-def get_sentiment_fallback(symbol: str, news_text: str = "") -> dict:
+def get_sentiment_fallback(symbol: str, news_text: str = "", request_id: str = "") -> dict:
     """
     Generate a directional prediction based on recent news sentiment.
 
@@ -120,6 +151,7 @@ def get_sentiment_fallback(symbol: str, news_text: str = "") -> dict:
     Args:
         symbol (str): Stock ticker.
         news_text (str): Optional news headline provided in the request.
+        request_id (str): Optional request ID for logging context.
 
     Returns:
         dict: {
@@ -128,71 +160,72 @@ def get_sentiment_fallback(symbol: str, news_text: str = "") -> dict:
             'success': bool,
             'sentiment_score': float,
             'fallback': True,
-            'message': str
+            'message': str,
+            'error': str (only if success=False)
         }
     """
     try:
-        # Use provided news_text if available, otherwise fetch recent news from DB
+        sentiment_score = 0.0
+
         if news_text:
+            # Use provided news text
             result = analyze_sentiment(news_text)
             label = result.get('label', 'neutral')
             score = result.get('score', 0.0)
             sentiment_score = score if label == 'positive' else -score if label == 'negative' else 0.0
         else:
             # Query recent news from the database (last 7 days)
-            from news.models import ProcessedNews
-            cutoff = datetime.now() - timedelta(days=7)
-            news = ProcessedNews.objects.filter(symbol=symbol.upper(), published_at__gte=cutoff)
-            if not news.exists():
-                return {
-                    'prediction': 'HOLD',
-                    'confidence': 0.0,
-                    'success': True,
-                    'sentiment_score': 0.0,
-                    'fallback': True,
-                    'message': 'No recent news found'
-                }
-            scores = [n.sentiment_score for n in news if n.sentiment_score is not None]
-            if not scores:
-                return {
-                    'prediction': 'HOLD',
-                    'confidence': 0.0,
-                    'success': True,
-                    'sentiment_score': 0.0,
-                    'fallback': True,
-                    'message': 'No sentiment scores available'
-                }
-            avg_sentiment = sum(scores) / len(scores)
-            sentiment_score = avg_sentiment
+            try:
+                from news.models import ProcessedNews
+                cutoff = timezone.now() - timedelta(days=7)
+                news = ProcessedNews.objects.filter(
+                    symbol=symbol.upper(),
+                    published_at__gte=cutoff
+                )
+                if not news.exists():
+                    return _fallback_result('HOLD', 0.0, 0.0, 'No recent news found')
+                scores = [n.sentiment_score for n in news if n.sentiment_score is not None]
+                if not scores:
+                    return _fallback_result('HOLD', 0.0, 0.0, 'No sentiment scores available')
+                sentiment_score = sum(scores) / len(scores)
+            except ImportError:
+                logger.warning("ProcessedNews model not available; cannot fetch news")
+                return _fallback_result('HOLD', 0.0, 0.0, 'News model unavailable')
 
         # Map sentiment to direction and confidence
-        if sentiment_score > 0.2:
+        if sentiment_score > SENTIMENT_THRESHOLD:
             direction = 'UP'
             confidence = min(abs(sentiment_score) * 100, 90) + 10
-        elif sentiment_score < -0.2:
+        elif sentiment_score < -SENTIMENT_THRESHOLD:
             direction = 'DOWN'
             confidence = min(abs(sentiment_score) * 100, 90) + 10
         else:
             direction = 'HOLD'
             confidence = 50.0
 
-        return {
-            'prediction': direction,
-            'confidence': round(confidence, 1),
-            'success': True,
-            'sentiment_score': round(sentiment_score, 3),
-            'fallback': True,
-            'message': 'Using sentiment-based fallback due to insufficient price history'
-        }
+        return _fallback_result(direction, round(confidence, 1), round(sentiment_score, 3),
+                                'Using sentiment-based fallback')
+
     except Exception as e:
         logger.error(f"Sentiment fallback failed for {symbol}: {e}")
-        return {
-            'prediction': 'HOLD',
-            'confidence': 0.0,
-            'success': False,
-            'error': str(e),
-            'fallback': True
-        }
+        return _fallback_result('HOLD', 0.0, 0.0, f'Fallback error: {str(e)}', success=False)
+
+
+def _fallback_result(prediction: str, confidence: float, sentiment_score: float,
+                     message: str, success: bool = True) -> dict:
+    """Build a consistent fallback result dictionary."""
+    result = {
+        'prediction': prediction,
+        'confidence': confidence,
+        'success': success,
+        'sentiment_score': sentiment_score,
+        'fallback': True,
+        'message': message,
+    }
+    if not success:
+        result['error'] = message
+    return result
+
 
 # ============================================================================
 # 4. Predictor Class
@@ -205,6 +238,10 @@ class LSTMPredictor:
     If the model file is missing or fails, predictions will fall back to sentiment.
     The model path is read from `settings.LSTM_MODEL_PATH`; defaults to
     `models/stock_prediction_model.pth` in the project root.
+
+    Performance:
+        - Model is loaded once and reused.
+        - Feature computation is cached per symbol.
     """
 
     def __init__(self, model_path=None):
@@ -215,9 +252,9 @@ class LSTMPredictor:
 
         self.device = torch.device("cpu")
         self.model = None
-        self.input_size = 7   # sentiment + 6 technicals
-        self.hidden_size = 32
-        self.output_size = 1
+        self.input_size = MODEL_INPUT_SIZE
+        self.hidden_size = MODEL_HIDDEN_SIZE
+        self.output_size = MODEL_OUTPUT_SIZE
 
         self._load_model()
 
@@ -229,23 +266,30 @@ class LSTMPredictor:
                 return
 
             model = LSTMModel(self.input_size, self.hidden_size, self.output_size)
-            state_dict = torch.load(self.model_path, map_location=self.device)
+            # Use weights_only=True for security (if PyTorch >= 1.9)
+            try:
+                state_dict = torch.load(self.model_path, map_location=self.device, weights_only=True)
+            except TypeError:
+                # Fallback for older PyTorch versions
+                state_dict = torch.load(self.model_path, map_location=self.device)
+
             model.load_state_dict(state_dict)
             model.to(self.device)
             model.eval()
             self.model = model
             logger.info(f"LSTM model loaded from {self.model_path}")
         except Exception as e:
-            logger.error(f"Failed to load LSTM model: {e}")
+            logger.error(f"Failed to load LSTM model: {e}", exc_info=True)
             self.model = None
 
-    def predict(self, symbol: str, news_text: str = "") -> dict:
+    def predict(self, symbol: str, news_text: str = "", request_id: str = "") -> dict:
         """
         Generate a stock movement prediction for the given symbol.
 
         Args:
             symbol (str): Stock ticker (e.g., 'AAPL')
             news_text (str): Optional news headline to augment sentiment.
+            request_id (str): Optional request ID for logging.
 
         Returns:
             dict: {
@@ -255,41 +299,53 @@ class LSTMPredictor:
                 'sentiment_score': float,
                 'fallback': bool,
                 'message': str,
-                'error': str (only present if success=False)
+                'error': str (only if success=False)
             }
         """
+        ctx = f"symbol={symbol} request_id={request_id}"
+
         # --------------------------------------------------------------------
         # 1. If model is not loaded, fallback to sentiment
         # --------------------------------------------------------------------
         if self.model is None:
-            result = get_sentiment_fallback(symbol, news_text)
+            logger.warning(f"Model not loaded – using fallback for {ctx}")
+            result = get_sentiment_fallback(symbol, news_text, request_id)
             result['error'] = 'Model not loaded'
             return result
 
         # --------------------------------------------------------------------
-        # 2. Compute technical features
+        # 2. Compute technical features (cached)
         # --------------------------------------------------------------------
         tech_features = compute_lstm_features(symbol)
         if tech_features is None:
-            result = get_sentiment_fallback(symbol, news_text)
+            logger.warning(f"Failed to compute features for {ctx} – using fallback")
+            result = get_sentiment_fallback(symbol, news_text, request_id)
             result['error'] = 'Insufficient price data'
             return result
 
-        # Ensure all required keys exist and are numeric
+        # Validate required keys and types
         required_keys = ['MA7', 'MA21', 'STD21', 'RSI14', 'UpperBB', 'LowerBB', 'Close']
         for key in required_keys:
-            if key not in tech_features or tech_features[key] is None:
-                result = get_sentiment_fallback(symbol, news_text)
-                result['error'] = f'Missing feature: {key}'
+            value = tech_features.get(key)
+            if value is None or not np.isfinite(value):
+                logger.warning(f"Invalid feature {key} for {ctx} – using fallback")
+                result = get_sentiment_fallback(symbol, news_text, request_id)
+                result['error'] = f'Invalid feature: {key}'
                 return result
 
         # --------------------------------------------------------------------
         # 3. Compute sentiment score from FinBERT
         # --------------------------------------------------------------------
-        sentiment_result = analyze_sentiment(news_text) if news_text else {'label': 'neutral', 'score': 0.0}
-        label = sentiment_result.get('label', 'neutral')
-        score = sentiment_result.get('score', 0.0)
-        sentiment_score = score if label == 'positive' else -score if label == 'negative' else 0.0
+        try:
+            sentiment_result = analyze_sentiment(news_text) if news_text else {'label': 'neutral', 'score': 0.0}
+            label = sentiment_result.get('label', 'neutral')
+            score = sentiment_result.get('score', 0.0)
+            sentiment_score = score if label == 'positive' else -score if label == 'negative' else 0.0
+            if not np.isfinite(sentiment_score):
+                sentiment_score = 0.0
+        except Exception as e:
+            logger.error(f"Sentiment analysis failed for {ctx}: {e}")
+            sentiment_score = 0.0
 
         # Build feature vector (7 features)
         try:
@@ -303,28 +359,36 @@ class LSTMPredictor:
                 float(tech_features['LowerBB'])
             ], dtype=np.float32)
         except (TypeError, ValueError) as e:
-            result = get_sentiment_fallback(symbol, news_text)
+            logger.warning(f"Feature conversion error for {ctx}: {e}")
+            result = get_sentiment_fallback(symbol, news_text, request_id)
             result['error'] = f'Feature conversion error: {e}'
             return result
 
         # Check for NaN/Inf
         if not np.isfinite(features).all():
-            result = get_sentiment_fallback(symbol, news_text)
+            logger.warning(f"Invalid features (NaN/Inf) for {ctx}")
+            result = get_sentiment_fallback(symbol, news_text, request_id)
             result['error'] = 'Invalid features (NaN or Inf)'
             return result
 
         # --------------------------------------------------------------------
         # 4. Run LSTM model
         # --------------------------------------------------------------------
-        input_tensor = torch.tensor(features, device=self.device).unsqueeze(0).unsqueeze(1)
-
-        with torch.no_grad():
-            output = self.model(input_tensor)
-            prob = torch.sigmoid(output).item()
+        try:
+            input_tensor = torch.tensor(features, device=self.device).unsqueeze(0).unsqueeze(1)
+            with torch.no_grad():
+                output = self.model(input_tensor)
+                prob = torch.sigmoid(output).item()
+        except Exception as e:
+            logger.error(f"Model inference error for {ctx}: {e}")
+            result = get_sentiment_fallback(symbol, news_text, request_id)
+            result['error'] = f'Inference error: {str(e)}'
+            return result
 
         prediction = 'UP' if prob >= 0.5 else 'DOWN'
         confidence = round((prob if prob >= 0.5 else 1 - prob) * 100, 1)
 
+        logger.info(f"LSTM prediction for {ctx}: {prediction} (conf={confidence})")
         return {
             'prediction': prediction,
             'confidence': confidence,
@@ -335,11 +399,13 @@ class LSTMPredictor:
             'message': 'LSTM prediction successful'
         }
 
+
 # ============================================================================
 # 5. Singleton
 # ============================================================================
 
 _predictor_instance = None
+
 
 def get_lstm_predictor() -> LSTMPredictor:
     """Return a singleton instance of LSTMPredictor."""

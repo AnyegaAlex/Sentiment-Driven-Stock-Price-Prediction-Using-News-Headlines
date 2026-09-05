@@ -12,12 +12,11 @@ from rest_framework.permissions import AllowAny
 from django.core.cache import cache
 from django.db import transaction
 import logging
-from datetime import datetime
-from authentication.utils import error_response, success_response
-from datetime import datetime, timedelta
-from django.utils import timezone  
+from datetime import timedelta
+from django.utils import timezone
 from django.db.models import F
 from django.contrib.auth import get_user_model
+
 User = get_user_model()
 
 # drf-spectacular for OpenAPI
@@ -41,14 +40,38 @@ from .serializers import (
 from news.models import ProcessedNews
 from .lstm_predictor import get_lstm_predictor
 from .utils import save_prediction, calculate_performance_metrics, detect_drift
+from authentication.utils import error_response, success_response
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+#  CONSOLIDATED FALLBACK DATA (merged from static_data & STATIC_DATA)
+# ============================================================================
+FALLBACK_DATA = {
+    "AAPL": {"company": "Apple Inc.", "price": 116.16, "sma50": 114.84, "sma200": 111.81, "rsi": 70.8, "support": 110.35, "resistance": 121.97, "volume": 12424000, "volatility": 0.15},
+    "MSFT": {"company": "Microsoft Corp.", "price": 420.50, "sma50": 418.20, "sma200": 410.00, "rsi": 65.0, "support": 400.0, "resistance": 430.0, "volume": 8000000, "volatility": 0.12},
+    "NVDA": {"company": "NVIDIA Corp.", "price": 130.00, "sma50": 128.50, "sma200": 125.00, "rsi": 60.0, "support": 120.0, "resistance": 140.0, "volume": 15000000, "volatility": 0.25},
+    "GOOGL": {"company": "Alphabet Inc.", "price": 180.00, "sma50": 178.00, "sma200": 175.00, "rsi": 58.0, "support": 170.0, "resistance": 190.0, "volume": 5000000, "volatility": 0.10},
+    "AMZN": {"company": "Amazon.com Inc.", "price": 190.00, "sma50": 188.00, "sma200": 185.00, "rsi": 55.0, "support": 180.0, "resistance": 200.0, "volume": 6000000, "volatility": 0.18},
+    "META": {"company": "Meta Platforms Inc.", "price": 510.00, "sma50": 505.00, "sma200": 500.00, "rsi": 62.0, "support": 490.0, "resistance": 520.0, "volume": 4000000, "volatility": 0.14},
+    "TSLA": {"company": "Tesla Inc.", "price": 250.00, "sma50": 245.00, "sma200": 240.00, "rsi": 70.0, "support": 230.0, "resistance": 260.0, "volume": 3000000, "volatility": 0.35},
+    "JPM": {"company": "JPMorgan Chase", "price": 160.00, "sma50": 158.00, "sma200": 155.00, "rsi": 50.0, "support": 150.0, "resistance": 170.0, "volume": 2000000, "volatility": 0.08},
+    "IBM": {"company": "International Business Machines", "price": 180.00, "sma50": 178.00, "sma200": 175.00, "rsi": 52.0, "support": 170.0, "resistance": 190.0, "volume": 1500000, "volatility": 0.09},
+    "PLTR": {"company": "Palantir Technologies", "price": 132.38, "sma50": 132.48, "sma200": 155.64, "rsi": 53.0, "support": 120.0, "resistance": 145.0, "volume": 31841300, "volatility": 1.8},
+    "NFLX": {"company": "Netflix Inc.", "price": 620.00, "sma50": 615.00, "sma200": 600.00, "rsi": 65.0, "support": 590.0, "resistance": 650.0, "volume": 2000000, "volatility": 0.20},
+    "VTI": {"company": "Vanguard Total Stock Market", "price": 250.00, "sma50": 248.00, "sma200": 245.00, "rsi": 55.0, "support": 240.0, "resistance": 260.0, "volume": 3000000, "volatility": 0.12},
+}
+
+
+# ============================================================================
+#  TECHNICAL INDICATORS (with caching)
+# ============================================================================
 
 def calculate_technical_indicators(symbol):
     """
     Fetch real technical indicators using yfinance.
     Returns dict with all fields, or None if data unavailable.
-    If SMA_50 or SMA_200 cannot be computed (insufficient data), 
+    If SMA_50 or SMA_200 cannot be computed (insufficient data),
     they are approximated from the available history.
     """
     try:
@@ -121,24 +144,41 @@ def calculate_technical_indicators(symbol):
         logger.warning(f"yfinance failed for {symbol}: {e}")
         return None
 
-# ============================================================
-#  FALLBACK HELPERS (unchanged – kept for resilience)
-# ============================================================
+
+def get_technical_indicators(symbol, timeframe="1d"):
+    """
+    Wrapper around calculate_technical_indicators with Redis caching.
+    """
+    cache_key = f"tech_{symbol}_{timeframe}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
+    # Get real data (fallback handled inside calculate_technical_indicators)
+    data = calculate_technical_indicators(symbol)
+    if data is None:
+        # Use fallback (pre-generated)
+        data = get_fallback_technical(symbol)
+        # The fallback returns a dict with "technical" key – we want just the data
+        if data and "technical" in data:
+            data = data["technical"]
+        else:
+            data = None
+
+    if data:
+        # Cache for 5 minutes
+        cache.set(cache_key, data, timeout=300)
+    return data
+
+
+# ============================================================================
+#  FALLBACK HELPERS (kept for resilience)
+# ============================================================================
+
 def get_fallback_analysis(symbol: str, risk_type: str = "medium", hold_time: str = "medium-term") -> dict:
     """Generate realistic fallback when external APIs fail."""
     symbol = symbol.upper()
-    static_data = {
-        "AAPL": {"company": "Apple Inc.", "price": 116.16, "sma50": 114.84, "sma200": 111.81, "rsi": 70.8, "support": 110.35, "resistance": 121.97, "volume": 12424000, "volatility": 0.15},
-        "MSFT": {"company": "Microsoft Corp.", "price": 420.50, "sma50": 418.20, "sma200": 410.00, "rsi": 65.0, "support": 400.0, "resistance": 430.0, "volume": 8000000, "volatility": 0.12},
-        "NVDA": {"company": "NVIDIA Corp.", "price": 130.00, "sma50": 128.50, "sma200": 125.00, "rsi": 60.0, "support": 120.0, "resistance": 140.0, "volume": 15000000, "volatility": 0.25},
-        "GOOGL": {"company": "Alphabet Inc.", "price": 180.00, "sma50": 178.00, "sma200": 175.00, "rsi": 58.0, "support": 170.0, "resistance": 190.0, "volume": 5000000, "volatility": 0.10},
-        "AMZN": {"company": "Amazon.com Inc.", "price": 190.00, "sma50": 188.00, "sma200": 185.00, "rsi": 55.0, "support": 180.0, "resistance": 200.0, "volume": 6000000, "volatility": 0.18},
-        "META": {"company": "Meta Platforms Inc.", "price": 510.00, "sma50": 505.00, "sma200": 500.00, "rsi": 62.0, "support": 490.0, "resistance": 520.0, "volume": 4000000, "volatility": 0.14},
-        "TSLA": {"company": "Tesla Inc.", "price": 250.00, "sma50": 245.00, "sma200": 240.00, "rsi": 70.0, "support": 230.0, "resistance": 260.0, "volume": 3000000, "volatility": 0.35},
-        "JPM": {"company": "JPMorgan Chase", "price": 160.00, "sma50": 158.00, "sma200": 155.00, "rsi": 50.0, "support": 150.0, "resistance": 170.0, "volume": 2000000, "volatility": 0.08},
-        "IBM": {"company": "International Business Machines", "price": 180.00, "sma50": 178.00, "sma200": 175.00, "rsi": 52.0, "support": 170.0, "resistance": 190.0, "volume": 1500000, "volatility": 0.09},
-    }
-    data = static_data.get(symbol, {"company": f"{symbol} Inc.", "price": 100.0, "sma50": 98.0, "sma200": 95.0, "rsi": 55.0, "support": 95.0, "resistance": 105.0, "volume": 1000000, "volatility": 0.2})
+    data = FALLBACK_DATA.get(symbol, {"company": f"{symbol} Inc.", "price": 100.0, "sma50": 98.0, "sma200": 95.0, "rsi": 55.0, "support": 95.0, "resistance": 105.0, "volume": 1000000, "volatility": 0.2})
     price = data["price"]
     fallback_sentiment = {"overall": "Neutral", "score": 0.5, "recent_articles": 0}
     return {
@@ -147,7 +187,7 @@ def get_fallback_analysis(symbol: str, risk_type: str = "medium", hold_time: str
         "recommendation": "HOLD",
         "confidence": 0.5,
         "sentiment": fallback_sentiment,
-        "lastUpdated": datetime.utcnow().isoformat() + "Z",
+        "lastUpdated": timezone.now().isoformat() + "Z",
         "technicalIndicators": {
             "currentPrice": price,
             "sma50": data["sma50"],
@@ -168,54 +208,29 @@ def get_fallback_analysis(symbol: str, risk_type: str = "medium", hold_time: str
         "riskAssessment": {"level": risk_type, "horizon": hold_time}
     }
 
+
 def get_fallback_technical(symbol: str) -> dict:
     """
     Generate realistic fallback technical data when yfinance fails.
     Uses a static map for well‑known symbols, and a dynamic generator for others.
-
-    Args:
-        symbol (str): Stock ticker.
-
-    Returns:
-        dict: A dictionary with a 'technical' key containing all required fields.
     """
     symbol = symbol.upper()
-
-    # Static data for popular symbols (optional, but gives better fallback values)
-    STATIC_DATA = {
-        "AAPL": {"price": 116.16, "sma50": 114.84, "sma200": 111.81, "rsi": 70.8, "support": 110.35, "resistance": 121.97, "volume": 12424000, "volatility": 0.15},
-        "MSFT": {"price": 420.50, "sma50": 418.20, "sma200": 410.00, "rsi": 65.0, "support": 400.0, "resistance": 430.0, "volume": 8000000, "volatility": 0.12},
-        "NVDA": {"price": 130.00, "sma50": 128.50, "sma200": 125.00, "rsi": 60.0, "support": 120.0, "resistance": 140.0, "volume": 15000000, "volatility": 0.25},
-        "GOOGL": {"price": 180.00, "sma50": 178.00, "sma200": 175.00, "rsi": 58.0, "support": 170.0, "resistance": 190.0, "volume": 5000000, "volatility": 0.10},
-        "AMZN": {"price": 190.00, "sma50": 188.00, "sma200": 185.00, "rsi": 55.0, "support": 180.0, "resistance": 200.0, "volume": 6000000, "volatility": 0.18},
-        "META": {"price": 510.00, "sma50": 505.00, "sma200": 500.00, "rsi": 62.0, "support": 490.0, "resistance": 520.0, "volume": 4000000, "volatility": 0.14},
-        "TSLA": {"price": 250.00, "sma50": 245.00, "sma200": 240.00, "rsi": 70.0, "support": 230.0, "resistance": 260.0, "volume": 3000000, "volatility": 0.35},
-        "JPM": {"price": 160.00, "sma50": 158.00, "sma200": 155.00, "rsi": 50.0, "support": 150.0, "resistance": 170.0, "volume": 2000000, "volatility": 0.08},
-        "IBM": {"price": 180.00, "sma50": 178.00, "sma200": 175.00, "rsi": 52.0, "support": 170.0, "resistance": 190.0, "volume": 1500000, "volatility": 0.09},
-        "PLTR": {"price": 132.38, "sma50": 132.48, "sma200": 155.64, "rsi": 53.0, "support": 120.0, "resistance": 145.0, "volume": 31841300, "volatility": 1.8},
-        "NFLX": {"price": 620.00, "sma50": 615.00, "sma200": 600.00, "rsi": 65.0, "support": 590.0, "resistance": 650.0, "volume": 2000000, "volatility": 0.20},
-        "VTI": {"price": 250.00, "sma50": 248.00, "sma200": 245.00, "rsi": 55.0, "support": 240.0, "resistance": 260.0, "volume": 3000000, "volatility": 0.12},
-    }
+    import random
 
     # If symbol is in static map, use that data
-    if symbol in STATIC_DATA:
-        data = STATIC_DATA[symbol]
+    if symbol in FALLBACK_DATA:
+        data = FALLBACK_DATA[symbol]
         price = data["price"]
-        # Generate a 30-day price history around the current price
-        import random
         random.seed(hash(symbol) % 2**32)  # deterministic per symbol
-        base = price
         price_history = []
         for i in range(30):
-            # Add random walk with small steps
-            change = (random.random() - 0.5) * 0.02  # ±2% variation
+            change = (random.random() - 0.5) * 0.02
             if i == 0:
-                price_history.append(round(base * (1 - 0.02), 2))
+                price_history.append(round(price * (1 - 0.02), 2))
             else:
                 prev = price_history[-1]
                 new_price = prev * (1 + change)
                 price_history.append(round(new_price, 2))
-        # Ensure the last value matches the current price
         price_history[-1] = round(price, 2)
 
         return {
@@ -233,35 +248,25 @@ def get_fallback_technical(symbol: str) -> dict:
             }
         }
 
-    # --- Dynamic fallback for unknown symbols ---
-    # Use a reasonable default price (e.g., 100.0)
-    base_price = 100.0
-    # Add some variation based on symbol hash
-    import random
+    # Dynamic fallback for unknown symbols
     random.seed(hash(symbol) % 2**32)
-    # Price between $20 and $500
     price = round(random.uniform(20, 500), 2)
-    # SMAs: slightly above and below current price
     sma50 = round(price * (1 + random.uniform(-0.05, 0.05)), 2)
     sma200 = round(price * (1 + random.uniform(-0.10, 0.10)), 2)
-    # RSI: between 30 and 70
     rsi = round(random.uniform(30, 70), 1)
-    # Support/Resistance: 10-20% below/above current price
     support = round(price * (1 - random.uniform(0.05, 0.15)), 2)
     resistance = round(price * (1 + random.uniform(0.05, 0.15)), 2)
     pivot = round((price + support + resistance) / 3, 2)
     volume = random.randint(1000000, 50000000)
     volatility = round(random.uniform(0.05, 0.35), 2)
 
-    # Generate 30-day price history with random walk
     price_history = []
-    current = price * 0.95  # start slightly below
+    current = price * 0.95
     for i in range(30):
-        change = (random.random() - 0.5) * 0.025  # ±2.5% per day
+        change = (random.random() - 0.5) * 0.025
         new_price = current * (1 + change)
         price_history.append(round(new_price, 2))
         current = new_price
-    # Ensure last value is roughly the current price
     price_history[-1] = round(price, 2)
 
     return {
@@ -279,13 +284,78 @@ def get_fallback_technical(symbol: str) -> dict:
         }
     }
 
-# ============================================================
+
+# ============================================================================
+#  SENTIMENT HELPER (to avoid code duplication)
+# ============================================================================
+
+def get_sentiment_summary(symbol, days=7):
+    """
+    Fetch and summarise sentiment from recent news for a given symbol.
+    Returns a dict with overall, score, recent_articles, source_stats, and history.
+    """
+    cutoff = timezone.now() - timedelta(days=days)
+    news_items = ProcessedNews.objects.filter(
+        symbol=symbol.upper(),
+        published_at__gte=cutoff
+    ).order_by('-published_at')[:100]
+
+    if not news_items.exists():
+        return {
+            "overall": "Neutral",
+            "score": 0.0,
+            "recent_articles": 0,
+            "source_stats": {"tier1_count": 0, "reliability_sum": 0, "tier1_sources": []},
+            "history": []
+        }
+
+    scores = [n.sentiment_score for n in news_items if n.sentiment_score is not None]
+    valid_scores = [s for s in scores if s is not None]
+    avg_score = sum(valid_scores) / len(valid_scores) if valid_scores else 0.0
+    label = "Bullish" if avg_score > 0.2 else "Bearish" if avg_score < -0.2 else "Neutral"
+
+    reliable_sources = {'Reuters', 'Bloomberg', 'CNBC', 'Wall Street Journal', 'Financial Times'}
+    tier1_sources = []
+    reliability_sum = 0
+    tier1_count = 0
+    for item in news_items[:50]:
+        source = item.source_name or item.provider or ''
+        if source in reliable_sources:
+            tier1_sources.append(source)
+            tier1_count += 1
+            reliability_sum += item.source_reliability or 70
+
+    history = []
+    for item in news_items[:min(days, len(news_items))]:
+        if item.sentiment_score is not None:
+            history.append({
+                "date": item.published_at.isoformat(),
+                "score": round(item.sentiment_score, 4)
+            })
+    history.sort(key=lambda x: x['date'])
+
+    return {
+        "overall": label,
+        "score": round(avg_score, 4),
+        "recent_articles": len(news_items),
+        "source_stats": {
+            "tier1_count": tier1_count,
+            "reliability_sum": round(reliability_sum, 1),
+            "tier1_sources": list(set(tier1_sources))[:5]
+        },
+        "history": history[-30:]
+    }
+
+
+# ============================================================================
 #  INLINE SERIALIZERS FOR SWAGGER RESPONSE SHAPES
-# ============================================================
+# ============================================================================
+
 class SentimentSummarySerializer(serializers.Serializer):
     overall = serializers.CharField()
     score = serializers.FloatField()
     recent_articles = serializers.IntegerField()
+
 
 class TechnicalIndicatorsResponseSerializer(serializers.Serializer):
     currentPrice = serializers.FloatField()
@@ -296,19 +366,23 @@ class TechnicalIndicatorsResponseSerializer(serializers.Serializer):
     resistance = serializers.FloatField()
     volume = serializers.IntegerField()
 
+
 class PriceTargetsSerializer(serializers.Serializer):
     bearish = serializers.FloatField()
     base = serializers.FloatField()
     bullish = serializers.FloatField()
+
 
 class KeyFactorSerializer(serializers.Serializer):
     title = serializers.CharField()
     description = serializers.CharField()
     impact = serializers.CharField()
 
+
 class RiskAssessmentSerializer(serializers.Serializer):
     level = serializers.CharField()
     horizon = serializers.CharField()
+
 
 class StockAnalysisResponseSerializer(serializers.Serializer):
     company = serializers.CharField()
@@ -323,6 +397,7 @@ class StockAnalysisResponseSerializer(serializers.Serializer):
     riskAssessment = RiskAssessmentSerializer()
     lstm_prediction = serializers.DictField(required=False)
 
+
 class LSTMPredictionResponseSerializer(serializers.Serializer):
     symbol = serializers.CharField()
     prediction = serializers.CharField()
@@ -331,9 +406,10 @@ class LSTMPredictionResponseSerializer(serializers.Serializer):
     timestamp = serializers.CharField()
     success = serializers.BooleanField()
 
-# ============================================================
+
+# ============================================================================
 #  VIEWS
-# ============================================================
+# ============================================================================
 
 class StockOpinionView(APIView):
     """
@@ -390,36 +466,36 @@ class StockOpinionView(APIView):
                 error_response("Stock symbol is required.", code=2001),
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         risk_type = request.query_params.get("risk_type", "medium")
         hold_time = request.query_params.get("hold_time", "medium-term")
         detail_level = request.query_params.get("detail_level", "summary")
-        
+
         try:
-            # ✅ Lazy import 
+            # Lazy import to avoid heavy load
             from .opinion_generator import generate_stock_opinion, format_investment_analysis
-            
+
             opinion = generate_stock_opinion(symbol=symbol, risk_type=risk_type)
             if "error" in opinion:
                 return Response(opinion, status=status.HTTP_400_BAD_REQUEST)
-            
+
             formatted_opinion = format_investment_analysis(opinion)
             formatted_opinion['hold_time'] = hold_time
             formatted_opinion['detail_level'] = detail_level
-            
+
             if request.query_params.get("format", "json").lower() == "text":
                 text_response = self._format_as_text(formatted_opinion)
                 return Response({"analysis_text": text_response}, status=status.HTTP_200_OK)
-            
+
             return Response(formatted_opinion, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
             logger.exception(f"Error generating stock opinion for {symbol}: {str(e)}")
             return Response(
                 error_response(f"Internal server error: {str(e)}", code=9001),
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-    
+
     def _format_as_text(self, opinion: dict) -> str:
         lines = [
             f"Stock Analysis for {opinion.get('symbol', 'Unknown')}",
@@ -581,10 +657,10 @@ class StockAnalysisView(APIView):
                 error_response("Stock symbol is required.", code=2001),
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         risk_type = request.query_params.get("risk_type", "medium")
         hold_time = request.query_params.get("hold_time", "medium-term")
-        
+
         cache_key = f"stock_analysis_{symbol}_{risk_type}_{hold_time}"
         cached_response = cache.get(cache_key)
         if cached_response:
@@ -592,97 +668,39 @@ class StockAnalysisView(APIView):
 
         # ---------- TRY REAL DATA ----------
         try:
-            # ✅ Lazy import
             from .opinion_generator import generate_stock_opinion, format_investment_analysis
-            
+
             opinion = generate_stock_opinion(symbol=symbol, risk_type=risk_type, news_text="")
             if "error" in opinion:
                 raise ValueError(opinion["error"])
-            
+
             formatted = format_investment_analysis(opinion)
-            
-            # ---------- BUILD SENTIMENT SUMMARY ----------
-            sentiment_summary = {
-                'overall': 'Neutral',
-                'score': 0.0,
-                'recent_articles': 0
+
+            # ---------- SENTIMENT SUMMARY (using helper) ----------
+            sentiment_summary = get_sentiment_summary(symbol, days=7)
+
+            # ---------- TECHNICAL INDICATORS (cached) ----------
+            tech_data = get_technical_indicators(symbol)
+            if not tech_data:
+                raise ValueError("No technical data available")
+
+            # Convert to the format expected by frontend
+            tech_data_formatted = {
+                "currentPrice": tech_data["current_price"],
+                "sma50": tech_data["sma_50"],
+                "sma200": tech_data["sma_200"],
+                "rsi": tech_data["rsi"],
+                "support": tech_data["support"],
+                "resistance": tech_data["resistance"],
+                "volume": tech_data["volume"],
             }
-            try:
-                news_items = ProcessedNews.objects.filter(symbol=symbol).order_by('-published_at')[:10]
-                if news_items.exists():
-                    scores = [n.sentiment_score for n in news_items if n.sentiment_score is not None]
-                    if scores:
-                        avg_score = sum(scores) / len(scores)
-                        sentiment_summary['score'] = round(avg_score, 4)
-                        if avg_score > 0.2:
-                            sentiment_summary['overall'] = 'Bullish'
-                        elif avg_score < -0.2:
-                            sentiment_summary['overall'] = 'Bearish'
-                        else:
-                            sentiment_summary['overall'] = 'Neutral'
-                        sentiment_summary['recent_articles'] = len(scores)
-                    else:
-                        sentiment_summary['score'] = 0.5
-                else:
-                    sentiment_summary['score'] = 0.5
-            except Exception as e:
-                logger.warning(f"Could not fetch sentiment for {symbol}: {e}")
-                sentiment_summary['score'] = 0.5
-
-            # ---------- FETCH TECHNICAL INDICATORS (using dedicated helper) ----------
-            # Use the same logic as TechnicalIndicatorsView to ensure consistency
-            tech_data = None
-            try:
-                # Try yfinance directly
-                import yfinance as yf
-                ticker = yf.Ticker(symbol)
-                hist = ticker.history(period="1mo")  # at least 20 days for support/resistance
-                if not hist.empty and len(hist) >= 20:
-                    current_price = float(hist['Close'].iloc[-1])
-                    sma50 = float(hist['Close'].rolling(window=50).mean().iloc[-1]) if len(hist) >= 50 else 0.0
-                    sma200 = float(hist['Close'].rolling(window=200).mean().iloc[-1]) if len(hist) >= 200 else 0.0
-                    # RSI
-                    delta = hist['Close'].diff()
-                    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-                    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-                    rs = gain / loss
-                    rsi = float(100 - (100 / (1 + rs.iloc[-1]))) if rs.iloc[-1] != 0 else 50.0
-                    support = float(hist['Low'].tail(20).min())
-                    resistance = float(hist['High'].tail(20).max())
-                    volume = int(hist['Volume'].iloc[-1])
-                    tech_data = {
-                        "currentPrice": current_price,
-                        "sma50": sma50,
-                        "sma200": sma200,
-                        "rsi": rsi,
-                        "support": support,
-                        "resistance": resistance,
-                        "volume": volume,
-                    }
-            except Exception as e:
-                logger.warning(f"yfinance failed for technicals in StockAnalysisView: {e}")
-
-            # If yfinance failed, use fallback
-            if tech_data is None:
-                fallback = get_fallback_technical(symbol)
-                tech = fallback["technical"]
-                tech_data = {
-                    "currentPrice": tech["current_price"],
-                    "sma50": tech["sma_50"],
-                    "sma200": tech["sma_200"],
-                    "rsi": tech["rsi"],
-                    "support": tech["support"],
-                    "resistance": tech["resistance"],
-                    "volume": tech["volume"],
-                }
 
             # Price targets (fallback if not present)
             price_targets = {
-                "bearish": round(tech_data["currentPrice"] * 0.9, 2),
-                "base": round(tech_data["currentPrice"], 2),
-                "bullish": round(tech_data["currentPrice"] * 1.14, 2),
+                "bearish": round(tech_data_formatted["currentPrice"] * 0.9, 2),
+                "base": round(tech_data_formatted["currentPrice"], 2),
+                "bullish": round(tech_data_formatted["currentPrice"] * 1.14, 2),
             }
-            # If opinion provided targets, use them
             if formatted.get('analysis', {}).get('price_targets'):
                 pt = formatted['analysis']['price_targets']
                 price_targets = {
@@ -707,9 +725,13 @@ class StockAnalysisView(APIView):
                 "symbol": symbol.upper(),
                 "recommendation": formatted.get('analysis', {}).get('recommendation', 'HOLD'),
                 "confidence": formatted.get('analysis', {}).get('confidence', 0.5) / 100.0,
-                "sentiment": sentiment_summary,
-                "lastUpdated": datetime.utcnow().isoformat() + 'Z',
-                "technicalIndicators": tech_data,
+                "sentiment": {
+                    "overall": sentiment_summary["overall"],
+                    "score": sentiment_summary["score"],
+                    "recent_articles": sentiment_summary["recent_articles"],
+                },
+                "lastUpdated": timezone.now().isoformat() + 'Z',
+                "technicalIndicators": tech_data_formatted,
                 "priceTargets": price_targets,
                 "keyFactors": key_factors,
                 "riskAssessment": {
@@ -730,18 +752,16 @@ class StockAnalysisView(APIView):
                         "fallback": lstm_result.get('fallback', False),
                         "message": lstm_result.get('message', '')
                     }
-                    # Save prediction to history if not fallback
                     if not lstm_result.get('fallback', True):
                         save_prediction(
                             symbol=symbol,
                             movement=lstm_result['prediction'],
                             confidence=lstm_result['confidence'] / 100.0,
-                            sentiment_score=sentiment_summary['score'],
+                            sentiment_score=sentiment_summary["score"],
                             headline="",
                             source='lstm'
                         )
                 else:
-                    # If predictor returns success=False, still include a placeholder
                     response_data["lstm_prediction"] = {
                         "direction": "UNAVAILABLE",
                         "confidence": 0.0,
@@ -763,18 +783,20 @@ class StockAnalysisView(APIView):
 
         except Exception as e:
             logger.warning(f"Real data failed for {symbol}: {e}. Using fallback.")
-            # Full fallback using get_fallback_technical and opinion fallback
             fallback = get_fallback_analysis(symbol, risk_type, hold_time)
-            # Ensure support/resistance are set
+            # Ensure support/resistance are set from fallback technical
             tech_fallback = get_fallback_technical(symbol)
-            if fallback.get('technicalIndicators'):
+            if fallback.get('technicalIndicators') and tech_fallback.get('technical'):
                 fallback['technicalIndicators']['support'] = tech_fallback['technical']['support']
                 fallback['technicalIndicators']['resistance'] = tech_fallback['technical']['resistance']
+            # Add an empty LSTM field to keep schema consistent
+            fallback['lstm_prediction'] = {"direction": "UNAVAILABLE", "confidence": 0.0}
             cache.set(cache_key, fallback, timeout=300)
             return Response(
                 success_response(data=fallback),
                 status=status.HTTP_200_OK
             )
+
 
 class TechnicalIndicatorsView(APIView):
     """
@@ -845,13 +867,9 @@ class TechnicalIndicatorsView(APIView):
             if hist.empty:
                 raise ValueError("No historical data returned from yfinance")
 
-            # Current price
             current_price = float(hist['Close'].iloc[-1])
-
-            # Price history
             price_history = [round(float(p), 2) for p in hist['Close'].tolist()]
 
-            # SMAs
             sma_50 = 0
             sma_200 = 0
             if len(hist) >= 50:
@@ -859,7 +877,6 @@ class TechnicalIndicatorsView(APIView):
             if len(hist) >= 200:
                 sma_200 = round(float(hist['Close'].rolling(window=200).mean().iloc[-1]), 2)
 
-            # RSI (14-day)
             rsi = 0
             if len(hist) >= 15:
                 delta = hist['Close'].diff()
@@ -868,19 +885,15 @@ class TechnicalIndicatorsView(APIView):
                 rs = gain / loss
                 rsi = round(100 - (100 / (1 + rs.iloc[-1])), 1) if rs.iloc[-1] != 0 else 50
 
-            # Support & Resistance (20-day high/low)
             recent = hist.tail(20)
             support = round(float(recent['Low'].min()), 2) if not recent.empty else 0
             resistance = round(float(recent['High'].max()), 2) if not recent.empty else 0
 
-            # Pivot Point (standard)
             last = hist.tail(1)
             pivot = round(float((last['High'].iloc[-1] + last['Low'].iloc[-1] + last['Close'].iloc[-1]) / 3), 2) if not last.empty else 0
 
-            # Volume
             volume = int(hist['Volume'].iloc[-1]) if not hist.empty else 0
 
-            # Volatility (daily returns std dev)
             returns = hist['Close'].pct_change().dropna()
             volatility = round(float(returns.std() * 100), 2) if len(returns) > 1 else 0
 
@@ -934,7 +947,7 @@ class SymbolsListView(APIView):
         cached = cache.get(cache_key)
         if cached:
             return Response(cached, status=status.HTTP_200_OK)
-        
+
         try:
             symbols_data = [
                 {"symbol": "AAPL", "name": "Apple Inc.", "region": "US"},
@@ -951,7 +964,7 @@ class SymbolsListView(APIView):
             serializer = SymbolSerializer(symbols_data, many=True)
             cache.set(cache_key, serializer.data, timeout=3600)
             return Response(serializer.data, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
             logger.exception(f"Error fetching symbols list: {e}")
             return Response(
@@ -995,9 +1008,9 @@ class SubscribeView(APIView):
                     obj.is_active = True
                     obj.save()
                     return Response(
-                    success_response(message="Subscription reactivated."),
-                    status=status.HTTP_200_OK
-                )
+                        success_response(message="Subscription reactivated."),
+                        status=status.HTTP_200_OK
+                    )
                 return Response(
                     error_response("Email already subscribed.", code=4002),
                     status=status.HTTP_400_BAD_REQUEST
@@ -1067,12 +1080,9 @@ class LSTMPredictionView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # ---------- ✅ Save prediction to history with user association ----------
+            # ---------- Save prediction to history with user association ----------
             try:
-                # Get the authenticated user (or None)
                 user = request.user if request.user.is_authenticated else None
-
-                # Save the prediction using the updated save_prediction function
                 prediction_obj = save_prediction(
                     symbol=symbol,
                     movement=result['prediction'],
@@ -1080,11 +1090,10 @@ class LSTMPredictionView(APIView):
                     sentiment_score=result.get('sentiment_score', 0.0),
                     headline=news_text,
                     source='lstm',
-                    user=user,               # ✅ Pass user
-                    price_at_prediction=result.get('current_price')  # optional
+                    user=user,
+                    price_at_prediction=result.get('current_price')
                 )
 
-                # ✅ Increment user's predictions count (if user is authenticated)
                 if user:
                     User.objects.filter(id=user.id).update(
                         predictions_count=F('predictions_count') + 1
@@ -1094,7 +1103,7 @@ class LSTMPredictionView(APIView):
                 logger.warning(f"Failed to save prediction record for {symbol}: {e}")
 
             result['symbol'] = symbol.upper()
-            result['timestamp'] = datetime.utcnow().isoformat() + 'Z'
+            result['timestamp'] = timezone.now().isoformat() + 'Z'
 
             cache.set(cache_key, result, timeout=300)
             return Response(
@@ -1108,7 +1117,7 @@ class LSTMPredictionView(APIView):
                 error_response(f"Internal server error: {str(e)}", code=9001),
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
+
 
 class SentimentAnalysisView(APIView):
     """
@@ -1178,12 +1187,10 @@ class SentimentAnalysisView(APIView):
                 error_response("Symbol is required.", code=2001),
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         time_range = request.query_params.get("time_range", "7d")
-        
-        # Parse time range
         days = 7 if time_range == '7d' else 30
-        
+
         cache_key = f"sentiment_{symbol}_{time_range}"
         cached_response = cache.get(cache_key)
         if cached_response:
@@ -1191,100 +1198,28 @@ class SentimentAnalysisView(APIView):
                 success_response(data=cached_response),
                 status=status.HTTP_200_OK
             )
-        
+
         try:
-            # Fetch recent news for sentiment analysis
-            cutoff = datetime.now() - timedelta(days=days)
-            news_items = ProcessedNews.objects.filter(
-                symbol=symbol.upper(),
-                published_at__gte=cutoff
-            ).order_by('-published_at')[:100]
-            
-            if not news_items.exists():
-                # Return neutral sentiment with no news
-                response_data = {
-                    "sentiment": {
-                        "score": 0.0,
-                        "label": "Neutral"
-                    },
-                    "news_count": 0,
-                    "source_stats": {
-                        "tier1_count": 0,
-                        "reliability_sum": 0,
-                        "tier1_sources": []
-                    },
-                    "history": []
-                }
-                cache.set(cache_key, response_data, timeout=300)
-                return Response(
-                    success_response(data=response_data),
-                    status=status.HTTP_200_OK
-                )
-            
-            # Calculate sentiment scores
-            scores = [n.sentiment_score for n in news_items if n.sentiment_score is not None]
-            valid_scores = [s for s in scores if s is not None]
-            
-            if valid_scores:
-                avg_score = sum(valid_scores) / len(valid_scores)
-                if avg_score > 0.2:
-                    label = "Bullish"
-                elif avg_score < -0.2:
-                    label = "Bearish"
-                else:
-                    label = "Neutral"
-            else:
-                avg_score = 0.0
-                label = "Neutral"
-            
-            # Build source statistics
-            reliable_sources = ['Reuters', 'Bloomberg', 'CNBC', 'Wall Street Journal', 'Financial Times']
-            tier1_sources = []
-            reliability_sum = 0
-            tier1_count = 0
-            
-            for item in news_items[:50]:
-                source = item.source_name or item.provider or ''
-                if source in reliable_sources:
-                    tier1_sources.append(source)
-                    tier1_count += 1
-                    reliability_sum += item.source_reliability or 70
-            
-            # Build history data (last 7 or 30 days)
-            history = []
-            for item in news_items[:min(days, len(news_items))]:
-                if item.sentiment_score is not None:
-                    history.append({
-                        "date": item.published_at.isoformat(),
-                        "score": round(item.sentiment_score, 4)
-                    })
-            
-            # Sort history by date
-            history.sort(key=lambda x: x['date'])
-            
+            sentiment = get_sentiment_summary(symbol, days)
+
             response_data = {
                 "sentiment": {
-                    "score": round(avg_score, 4),
-                    "label": label
+                    "score": sentiment['score'],
+                    "label": sentiment['overall']
                 },
-                "news_count": len(news_items),
-                "source_stats": {
-                    "tier1_count": tier1_count,
-                    "reliability_sum": round(reliability_sum, 1) if reliability_sum > 0 else 0,
-                    "tier1_sources": list(set(tier1_sources))[:5]
-                },
-                "history": history[-30:]  # Last 30 days
+                "news_count": sentiment['recent_articles'],
+                "source_stats": sentiment['source_stats'],
+                "history": sentiment['history']
             }
-            
+
             cache.set(cache_key, response_data, timeout=600)
             return Response(
                 success_response(data=response_data),
                 status=status.HTTP_200_OK
             )
-            
+
         except Exception as e:
             logger.exception(f"Error in SentimentAnalysisView for {symbol}: {e}")
-            # Return fallback sentiment data
             fallback_data = {
                 "sentiment": {
                     "score": 0.0,
@@ -1304,9 +1239,9 @@ class SentimentAnalysisView(APIView):
             )
 
 
-# ============================================================
-#  – PREDICTION HISTORY SYSTEM
-# ============================================================
+# ============================================================================
+#  PREDICTION HISTORY SYSTEM
+# ============================================================================
 
 class PredictionListView(APIView):
     """
@@ -1314,7 +1249,7 @@ class PredictionListView(APIView):
     Returns paginated predictions with accuracy and SHAP data.
     """
     permission_classes = [AllowAny]
-    
+
     def get(self, request):
         import dateutil.parser
 
@@ -1324,9 +1259,9 @@ class PredictionListView(APIView):
         outcome = request.query_params.get('outcome')  # 'correct', 'incorrect'
         limit = int(request.query_params.get('limit', 50))
         offset = int(request.query_params.get('offset', 0))
-        
+
         qs = Prediction.objects.all().order_by('-date')
-        
+
         if symbol:
             qs = qs.filter(stock_symbol=symbol.upper())
 
@@ -1336,24 +1271,22 @@ class PredictionListView(APIView):
                 qs = qs.filter(date__gte=parsed_date.date())
             except (ValueError, TypeError, OverflowError) as e:
                 logger.warning(f"Failed to parse date_from: {date_from} - {e}")
-        
+
         if date_to and date_to not in ['null', 'undefined', '']:
             try:
                 parsed_date = dateutil.parser.parse(date_to)
                 qs = qs.filter(date__lte=parsed_date.date())
             except (ValueError, TypeError, OverflowError) as e:
                 logger.warning(f"Failed to parse date_to: {date_to} - {e}")
-        
-        # Filter by outcome
+
         if outcome == 'correct':
             qs = qs.filter(is_correct=True)
         elif outcome == 'incorrect':
-            qs = qs.filter(is_correct=False)    
-        
+            qs = qs.filter(is_correct=False)
+
         total = qs.count()
         qs = qs[offset:offset+limit]
-        
-        # Use PredictionDetailSerializer for full data
+
         serializer = PredictionDetailSerializer(qs, many=True)
         return Response({
             'total': total,
@@ -1369,11 +1302,11 @@ class PerformanceSummaryView(APIView):
     Returns accuracy, precision, recall, F1, and per-symbol breakdown.
     """
     permission_classes = [AllowAny]
-    
+
     def get(self, request):
         symbol = request.query_params.get('symbol')
         days = int(request.query_params.get('days', 30))
-        
+
         start_date = timezone.now() - timedelta(days=days)
         qs = Prediction.objects.filter(
             resolution_date__gte=start_date,
@@ -1381,29 +1314,24 @@ class PerformanceSummaryView(APIView):
         )
         if symbol:
             qs = qs.filter(stock_symbol=symbol.upper())
-        
+
         metrics = calculate_performance_metrics(qs)
-        
-        # Per-symbol breakdown
+
         symbols = qs.values_list('stock_symbol', flat=True).distinct()
         symbol_metrics = {}
         for sym in symbols:
             sym_qs = qs.filter(stock_symbol=sym)
             symbol_metrics[sym] = calculate_performance_metrics(sym_qs)
-        
-        # Total counts
+
         total_preds = qs.count()
         correct_preds = qs.filter(is_correct=True).count()
-        
-        # ✅ ADD THIS - Get resolved predictions count
         resolved_qs = qs.filter(is_correct__isnull=False)
         total_resolved = resolved_qs.count()
 
-        # Recent accuracy (last 7 days)
-        recent_start = datetime.now() - timedelta(days=7)
+        recent_start = timezone.now() - timedelta(days=7)
         recent_qs = qs.filter(resolution_date__gte=recent_start)
         recent_metrics = calculate_performance_metrics(recent_qs)
-        
+
         return Response({
             'total_predictions': total_preds,
             'resolved_predictions': total_resolved,
@@ -1419,16 +1347,16 @@ class DriftDetectionView(APIView):
     Detect model drift by comparing recent vs baseline performance.
     """
     permission_classes = [AllowAny]
-    
+
     def get(self, request):
         recent_days = int(request.query_params.get('recent_days', 30))
         baseline_days = int(request.query_params.get('baseline_days', 90))
-        
+
         result = detect_drift(
             recent_period_days=recent_days,
             baseline_period_days=baseline_days
         )
-        
+
         return Response(result)
 
 
@@ -1437,7 +1365,7 @@ class SHAPExplanationView(APIView):
     Get SHAP explanation for a specific prediction.
     """
     permission_classes = [AllowAny]
-    
+
     def get(self, request, prediction_id):
         try:
             pred = Prediction.objects.get(id=prediction_id)
@@ -1457,9 +1385,12 @@ class SHAPExplanationView(APIView):
                 {'error': 'Prediction not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
 
-# stocks/views.py (add this near the bottom)
+
+# ============================================================================
+#  CRON ENDPOINT
+# ============================================================================
+
 import os
 from django.http import JsonResponse
 from django.core.management import call_command
@@ -1467,35 +1398,31 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny
-import logging
 
 logger = logging.getLogger(__name__)
+
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 @api_view(['GET', 'POST'])
-@authentication_classes([])   # No DRF authentication – we use our own secret token
+@authentication_classes([])
 @permission_classes([AllowAny])
 def cron_resolve_predictions(request):
     """
     Endpoint for cron-job.org to trigger prediction resolution.
     Protected by a secret token passed as 'secret' query parameter.
     """
-    # Get the secret from request (query string or POST body)
     secret = request.query_params.get('secret') or request.data.get('secret')
     expected_secret = os.environ.get('CRON_SECRET')
-    
-    # If CRON_SECRET is not set, reject all requests (fail-safe)
+
     if not expected_secret:
         logger.error("CRON_SECRET environment variable not set – cron endpoint disabled")
         return JsonResponse({'error': 'Cron endpoint not configured'}, status=500)
-    
-    # Validate the token
+
     if secret != expected_secret:
         logger.warning(f"Cron trigger rejected – invalid secret from {request.META.get('REMOTE_ADDR')}")
         return JsonResponse({'error': 'Unauthorized'}, status=403)
-    
-    # Run the management command
+
     try:
         call_command('resolve_predictions', days=7)
         logger.info("Cron trigger: resolve_predictions completed successfully")

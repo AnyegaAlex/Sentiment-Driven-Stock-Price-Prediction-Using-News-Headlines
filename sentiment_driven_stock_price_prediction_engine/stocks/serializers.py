@@ -13,18 +13,12 @@ class PredictionSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['id', 'created_at']
 
-class SubscriptionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Subscription
-        fields = ['email']
-        extra_kwargs = {
-            'email': {'required': True, 'allow_blank': False}
-        }
+class SubscriptionSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
 
     def validate_email(self, value):
         # Basic email format validation (Django's EmailField already does this)
         return value
-
 
 # ============================================================
 # – API RESPONSE SERIALIZERS

@@ -1,3 +1,66 @@
-.venv
-__pycache__
-*.pyc
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Logs and data
+logs/
+*.log
+media/
+staticfiles/
+db.sqlite3
+*.db
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Deployment
+Dockerfile
+.dockerignore
+docker-compose*.yml
+*.sh
+*.conf
+
+# Node (if used)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Misc
+*.tmp
+*.bak
