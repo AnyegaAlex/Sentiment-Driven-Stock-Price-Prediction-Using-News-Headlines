@@ -5,11 +5,8 @@ services:
     plan: free
     dockerfilePath: Dockerfile
     envVars:
-      # Database
       - key: DATABASE_URL
-        fromDatabase:
-          name: tradingdb
-          property: connectionString
+        sync: false   # set manually in dashboard (Neon)
 
       # Redis (optional – fallback to LocMem)
       - key: REDIS_URL
