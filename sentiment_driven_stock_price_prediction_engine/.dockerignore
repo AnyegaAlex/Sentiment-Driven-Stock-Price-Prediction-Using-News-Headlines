@@ -48,6 +48,8 @@ Dockerfile
 .dockerignore
 docker-compose*.yml
 *.sh
+# Keep entrypoint.sh
+!entrypoint.sh
 *.conf
 
 # Node (if used)
