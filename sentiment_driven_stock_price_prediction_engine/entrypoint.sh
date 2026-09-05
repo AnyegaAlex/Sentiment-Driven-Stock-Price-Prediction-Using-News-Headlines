@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# Performance environment variables (must be set early)
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export TRANSFORMERS_CACHE=/app/.cache/huggingface
+
+
 # ============================================================
 # Configuration
 # ============================================================
@@ -10,8 +16,8 @@ LOG_DIR="/app/logs"
 STATIC_DIR="/app/staticfiles"
 MEDIA_DIR="/app/media"
 GUNICORN_WORKERS="${GUNICORN_WORKERS:-1}"
-GUNICORN_THREADS="${GUNICORN_THREADS:-2}"
-GUNICORN_TIMEOUT="${GUNICORN_TIMEOUT:-90}"
+GUNICORN_THREADS="${GUNICORN_THREADS:-1}"
+GUNICORN_TIMEOUT="${GUNICORN_TIMEOUT:-300}"
 PORT="${PORT:-10000}"
 
 # ============================================================
@@ -48,7 +54,12 @@ fi
 # Run migrations and collect static files
 # ============================================================
 echo "Running migrations..."
-python manage.py migrate --noinput
+# Timeout to prevent hang; retry once if it times out
+if ! timeout 120 python manage.py migrate --noinput; then
+    echo "Migration timed out. Retrying after 10s..."
+    sleep 10
+    timeout 120 python manage.py migrate --noinput || echo "Migration failed – check logs."
+fi
 
 echo "Collecting static files..."
 python manage.py collectstatic --noinput || echo "Static files collection skipped"

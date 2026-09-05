@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
+import torch
+torch.set_num_threads(1)                # Limit CPU threads
+torch.set_num_interop_threads(1)        # Limit inter‑op threads
+torch.backends.cudnn.enabled = False    # Disable cuDNN (saves memory)
 import os
 import sys
 
