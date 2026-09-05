@@ -12,6 +12,7 @@ from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
+from rest_framework import serializers 
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,8 @@ class HealthCheckView(APIView):
     - Response time
     """
     permission_classes = [AllowAny]
-    
+    serializer_class = serializers.Serializer  
+
     def get(self, request):
         start_time = time.time()
         status = 'healthy'
@@ -148,7 +150,8 @@ class ReadinessView(APIView):
     Checks only critical dependencies (database, redis).
     """
     permission_classes = [AllowAny]
-    
+    serializer_class = serializers.Serializer  
+
     def get(self, request):
         ready = True
         issues = []

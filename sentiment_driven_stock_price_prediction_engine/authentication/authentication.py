@@ -25,6 +25,12 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 from .models import UserAPIKey
 
+# drf-spectacular extension
+try:
+    from drf_spectacular.extensions import OpenApiAuthenticationExtension
+except ImportError:
+    OpenApiAuthenticationExtension = None  # graceful fallback if drf-spectacular not installed
+
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
@@ -375,3 +381,23 @@ class CombinedAuthentication(authentication.BaseAuthentication):
     def authenticate_header(self, request):
         """Return the WWW-Authenticate header value."""
         return 'Bearer realm="api", X-API-Key'
+    
+# ============================================================================
+# DRF-SPECTACULAR OPENAPI AUTH EXTENSION
+# ============================================================================
+
+if OpenApiAuthenticationExtension is not None:
+    class APIKeyAuthenticationScheme(OpenApiAuthenticationExtension):
+        """
+        OpenAPI schema extension for APIKeyAuthentication.
+        """
+        target_class = 'authentication.authentication.APIKeyAuthentication'
+        name = 'APIKeyAuth'
+
+        def get_security_definition(self, auto_schema):
+            return {
+                'type': 'apiKey',
+                'in': 'header',
+                'name': 'X-API-Key',
+                'description': 'API key authentication',
+            }

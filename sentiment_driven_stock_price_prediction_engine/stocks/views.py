@@ -416,6 +416,7 @@ class StockOpinionView(APIView):
     Legacy endpoint – kept for backward compatibility.
     Generates a detailed investment analysis.
     """
+    serializer_class = StockOpinionSerializer  
     @extend_schema(
         summary="Generate AI stock opinion (legacy)",
         description="Returns a full investment thesis including recommendation, key points, and risk assessment.",
@@ -515,6 +516,7 @@ class PredictionHistoryView(APIView):
     """
     Paginated prediction history with Redis caching.
     """
+    serializer_class = PredictionSerializer  
     @extend_schema(
         summary="Get prediction history",
         description="Returns a paginated list of past predictions. Filter by symbol and control pagination.",
@@ -613,6 +615,7 @@ class StockAnalysisView(APIView):
     Unified endpoint for the dashboard.
     Combines sentiment, technicals, price targets, and (optionally) LSTM.
     """
+    serializer_class = StockAnalysisResponseSerializer  
     permission_classes = [AllowAny]
 
     @extend_schema(
@@ -803,6 +806,7 @@ class TechnicalIndicatorsView(APIView):
     Returns pure technical indicators (SMA, RSI, support, resistance, etc.).
     Uses yfinance for real data, with fallback to static data.
     """
+    serializer_class = TechnicalIndicatorsResponseSerializer  
     permission_classes = [AllowAny]
 
     @extend_schema(
@@ -931,6 +935,7 @@ class SymbolsListView(APIView):
     """
     List available stock symbols with company names and regions.
     """
+    serializer_class = SymbolSerializer  
     permission_classes = [AllowAny]
 
     @extend_schema(
@@ -977,6 +982,7 @@ class SubscribeView(APIView):
     """
     Email subscription for alerts.
     """
+    serializer_class = SubscriptionSerializer  
     permission_classes = [AllowAny]
 
     @extend_schema(
@@ -1026,6 +1032,7 @@ class LSTMPredictionView(APIView):
     LSTM‑based prediction endpoint.
     Accepts symbol and optional news text, returns directional prediction with confidence.
     """
+    serializer_class = LSTMPredictionResponseSerializer  
     permission_classes = [AllowAny]
 
     @extend_schema(
@@ -1124,6 +1131,7 @@ class SentimentAnalysisView(APIView):
     Dedicated sentiment analysis endpoint.
     Returns sentiment metrics for a given symbol based on recent news.
     """
+    serializer_class = serializers.Serializer  
     permission_classes = [AllowAny]
 
     @extend_schema(
@@ -1248,6 +1256,7 @@ class PredictionListView(APIView):
     List predictions with filters.
     Returns paginated predictions with accuracy and SHAP data.
     """
+    serializer_class = PredictionDetailSerializer  
     permission_classes = [AllowAny]
 
     def get(self, request):
@@ -1301,6 +1310,7 @@ class PerformanceSummaryView(APIView):
     Get overall performance metrics.
     Returns accuracy, precision, recall, F1, and per-symbol breakdown.
     """
+    serializer_class = serializers.Serializer  
     permission_classes = [AllowAny]
 
     def get(self, request):
@@ -1346,6 +1356,7 @@ class DriftDetectionView(APIView):
     """
     Detect model drift by comparing recent vs baseline performance.
     """
+    serializer_class = serializers.Serializer  
     permission_classes = [AllowAny]
 
     def get(self, request):
@@ -1364,6 +1375,7 @@ class SHAPExplanationView(APIView):
     """
     Get SHAP explanation for a specific prediction.
     """
+    serializer_class = serializers.Serializer  
     permission_classes = [AllowAny]
 
     def get(self, request, prediction_id):

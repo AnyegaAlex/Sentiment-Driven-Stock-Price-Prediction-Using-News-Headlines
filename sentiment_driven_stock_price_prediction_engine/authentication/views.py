@@ -140,6 +140,7 @@ class LoginView(APIView):
     """
     permission_classes = [permissions.AllowAny]
     throttle_classes = [AnonRateThrottle]
+    serializer_class = LoginSerializer  # Added
 
     def post(self, request):
         start_time = time.time()
@@ -300,6 +301,7 @@ class VerifyEmailView(APIView):
     """
     permission_classes = [permissions.AllowAny]
     throttle_classes = [AnonRateThrottle]
+    serializer_class = serializers.Serializer  # Added fallback
 
     def get(self, request):
         """Verify email using the token from the verification link."""
@@ -473,6 +475,7 @@ class ResendVerificationView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
     throttle_classes = [UserRateThrottle]
+    serializer_class = serializers.Serializer  # Added
 
     def post(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
@@ -580,6 +583,7 @@ class PasswordResetRequestView(APIView):
     """
     permission_classes = [permissions.AllowAny]
     throttle_classes = [AnonRateThrottle]
+    serializer_class = PasswordResetRequestSerializer  # Added
 
     def post(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
@@ -639,6 +643,7 @@ class PasswordResetConfirmView(APIView):
     """
     permission_classes = [permissions.AllowAny]
     throttle_classes = [AnonRateThrottle]
+    serializer_class = PasswordResetConfirmSerializer  # Added
 
     def post(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
@@ -828,6 +833,7 @@ class ChangePasswordView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
     throttle_classes = [UserRateThrottle]
+    serializer_class = ChangePasswordSerializer  # Added
 
     def post(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
@@ -907,6 +913,7 @@ class ChangeEmailView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
     throttle_classes = [UserRateThrottle]
+    serializer_class = ChangeEmailSerializer  # Added
 
     def post(self, request):
         """Request email change: send code to new email."""
@@ -1104,6 +1111,7 @@ class ChangeUsernameView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
     throttle_classes = [UserRateThrottle]
+    serializer_class = ChangeUsernameSerializer  # Added
 
     def post(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
@@ -1211,6 +1219,7 @@ class APIKeyListView(APIView):
     Rate Limited: 10/minute per user for POST
     """
     permission_classes = [IsAuthenticated]
+    serializer_class = UserAPIKeySerializer  # Added
 
     def get(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
@@ -1338,6 +1347,7 @@ class APIKeyRevokeView(APIView):
     """
     permission_classes = [IsAuthenticated]
     throttle_classes = [UserRateThrottle]
+    serializer_class = UserAPIKeySerializer  # Added
 
     def delete(self, request, pk):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
@@ -1401,6 +1411,7 @@ class UsageStatsView(APIView):
     Aggregates counts from cache across all active API keys of the user.
     """
     permission_classes = [IsAuthenticated]
+    serializer_class = serializers.Serializer  # Added
 
     def get(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
@@ -1442,6 +1453,7 @@ class TopSymbolsView(APIView):
     Returns top 5 most frequently analyzed symbols for the authenticated user.
     """
     permission_classes = [IsAuthenticated]
+    serializer_class = serializers.Serializer  # Added
 
     def get(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
@@ -1473,6 +1485,7 @@ class ActivityLogView(APIView):
     Supports pagination via limit and offset query parameters.
     """
     permission_classes = [IsAuthenticated]
+    serializer_class = serializers.Serializer  # Added
 
     def get(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
@@ -1525,6 +1538,7 @@ class UserPreferencesView(APIView):
     PATCH – updates preferences (partial update allowed).
     """
     permission_classes = [IsAuthenticated]
+    serializer_class = UserPreferencesSerializer  # Added
 
     def get(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
@@ -1590,6 +1604,7 @@ class UserWatchlistView(APIView):
     DELETE /<symbol>/ – removes a symbol from the watchlist.
     """
     permission_classes = [IsAuthenticated]
+    serializer_class = serializers.Serializer  # Added
 
     def get(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
@@ -1751,6 +1766,7 @@ class DeleteAccountView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
     throttle_classes = [UserRateThrottle]
+    serializer_class = serializers.Serializer  # Added
 
     def post(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
@@ -1852,6 +1868,7 @@ class CancelDeletionView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
     throttle_classes = [UserRateThrottle]
+    serializer_class = serializers.Serializer  # Added
 
     def post(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
