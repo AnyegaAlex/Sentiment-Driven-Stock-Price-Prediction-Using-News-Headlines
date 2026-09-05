@@ -151,10 +151,9 @@ DATABASES = {
     'default': dj_database_url.config(
         default=default_db,
         conn_max_age=0,
-        ssl_require=True,          # force SSL for PostgreSQL
-        engine='django.db.backends.postgresql'
     )
 }
+
 # Add health checks and connection timeout for PostgreSQL
 if DATABASES['default']['ENGINE'] == 'django.db.backends.postgresql':
     DATABASES['default']['OPTIONS'] = {
