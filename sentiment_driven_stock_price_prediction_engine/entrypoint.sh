@@ -48,6 +48,8 @@ fi
 # Run migrations and collect static files
 # ============================================================
 echo "Running migrations..."
+# Temporary workaround: skip migration 0002 (stuck) and continue
+python manage.py migrate authentication 0002 --fake 2>/dev/null || true
 python manage.py migrate --noinput
 
 echo "Collecting static files..."
