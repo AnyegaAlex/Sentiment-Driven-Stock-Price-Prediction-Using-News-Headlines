@@ -16,5 +16,10 @@ This link and code will expire in {{ expires_hours }} hours.
 
 If you did not create an account, you can safely ignore this email.
 
+If you have any questions, contact us at {{ contact_email }}.
+
 ========================================
 (c) {{ year }} Tickflow Capital. All rights reserved.
+For privacy and terms, visit:
+{{ frontend_url }}/privacy
+{{ frontend_url }}/terms

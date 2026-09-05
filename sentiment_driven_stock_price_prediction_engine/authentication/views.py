@@ -24,6 +24,7 @@ from django.contrib.auth import authenticate
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from rest_framework.exceptions import ParseError
 from rest_framework import status, generics, permissions, serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -92,22 +93,11 @@ class RegisterView(generics.CreateAPIView):
 
     def perform_create(self, serializer):
         try:
+            user = None
             with transaction.atomic():
                 user = serializer.save()
-                
-                # Create user preferences
                 UserPreferences.objects.get_or_create(user=user)
-                
-                # Queue verification email
-                email_sent = send_verification_email(user, self.request)
-                
-                # Track if email was sent
-                if email_sent:
-                    cache.set(f"verification_sent_{user.id}", True, timeout=60)
-                else:
-                    cache.set(f"email_failed_{user.id}", True, timeout=300)
-                
-                # Audit log
+                # Audit log (does not depend on email)
                 request_context = get_request_context(self.request)
                 AuditLog.objects.create(
                     user=user,
@@ -115,23 +105,27 @@ class RegisterView(generics.CreateAPIView):
                     details={
                         'ip': request_context['ip'],
                         'user_agent': request_context['user_agent'],
-                        'email_sent': email_sent,
                     }
                 )
-                
                 logger.info(f"New user registered: {user.email} (ID: {user.id})")
-                return user
-                
+            # Send email OUTSIDE the transaction
+            if user:
+                try:
+                    email_sent = send_verification_email(user, self.request)
+                    if email_sent:
+                        cache.set(f"verification_sent_{user.id}", True, timeout=60)
+                    else:
+                        cache.set(f"email_failed_{user.id}", True, timeout=300)
+                except Exception as e:
+                    logger.error(f"Verification email failed for user {user.id}: {e}")
+                    cache.set(f"email_failed_{user.id}", True, timeout=300)
+            return user
         except IntegrityError as e:
             logger.error(f"Registration integrity error: {e}")
-            raise serializers.ValidationError({
-                'email': 'This email is already registered.'
-            })
+            raise serializers.ValidationError({'email': 'This email is already registered.'})
         except Exception as e:
             logger.error(f"Registration error: {e}", exc_info=True)
-            raise serializers.ValidationError({
-                'error': 'Unable to create account. Please try again.'
-            })
+            raise serializers.ValidationError({'error': 'Unable to create account. Please try again.'})
 
 
 class LoginView(APIView):
@@ -243,7 +237,7 @@ class LoginView(APIView):
             )
             
             # ============================================================
-            # ✅ SECURITY ALERT – SENT ASYNCHRONOUSLY
+            #  SECURITY ALERT – SENT ASYNCHRONOUSLY
             # ============================================================
             # Fire security alert email in background thread
             # This prevents login delay (saves ~500ms-2s)
@@ -267,6 +261,19 @@ class LoginView(APIView):
                     message='Login successful'
                 ),
                 status=status.HTTP_200_OK
+            )
+        
+        except ParseError as e:
+            # Handle malformed JSON
+            logger.warning(f"JSON parse error during login: {e}")
+            return Response(
+                error_response(
+                    message='Invalid JSON payload. Please check your request format.',
+                    code='JSON_PARSE_ERROR',
+                    request_id=request_id,
+                    status_code=400
+                ),
+                status=status.HTTP_400_BAD_REQUEST
             )
             
         except Exception as e:
@@ -848,7 +855,7 @@ class ChangePasswordView(APIView):
             request_context = get_request_context(request)
             
             # ============================================================
-            # ✅ SECURITY ALERT – SENT ASYNCHRONOUSLY
+            #  SECURITY ALERT – SENT ASYNCHRONOUSLY
             # ============================================================
             # Fire security alert email in background thread
             # This prevents blocking the response (saves ~500ms-2s)
@@ -1106,7 +1113,7 @@ class ChangeUsernameView(APIView):
             serializer.is_valid(raise_exception=True)
             
             user = request.user
-            new_username = serializer.validated_data['username']
+            new_username = serializer.validated_data['new_username']
             password = serializer.validated_data['password']
             
             if not user.check_password(password):
@@ -1292,7 +1299,7 @@ class APIKeyListView(APIView):
                 )
             
             # ============================================================
-            # ✅ THE TRANSACTION IS COMMITTED HERE
+            #  THE TRANSACTION IS COMMITTED HERE
             # ============================================================
             
             logger.info(f"API key created for user {request.user.id}: {name}")

@@ -3,10 +3,19 @@ Custom middleware for authentication, rate limiting, logging, and deprecation.
 
 Includes:
 - APIKeyMiddleware: Enforces API key for unauthenticated requests; skips check for authenticated JWT users.
+  Uses direct hashed-key database lookup (O(1)) for performance.
 - DeprecationMiddleware: Adds deprecation headers to legacy endpoints.
 - RateLimitHeadersMiddleware: Informs clients about rate limit usage.
 - RequestLoggingMiddleware: Logs all requests with timing and request ID.
+
+Performance optimised:
+- API key validation uses hashed-key lookup with caching.
+- `last_used` updates are batched via cache and flushed on request end.
+
+Author: Tickflow Capital
+Version: 1.1.0
 """
+
 import time
 import uuid
 import hashlib
@@ -36,11 +45,11 @@ PUBLIC_PATHS = [
     '/health/',
     '/api/v1/health/',
     '/sentry-debug/',
-    
+
     # API Documentation
     '/api/docs/',
     '/api/schema/',
-    
+
     # Authentication (Public)
     '/api/v1/auth/register/',
     '/api/v1/auth/login/',
@@ -49,10 +58,10 @@ PUBLIC_PATHS = [
     '/api/v1/auth/password-reset/',
     '/api/v1/auth/password-reset/confirm/',
     '/api/v1/auth/refresh/',
-    
+
     # Newsletter (Optional – can be public)
     '/api/v1/subscribe/',
-    
+
     # Stock Analysis (Public – No Auth Required)
     '/api/v1/stock-analysis/',
     '/api/v1/technical-indicators/',
@@ -60,6 +69,8 @@ PUBLIC_PATHS = [
     '/api/v1/lstm-predict/',
     '/api/v1/symbols/',
 
+    # NOTE: '/stocks/cron/' is internal – if it's meant for cron jobs, it should be protected.
+    # Consider removing it from public paths or adding IP whitelist.
     '/stocks/cron/',
 ]
 
@@ -79,30 +90,30 @@ class APIKeyMiddleware:
     Enforces API key authentication for all non-exempt endpoints,
     but skips the check if the user is already authenticated via JWT.
 
-    Performance optimized: Uses hashed key lookup instead of iterating all keys.
+    Performance: Uses direct hashed-key lookup (O(1)) and caches results.
     """
-    
+
     def __init__(self, get_response):
         self.get_response = get_response
         self.jwt_auth = JWTAuthentication()
 
     def __call__(self, request):
-        # ✅ FIRST: Try JWT authentication for ALL requests
+        # 1. Try JWT authentication for ALL requests
         try:
             auth_result = self.jwt_auth.authenticate(request)
             if auth_result:
-                user, token = auth_result
+                user, _ = auth_result
                 request.user = user
                 return self.get_response(request)
         except (InvalidToken, TokenError, Exception):
             # JWT failed – continue to public paths check
             pass
 
-        # ⚠️ SECOND: Only skip for public paths if JWT failed
-        if any(request.path.startswith(path) for path in PUBLIC_PATHS):
+        # 2. Skip public paths if JWT failed
+        if self._is_public_path(request.path):
             return self.get_response(request)
 
-        # THIRD: Check API key (X-API-Key header)
+        # 3. Check API key (X-API-Key header)
         api_key = request.headers.get('X-API-Key')
         if not api_key:
             return JsonResponse(
@@ -114,32 +125,9 @@ class APIKeyMiddleware:
                 status=401
             )
 
-        # FOURTH: Validate API key
-        try:
-            # Hash the incoming key
-            from django.contrib.auth.hashers import check_password
-            user_key = None
-            
-            # Check all active keys
-            user_keys = UserAPIKey.objects.filter(is_active=True).select_related('user')
-            
-            for key in user_keys:
-                if key.validate_key(api_key):
-                    user_key = key
-                    break
-            
-            if user_key:
-                # Update last_used asynchronously
-                self._update_last_used(user_key)
-                
-                # Set user and key on request
-                request.user = user_key.user
-                request.api_key_obj = user_key
-                request.api_key = api_key
-                
-                return self.get_response(request)
-            
-            # No valid key found
+        # 4. Validate API key using O(1) hashed lookup
+        key_obj = self._validate_api_key(api_key)
+        if not key_obj:
             logger.warning(f"Invalid API key attempt: {api_key[:8]}...")
             return JsonResponse(
                 error_response(
@@ -149,32 +137,90 @@ class APIKeyMiddleware:
                 ),
                 status=401
             )
-            
-        except Exception as e:
-            logger.error(f"API key validation error: {e}", exc_info=True)
-            return JsonResponse(
-                error_response(
-                    message='Authentication error. Please try again.',
-                    code='AUTH_SERVER_ERROR',
-                    status_code=500
-                ),
-                status=500
-            )
 
-    def _hash_key(self, raw_key: str) -> str:
-        """Hash the API key for lookup."""
-        return hashlib.sha256(raw_key.encode()).hexdigest()
+        # 5. Update last_used (cached, flushed on response)
+        self._update_last_used_async(key_obj)
 
-    def _update_last_used(self, key_obj):
-        """Update last_used timestamp (async via cache to avoid blocking)."""
+        # 6. Set user and key on request
+        request.user = key_obj.user
+        request.api_key_obj = key_obj
+        request.api_key = api_key
+
+        # 7. Process request
+        response = self.get_response(request)
+
+        # 8. Flush any pending usage updates
+        self._flush_usage_updates(key_obj)
+
+        return response
+
+    def _is_public_path(self, path):
+        """Check if the path is in the public whitelist."""
+        return any(path.startswith(p) for p in PUBLIC_PATHS)
+
+    def _validate_api_key(self, raw_key):
+        """
+        Validate API key using direct hashed-key database lookup.
+
+        Returns:
+            UserAPIKey object or None if invalid.
+        """
+        raw_key = raw_key.strip()
+        # Compute hash (must match model's hashing method)
+        hashed = hashlib.sha256(raw_key.encode()).hexdigest()
+
+        # Check cache first
+        cache_key = f"api_key_lookup_{hashed}"
+        cached_key_id = cache.get(cache_key)
+
+        if cached_key_id:
+            try:
+                return UserAPIKey.objects.select_related('user').get(
+                    id=cached_key_id,
+                    is_active=True
+                )
+            except UserAPIKey.DoesNotExist:
+                cache.delete(cache_key)
+                return None
+
+        # Direct DB query
         try:
-            # Store in cache for batch update
-            cache_key = f"api_key_last_used_{key_obj.id}"
-            cache.set(cache_key, timezone.now(), timeout=60)
-            
-            # We could also use a background thread, but cache is simpler
+            key_obj = UserAPIKey.objects.select_related('user').get(
+                hashed_key=hashed,
+                is_active=True
+            )
+            # Cache positive result for 5 minutes
+            cache.set(cache_key, key_obj.id, timeout=300)
+            return key_obj
+        except UserAPIKey.DoesNotExist:
+            # Negative caching not needed due to rate limiting
+            return None
+
+    def _update_last_used_async(self, key_obj):
+        """Store last_used update in cache to be flushed later."""
+        # Store in a per-request cache (will be flushed in _flush_usage_updates)
+        update_key = f"pending_last_used_{key_obj.id}"
+        cache.set(update_key, timezone.now(), timeout=60)
+
+    def _flush_usage_updates(self, key_obj):
+        """Flush pending last_used updates to the database."""
+        try:
+            update_key = f"pending_last_used_{key_obj.id}"
+            timestamp = cache.get(update_key)
+            if timestamp:
+                # Update database only if it's been more than 5 minutes since last update
+                last_update_key = f"last_used_update_time_{key_obj.id}"
+                last_update = cache.get(last_update_key)
+                now = timezone.now()
+
+                if not last_update or (now - last_update).total_seconds() > 300:
+                    UserAPIKey.objects.filter(pk=key_obj.pk).update(last_used=timestamp)
+                    cache.set(last_update_key, now, timeout=300)
+
+                # Clear the pending update
+                cache.delete(update_key)
         except Exception as e:
-            logger.warning(f"Could not update last_used: {e}")
+            logger.warning(f"Could not flush last_used update: {e}")
 
 
 # ============================================================================
@@ -183,22 +229,19 @@ class APIKeyMiddleware:
 
 class DeprecationMiddleware:
     """Adds deprecation headers to legacy endpoints."""
-    
+
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
         response = self.get_response(request)
-        
-        # Check if path is deprecated
+
         if any(request.path.startswith(path) for path in DEPRECATED_PATHS):
             response['Deprecation'] = 'true'
             response['Sunset'] = 'Fri, 31 Dec 2027 23:59:59 GMT'
             response['Link'] = '</api/v1/stock-analysis/>; rel="successor-version"'
-            
-            # Add warning header
             response['Warning'] = '299 - "This endpoint is deprecated. Please use /api/v1/stock-analysis/ instead."'
-        
+
         return response
 
 
@@ -211,60 +254,49 @@ class RateLimitHeadersMiddleware:
     Add rate limit headers to all responses.
     Informs clients about their current rate limit usage.
     """
-    
+
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
         response = self.get_response(request)
 
-        # Add rate limit headers if API key is present
+        # API key based rate limit
         if hasattr(request, 'api_key_obj') and request.api_key_obj:
             try:
-                # Get rate limit from settings or use default
-                throttle_classes = api_settings.DEFAULT_THROTTLE_CLASSES
-                
-                # Get rate from settings
                 rates = api_settings.DEFAULT_THROTTLE_RATES
                 limit = int(rates.get('apikey', '200').split('/')[0])
-                
-                # Get current usage from cache
                 cache_key = f"rate_limit_{request.api_key_obj.id}"
-                usage = cache.get(cache_key, {'count': 0, 'reset_at': None})
-                
+                usage = cache.get(cache_key, {'count': 0, 'reset_at': 0})
                 remaining = max(0, limit - usage.get('count', 0))
-                reset_at = usage.get('reset_at', 0)
-                
+                reset_at = usage.get('reset_at', int(time.time() + 60))
+
                 response['X-RateLimit-Limit'] = str(limit)
                 response['X-RateLimit-Remaining'] = str(remaining)
-                
-                if reset_at:
-                    response['X-RateLimit-Reset'] = str(int(reset_at))
-                else:
-                    response['X-RateLimit-Reset'] = str(int(time.time() + 60))
-                
-                # Add Retry-After if rate limited
-                if remaining == 0:
-                    retry_after = max(0, int(reset_at - time.time()))
-                    response['Retry-After'] = str(retry_after)
-                    
-            except Exception as e:
-                logger.warning(f"Could not add rate limit headers: {e}")
+                response['X-RateLimit-Reset'] = str(reset_at)
 
-        # Also add rate limit headers for anonymous users (IP-based)
+                if remaining == 0:
+                    retry_after = max(0, reset_at - int(time.time()))
+                    response['Retry-After'] = str(retry_after)
+
+            except Exception as e:
+                logger.warning(f"Could not add API key rate limit headers: {e}")
+
+        # Anonymous user (IP-based) rate limit
         elif not request.user.is_authenticated:
             try:
                 ip = request.META.get('REMOTE_ADDR', 'Unknown')
                 rates = api_settings.DEFAULT_THROTTLE_RATES
                 limit = int(rates.get('anon', '100').split('/')[0])
-                
                 cache_key = f"rate_limit_anon_{ip}"
-                usage = cache.get(cache_key, {'count': 0, 'reset_at': None})
-                
+                usage = cache.get(cache_key, {'count': 0, 'reset_at': 0})
                 remaining = max(0, limit - usage.get('count', 0))
+                reset_at = usage.get('reset_at', int(time.time() + 3600))
+
                 response['X-RateLimit-Limit'] = str(limit)
                 response['X-RateLimit-Remaining'] = str(remaining)
-                
+                response['X-RateLimit-Reset'] = str(reset_at)
+
             except Exception as e:
                 logger.warning(f"Could not add anonymous rate limit headers: {e}")
 
@@ -281,28 +313,25 @@ class RequestLoggingMiddleware:
     - Request timing
     - Request IDs
     - User information (if available)
-    - API key usage (last_used)
-    - Symbol tracking (for analytics)
+    - API key usage (last_used – already handled by APIKeyMiddleware)
+    - Symbol usage (for analytics)
     """
-    
+
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        self.process_request(request)
+        self._process_request(request)
         response = self.get_response(request)
-        self.process_response(request, response)
+        self._process_response(request, response)
         return response
 
-    def process_request(self, request):
+    def _process_request(self, request):
         """Generate request ID and store start time."""
-        # Generate request ID
         request_id = request.headers.get('X-Request-ID', str(uuid.uuid4()))
         request.request_id = request_id
-        
-        # Store start time for duration calculation
         request._start_time = time.time()
-        
+
         # Build log context
         request.log_extra = {
             'request_id': request_id,
@@ -311,18 +340,16 @@ class RequestLoggingMiddleware:
             'ip': request.META.get('REMOTE_ADDR', 'Unknown'),
             'user_agent': request.META.get('HTTP_USER_AGENT', 'Unknown'),
         }
-        
-        # Add user info if available
+
         if hasattr(request, 'user') and request.user and request.user.is_authenticated:
             request.log_extra['user_id'] = request.user.id
-            request.log_extra['username'] = request.user.username
-        
-        # Add API key info if available
+            request.log_extra['username'] = getattr(request.user, 'username', 'Unknown')
+
         if hasattr(request, 'api_key_obj') and request.api_key_obj:
             request.log_extra['api_key_id'] = request.api_key_obj.id
             request.log_extra['api_key_name'] = request.api_key_obj.name
 
-    def process_response(self, request, response):
+    def _process_response(self, request, response):
         """Log request completion and track usage."""
         # ---- 1. Logging ----
         duration = time.time() - getattr(request, '_start_time', time.time())
@@ -334,20 +361,16 @@ class RequestLoggingMiddleware:
             'request_id': getattr(request, 'request_id', None),
             'ip': request.META.get('REMOTE_ADDR', 'Unknown'),
         }
-        
-        # Add user info if available
+
         user = getattr(request, 'user', None)
         if user and hasattr(user, 'is_authenticated') and user.is_authenticated:
-            if hasattr(user, 'id'):
-                log_data['user_id'] = user.id
-                log_data['username'] = getattr(user, 'username', 'Unknown')
-        
-        # Add API key info if available
+            log_data['user_id'] = getattr(user, 'id', None)
+            log_data['username'] = getattr(user, 'username', 'Unknown')
+
         if hasattr(request, 'api_key_obj') and request.api_key_obj:
             log_data['api_key_id'] = request.api_key_obj.id
             log_data['api_key_name'] = request.api_key_obj.name
 
-        # Log based on status code
         if response.status_code >= 500:
             logger.error(f"Request failed: {log_data}")
         elif response.status_code >= 400:
@@ -359,44 +382,21 @@ class RequestLoggingMiddleware:
         if hasattr(request, 'request_id'):
             response['X-Request-ID'] = request.request_id
 
-        # ---- 2. API Key Usage Tracking ----
-        if hasattr(request, 'api_key_obj') and request.api_key_obj:
-            self._track_api_key_usage(request.api_key_obj)
-
-        # ---- 3. Symbol Tracking (for analytics) ----
+        # ---- 2. Symbol Tracking (for analytics) ----
         if 'symbol' in request.GET:
             self._track_symbol_usage(request, request.GET['symbol'])
 
         return response
 
-    def _track_api_key_usage(self, api_key_obj):
-        """Track API key usage in database and cache."""
-        try:
-            # Update last_used in database
-            UserAPIKey.objects.filter(pk=api_key_obj.pk).update(
-                last_used=timezone.now()
-            )
-            
-            # Track daily usage in cache
-            date_str = timezone.now().date().isoformat()
-            cache_key = f"usage_daily_{api_key_obj.id}_{date_str}"
-            count = cache.get(cache_key, 0) + 1
-            cache.set(cache_key, count, timeout=86400 * 2)
-            
-        except Exception as e:
-            logger.warning(f"Could not track API key usage: {e}")
-
     def _track_symbol_usage(self, request, symbol):
-        """Track symbol usage for analytics."""
+        """Track symbol usage for analytics (authenticated users only)."""
         try:
             from .models import SymbolUsage
-            
+
             symbol = symbol.upper()
             user = getattr(request, 'user', None)
-            
-            # Only track authenticated users
+
             if user and hasattr(user, 'is_authenticated') and user.is_authenticated:
-                # Use database for persistent tracking
                 from django.db import transaction
                 with transaction.atomic():
                     usage, created = SymbolUsage.objects.get_or_create(
@@ -407,10 +407,13 @@ class RequestLoggingMiddleware:
                     usage.count += 1
                     usage.save(update_fields=['count', 'last_updated'])
             else:
-                # Track anonymous usage in cache only
+                # Anonymous usage – cache only
                 cache_key = f"symbol_usage_anon_{symbol}"
                 count = cache.get(cache_key, 0) + 1
                 cache.set(cache_key, count, timeout=86400 * 7)
-                
+
+        except ImportError:
+            # SymbolUsage model not available – skip silently
+            pass
         except Exception as e:
             logger.warning(f"Could not track symbol usage: {e}")

@@ -71,7 +71,7 @@ class Prediction(models.Model):
     )
 
     # ============================================================
-    # ✅ User Association
+    #  User Association
     # ============================================================
     user = models.ForeignKey(
         'authentication.User',

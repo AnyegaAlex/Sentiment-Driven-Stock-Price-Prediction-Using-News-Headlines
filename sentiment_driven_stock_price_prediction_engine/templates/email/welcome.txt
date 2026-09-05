@@ -16,8 +16,13 @@ With Tickflow Intelligence, you can:
 - Track your past predictions and review accuracy
 - Set up alerts for price moves and news events
 
+If you have any questions, contact us at {{ contact_email }}.
+
 Thanks,
 The Tickflow Capital Team
 
 ============================
 (c) {{ year }} Tickflow Capital. All rights reserved.
+For privacy and terms, visit:
+{{ frontend_url }}/privacy
+{{ frontend_url }}/terms

@@ -229,7 +229,7 @@ def resolve_prediction(prediction, resolution_days=7):
         prediction.resolution_date = datetime.now()
         prediction.time_to_resolution = prediction.resolution_date - datetime.combine(prediction.date, datetime.min.time())
         prediction.save()
-        # ✅ Update user's cached prediction accuracy
+        #  Update user's cached prediction accuracy
         if prediction.user:
             avg = Prediction.objects.filter(
                 user=prediction.user,

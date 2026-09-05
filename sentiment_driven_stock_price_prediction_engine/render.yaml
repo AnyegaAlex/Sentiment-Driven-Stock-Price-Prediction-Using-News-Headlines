@@ -5,15 +5,20 @@ services:
     plan: free
     dockerfilePath: Dockerfile
     envVars:
+      # Database
       - key: DATABASE_URL
         fromDatabase:
           name: tradingdb
           property: connectionString
+
+      # Redis (optional – fallback to LocMem)
       - key: REDIS_URL
         fromService:
           type: redis
           name: trading-redis
           property: connectionString
+
+      # Django core
       - key: SECRET_KEY
         generateValue: true
       - key: DEBUG
@@ -22,6 +27,52 @@ services:
         value: ".onrender.com"
       - key: CSRF_TRUSTED_ORIGINS
         value: "https://*.onrender.com"
-      # Static API key fallback
-      - key: STATIC_API_KEY
-        value: "your_static_key_here"  # Optional fallback
+      - key: FRONTEND_URL
+        value: "https://your-production-frontend.vercel.app"  # Replace with actual frontend URL
+      - key: CONTACT_EMAIL
+        value: "info@tickflowcapital.com"
+
+      # Email (SendGrid)
+      - key: SENDGRID_API_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: DEFAULT_FROM_EMAIL
+        value: "info@tickflowcapital.com"
+
+      # External APIs
+      - key: FINNHUB_API_KEY
+        sync: false
+      - key: ALPHA_VANTAGE_KEY
+        sync: false
+      - key: RAPIDAPI_KEY
+        sync: false
+      - key: RAPIDAPI_HOST
+        value: "apidojo-yahoo-finance-v1.p.rapidapi.com"
+      - key: TWELVEDATA_API_KEY
+        sync: false
+
+      # Cron secret (for the /stocks/cron/ endpoint)
+      - key: CRON_SECRET
+        sync: false  # Set a long random string
+
+      # Sentry
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: "production"
+
+      # Logging
+      - key: USE_JSON_LOGS
+        value: "true"
+
+      # Optional: Static API key fallback (if you want a fixed key)
+      # - key: STATIC_API_KEY
+      #   value: "your_static_key_here"  # Not recommended
+
+    healthCheckPath: /api/v1/health/
+
+  # Redis service (free tier)
+  - type: redis
+    name: trading-redis
+    region: singapore
+    plan: free
+    maxmemoryPolicy: noeviction

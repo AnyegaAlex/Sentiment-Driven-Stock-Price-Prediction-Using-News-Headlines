@@ -265,7 +265,7 @@ def init_sentry() -> bool:
         )
         
         # ================================================================
-        # ✅ ENHANCEMENT 1: Set Global Tags for Business Metrics
+        #  Set Global Tags for Business Metrics
         # ================================================================
         
         # Application metadata
@@ -279,7 +279,7 @@ def init_sentry() -> bool:
         sentry_sdk.set_tag('environment', environment)
         
         # ================================================================
-        # ✅ ENHANCEMENT 2: Set Business Context
+        # Set Business Context
         # ================================================================
         
         sentry_sdk.set_context('app', {
@@ -313,7 +313,7 @@ def init_sentry() -> bool:
 
 
 # ============================================================================
-# ✅ ENHANCEMENT 3: Performance Monitoring for Critical Endpoints
+#  Performance Monitoring for Critical Endpoints
 # ============================================================================
 
 def start_transaction(name: str, op: str = 'api.endpoint'):

@@ -1,11 +1,38 @@
 # gunicorn.conf.py
-import multiprocessing
+# Gunicorn configuration for Render free tier (512 MB RAM)
 
-workers = 1  # Reduce workers for memory-constrained environments
-worker_class = "gthread"  # Use threads instead of processes
-threads = 2  # Threads per worker
-bind = "0.0.0.0:8000"
-timeout = 120  # Increased timeout
+import multiprocessing
+import os
+
+# Number of worker processes
+workers = 1  # Keep low to avoid memory exhaustion
+
+# Use threaded workers (gthread) for better concurrency with low memory
+worker_class = "gthread"
+
+# Threads per worker
+threads = 2
+
+# Bind to the port from environment (Render sets PORT)
+bind = f"0.0.0.0:{os.environ.get('PORT', '10000')}"
+
+# Timeout for requests (long enough for LSTM predictions)
+timeout = 120
+
+# Keep-alive timeout
 keepalive = 120
-max_requests = 500  # Restart workers periodically
+
+# Restart workers after processing this many requests (prevents memory leaks)
+max_requests = 500
 max_requests_jitter = 50
+
+# Use /dev/shm for temporary files if available (speeds up operations)
+worker_tmp_dir = "/dev/shm"
+
+# Logging
+accesslog = "-"
+errorlog = "-"
+loglevel = "info"
+
+# Preload the application (saves memory but may cause issues with Django)
+# preload_app = True  # Uncomment if you want to preload
