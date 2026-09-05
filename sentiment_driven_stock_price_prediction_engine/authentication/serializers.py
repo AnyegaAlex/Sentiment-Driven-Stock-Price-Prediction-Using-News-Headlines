@@ -305,12 +305,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
     risk_tolerance = serializers.SerializerMethodField()
     experience_level = serializers.SerializerMethodField()
 
-    # statistics fields
-    analyses_count = serializers.SerializerMethodField()
-    predictions_count = serializers.SerializerMethodField()
-    news_read_count = serializers.SerializerMethodField()
-    prediction_accuracy = serializers.SerializerMethodField()
-
     class Meta:
         model = User
         fields = (
@@ -325,7 +319,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             'id', 'email', 'email_verified',
-            'tier', 'created_at', 'updated_at'
+            'tier', 'created_at', 'updated_at',
+            'analyses_count', 'predictions_count', 'news_read_count',
+            'prediction_accuracy',
         )
         extra_kwargs = {
             'username': {'help_text': USERNAME_HELP_TEXT},
@@ -334,48 +330,21 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'onboarded': {'help_text': "Whether the user has completed onboarding"},
         }
 
-    def get_persona(self, obj):
-        if hasattr(obj, 'preferences') and obj.preferences:
-            return obj.preferences.persona
-        return None
-    
     def get_watchlist(self, obj):
-        if hasattr(obj, 'preferences') and obj.preferences:
-            return obj.preferences.watchlist or []
-        return []
-    
+        prefs = getattr(obj, 'user_preferences', None)
+        return prefs.watchlist if prefs else []
+
     def get_investment_goal(self, obj):
-        if hasattr(obj, 'preferences') and obj.preferences:
-            return obj.preferences.investment_goal
-        return None
-    
+        prefs = getattr(obj, 'user_preferences', None)
+        return prefs.investment_goal if prefs else None
+
     def get_risk_tolerance(self, obj):
-        if hasattr(obj, 'preferences') and obj.preferences:
-            return obj.preferences.risk_tolerance
-        return None
-    
+        prefs = getattr(obj, 'user_preferences', None)
+        return prefs.risk_tolerance if prefs else None
+
     def get_experience_level(self, obj):
-        if hasattr(obj, 'preferences') and obj.preferences:
-            return obj.preferences.experience_level
-        return None
-    
-    def get_analyses_count(self, obj):
-        return getattr(obj, 'analyses_count', 0)
-
-    def get_predictions_count(self, obj):
-        return getattr(obj, 'predictions_count', 0)
-
-    def get_news_read_count(self, obj):
-        return getattr(obj, 'news_read_count', 0)
-    
-    def get_prediction_accuracy(self, obj):
-        from stocks.models import Prediction
-        total = obj.predictions.filter(is_correct__isnull=False).count()
-        if total == 0:
-            return 0
-        correct = obj.predictions.filter(is_correct=True).count()
-        return round((correct / total) * 100, 1)
-
+        prefs = getattr(obj, 'user_preferences', None)
+        return prefs.experience_level if prefs else None
 
 class UpdateProfileSerializer(serializers.ModelSerializer):
     """

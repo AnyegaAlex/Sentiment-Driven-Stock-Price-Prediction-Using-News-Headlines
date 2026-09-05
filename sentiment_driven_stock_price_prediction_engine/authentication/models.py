@@ -12,7 +12,7 @@ This module defines:
 
 All models include proper constraints, indexing, and string representations.
 """
-
+import hashlib
 import secrets
 import logging
 from django.db import models
@@ -478,25 +478,12 @@ class UserAPIKey(models.Model):
 
     @classmethod
     def generate_raw_key(cls) -> str:
-        """Generate a raw API key with 'ts_' prefix."""
         return f"ts_{secrets.token_urlsafe(32)}"
 
     @classmethod
     def create_key(cls, user, name: str, expires_at=None):
-        """
-        Create a new API key for a user.
-        
-        Args:
-            user: User instance
-            name: Human-readable key name
-            expires_at: Optional expiry date
-        
-        Returns:
-            tuple: (UserAPIKey instance, raw_key_string)
-        """
         raw = cls.generate_raw_key()
-        hashed = make_password(raw)
-        
+        hashed = hashlib.sha256(raw.encode()).hexdigest()   # plain SHA-256
         key_obj = cls.objects.create(
             user=user,
             name=name,
@@ -504,19 +491,16 @@ class UserAPIKey(models.Model):
             expires_at=expires_at,
             is_active=True,
         )
-        
         logger.info(f"API key created for user {user.id}: {name}")
         return key_obj, raw
 
     def validate_key(self, raw_key: str) -> bool:
-        """Validate a raw key against the stored hash."""
         if not self.is_active:
             return False
-        
         if self.expires_at and self.expires_at < timezone.now():
             return False
-        
-        return check_password(raw_key, self.key_hash)
+        calculated = hashlib.sha256(raw_key.encode()).hexdigest()
+        return self.key_hash == calculated
 
     def revoke(self):
         """Revoke this API key."""
