@@ -21,12 +21,9 @@ import logging
 import time
 from typing import Union, List, Dict, Any, Optional
 
-import numpy as np
-import torch
 from django.conf import settings
 from django.core.cache import cache
 from functools import lru_cache
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +56,14 @@ config = _config  # use as read-only
 # Device selection
 # ============================================================================
 
-def get_device() -> torch.device:
+def get_device():
     """
     Returns the best available device (CUDA if enough memory, else CPU).
 
     Memory check ensures we don't exceed `config['max_memory_mb']` on GPU.
     """
+    import torch  # lazy import
+
     if torch.cuda.is_available():
         try:
             free_mem = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)
@@ -80,12 +79,15 @@ def get_device() -> torch.device:
 # ============================================================================
 
 @lru_cache(maxsize=1)
-def load_model() -> Optional[AutoModelForSequenceClassification]:
+def load_model():
     """
     Load the FinBERT model with memory‑efficient options.
 
     Uses `lru_cache` to ensure only one instance is ever loaded.
     """
+    import torch
+    from transformers import AutoModelForSequenceClassification
+
     for attempt in range(config['load_retries']):
         try:
             device = get_device()
@@ -117,8 +119,10 @@ def load_model() -> Optional[AutoModelForSequenceClassification]:
 
 
 @lru_cache(maxsize=1)
-def load_tokenizer() -> Optional[AutoTokenizer]:
+def load_tokenizer():
     """Load the tokenizer with caching."""
+    from transformers import AutoTokenizer
+
     try:
         return AutoTokenizer.from_pretrained(config['model_name'])
     except Exception as e:
@@ -257,6 +261,7 @@ def analyze_sentiment(text: str) -> Dict[str, Any]:
         return result
 
     try:
+        import torch  # lazy import
         tokenizer = load_tokenizer()
         model = load_model()
         if tokenizer is None or model is None:
@@ -350,6 +355,7 @@ def analyze_batch(texts: List[str]) -> List[Dict[str, Any]]:
                     return_tensors="pt"
                 ).to(device)
 
+                import torch  # lazy import
                 with torch.inference_mode():
                     outputs = model(**inputs)
 
