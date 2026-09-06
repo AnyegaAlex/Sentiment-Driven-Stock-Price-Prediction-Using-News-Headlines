@@ -2,9 +2,6 @@
 Stock analysis views – unified dashboard, technical indicators, LSTM predictions,
 subscription, and history. All endpoints are documented via OpenAPI (Swagger).
 """
-import yfinance as yf
-import numpy as np
-import pandas as pd
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, serializers
@@ -74,6 +71,9 @@ def calculate_technical_indicators(symbol):
     If SMA_50 or SMA_200 cannot be computed (insufficient data),
     they are approximated from the available history.
     """
+    import yfinance as yf  # lazy import
+    import numpy as np      # lazy import
+
     try:
         ticker = yf.Ticker(symbol)
         hist = ticker.history(period="6mo")  # enough for 200-day SMA
@@ -837,6 +837,8 @@ class TechnicalIndicatorsView(APIView):
         tags=["Technical Indicators"]
     )
     def get(self, request):
+        import yfinance as yf  # lazy import
+
         symbol = request.query_params.get("symbol")
         if not symbol:
             return Response(

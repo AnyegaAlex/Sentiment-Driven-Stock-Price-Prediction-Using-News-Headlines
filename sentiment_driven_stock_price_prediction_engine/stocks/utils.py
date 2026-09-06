@@ -1,4 +1,3 @@
-import yfinance as yf
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -9,19 +8,7 @@ import time
 from django.core.cache import cache
 from functools import wraps
 
-# Optional imports for performance metrics
-try:
-    from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
-    import numpy as np
-    import yfinance as yf
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    SKLEARN_AVAILABLE = False
-    logger = logging.getLogger(__name__)
-    logger.warning("sklearn, numpy, or yfinance not installed. Performance metrics will be limited.")
-
 logger = logging.getLogger(__name__)
-
 
 # ============================================================
 # – SAVE PREDICTION
@@ -37,34 +24,16 @@ def save_prediction(
     user=None,                     
     price_at_prediction=None
 ) -> Prediction:
-    """
-    Save a prediction record with de‑duplication logic.
-    If a prediction with the same symbol, date, and similar confidence already exists,
-    the existing record is returned and no new record is created.
-
-    Args:
-        symbol: Stock symbol (case-insensitive)
-        movement: 'UP', 'DOWN', or 'neutral' (case-insensitive)
-        confidence: Float between 0 and 1
-        sentiment_score: Float, can be negative for negative sentiment
-        headline: Optional news headline or description
-        source: String identifier (default 'lstm')
-
-    Returns:
-        Prediction instance (either newly created or existing)
-    """
+    """Save a prediction record with de‑duplication logic."""
     symbol = symbol.upper()
     movement = movement.lower()
     if movement not in ('up', 'down', 'neutral'):
         logger.warning(f"Invalid movement '{movement}' for {symbol}, defaulting to 'neutral'")
         movement = 'neutral'
 
-    # Normalise confidence to 0-1
     confidence = max(0.0, min(1.0, float(confidence)))
-
     today = datetime.utcnow().date()
 
-    # Check for existing prediction with same symbol, date, and close confidence (±5%)
     existing = Prediction.objects.filter(
         stock_symbol=symbol,
         date=today,
@@ -76,7 +45,6 @@ def save_prediction(
         logger.debug(f"Duplicate prediction for {symbol} today – skipping creation")
         return existing
 
-    # Create new prediction
     try:
         pred = Prediction.objects.create(
             date=today,
@@ -86,15 +54,13 @@ def save_prediction(
             predicted_movement=movement,
             confidence=confidence,
             source=source,
-            user=user,                              
-            price_at_prediction=price_at_prediction  
+            user=user,
+            price_at_prediction=price_at_prediction
         )
         logger.info(f"Saved prediction for {symbol}: {movement} (conf={confidence:.2f})")
         return pred
     except IntegrityError as e:
-        # Rare race condition: another process may have created it simultaneously
         logger.warning(f"IntegrityError while saving prediction for {symbol}: {e}")
-        # Return the existing record if found
         existing = Prediction.objects.filter(
             stock_symbol=symbol,
             date=today,
@@ -102,7 +68,6 @@ def save_prediction(
         ).first()
         if existing:
             return existing
-        # If still not found, re-raise the exception
         raise
 
 # ============================================================
@@ -130,13 +95,11 @@ def retry_on_rate_limit(max_retries=3, delay=2):
 
 
 def get_cached_price(symbol, date):
-    """Get price from cache."""
     cache_key = f"price_{symbol}_{date.strftime('%Y%m%d')}"
     return cache.get(cache_key)
 
 
 def set_cached_price(symbol, date, price):
-    """Store price in cache for 7 days."""
     cache_key = f"price_{symbol}_{date.strftime('%Y%m%d')}"
     cache.set(cache_key, price, timeout=60*60*24*7)
 
@@ -144,6 +107,7 @@ def set_cached_price(symbol, date, price):
 @retry_on_rate_limit(max_retries=3, delay=2)
 def fetch_yfinance_price(symbol, target_date):
     """Fetch closing price for a symbol on target_date using yfinance."""
+    import yfinance as yf  # lazy import
     ticker = yf.Ticker(symbol)
     start = target_date - timedelta(days=2)
     end = target_date + timedelta(days=2)
@@ -164,13 +128,12 @@ def fetch_yfinance_price(symbol, target_date):
 # ============================================================
 
 def resolve_prediction(prediction, resolution_days=7):
-    """
-    Resolve a prediction after resolution_days with caching and rate limit handling.
-    """
+    """Resolve a prediction after resolution_days with caching and rate limit handling."""
+    import yfinance as yf  # lazy import
+
     try:
         resolution_date = prediction.date + timedelta(days=resolution_days)
 
-        # Get price at prediction time (cached)
         pred_price = get_cached_price(prediction.stock_symbol, prediction.date)
         if pred_price is None:
             pred_price = fetch_yfinance_price(prediction.stock_symbol, prediction.date)
@@ -184,7 +147,6 @@ def resolve_prediction(prediction, resolution_days=7):
                 return False
         prediction.price_at_prediction = Decimal(str(pred_price))
 
-        # Get price at resolution date (cached)
         res_price = get_cached_price(prediction.stock_symbol, resolution_date)
         if res_price is None:
             res_price = fetch_yfinance_price(prediction.stock_symbol, resolution_date)
@@ -195,7 +157,6 @@ def resolve_prediction(prediction, resolution_days=7):
             return False
         prediction.price_at_resolution = Decimal(str(res_price))
 
-        # Determine direction
         if res_price > pred_price:
             prediction.actual_direction = 'up'
         elif res_price < pred_price:
@@ -205,12 +166,10 @@ def resolve_prediction(prediction, resolution_days=7):
 
         prediction.is_correct = (prediction.actual_direction == prediction.predicted_movement)
 
-        # Percent change
         if pred_price:
             change = ((res_price - pred_price) / pred_price) * 100
             prediction.price_change_percent = Decimal(str(round(change, 2)))
 
-        # Add SPY context (cached)
         spy_cache_key = f"spy_price_{resolution_date.strftime('%Y%m%d')}"
         spy_data = cache.get(spy_cache_key)
         if spy_data is None:
@@ -229,7 +188,6 @@ def resolve_prediction(prediction, resolution_days=7):
         prediction.resolution_date = datetime.now()
         prediction.time_to_resolution = prediction.resolution_date - datetime.combine(prediction.date, datetime.min.time())
         prediction.save()
-        #  Update user's cached prediction accuracy
         if prediction.user:
             avg = Prediction.objects.filter(
                 user=prediction.user,
@@ -247,16 +205,13 @@ def resolve_prediction(prediction, resolution_days=7):
 
 
 def calculate_performance_metrics(queryset):
-    """
-    Calculate precision, recall, f1, confusion matrix from queryset.
-    
-    Args:
-        queryset: QuerySet of Prediction objects (must have is_correct and actual_direction)
-        
-    Returns:
-        dict: Performance metrics including accuracy, precision, recall, f1, confusion matrix
-    """
-    if not SKLEARN_AVAILABLE:
+    """Calculate precision, recall, f1, confusion matrix from queryset."""
+    try:
+        from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
+        import numpy as np
+        SKLEARN_AVAILABLE = True
+    except ImportError:
+        SKLEARN_AVAILABLE = False
         logger.warning("sklearn not available – returning empty metrics")
         return {
             'accuracy': 0,
@@ -266,7 +221,7 @@ def calculate_performance_metrics(queryset):
             'balanced_accuracy': 0,
             'confusion_matrix': {'TP': 0, 'FP': 0, 'TN': 0, 'FN': 0}
         }
-    
+
     if queryset.count() == 0:
         return {
             'accuracy': 0,
@@ -276,8 +231,7 @@ def calculate_performance_metrics(queryset):
             'balanced_accuracy': 0,
             'confusion_matrix': {'TP': 0, 'FP': 0, 'TN': 0, 'FN': 0}
         }
-    
-    # Only include resolved predictions
+
     resolved = queryset.filter(is_correct__isnull=False)
     if resolved.count() == 0:
         return {
@@ -288,16 +242,14 @@ def calculate_performance_metrics(queryset):
             'balanced_accuracy': 0,
             'confusion_matrix': {'TP': 0, 'FP': 0, 'TN': 0, 'FN': 0}
         }
-    
-    # Extract actual and predicted
+
     y_true = []
     y_pred = []
     for pred in resolved:
-        # Map direction to binary (up=1, down=0, neutral ignored)
         if pred.actual_direction in ['up', 'down']:
             y_true.append(1 if pred.actual_direction == 'up' else 0)
             y_pred.append(1 if pred.predicted_movement == 'up' else 0)
-    
+
     if len(y_true) == 0:
         return {
             'accuracy': 0,
@@ -307,14 +259,14 @@ def calculate_performance_metrics(queryset):
             'balanced_accuracy': 0,
             'confusion_matrix': {'TP': 0, 'FP': 0, 'TN': 0, 'FN': 0}
         }
-    
+
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
     accuracy = (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
     f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
     balanced_accuracy = (recall + (tn / (tn + fp) if (tn + fp) > 0 else 0)) / 2
-    
+
     return {
         'accuracy': round(accuracy * 100, 1),
         'precision': round(precision * 100, 1),
@@ -326,30 +278,19 @@ def calculate_performance_metrics(queryset):
 
 
 def detect_drift(recent_period_days=30, baseline_period_days=90):
-    """
-    Detect performance drift by comparing recent vs baseline F1.
-    
-    Args:
-        recent_period_days: Number of days for recent window
-        baseline_period_days: Number of days for baseline window
-        
-    Returns:
-        dict: Drift detection results including severity and metrics
-    """
+    """Detect performance drift by comparing recent vs baseline F1."""
     from django.utils import timezone
-    
+
     recent_start = timezone.now() - timedelta(days=recent_period_days)
     baseline_start = timezone.now() - timedelta(days=baseline_period_days)
-    
-    # Recent predictions (resolved within last 30 days)
+
     recent_qs = Prediction.objects.filter(
         resolution_date__gte=recent_start,
         is_correct__isnull=False
     )
     recent_metrics = calculate_performance_metrics(recent_qs)
-    recent_f1 = recent_metrics['f1'] / 100  # convert to 0-1
-    
-    # Baseline predictions (resolved 30-90 days ago)
+    recent_f1 = recent_metrics['f1'] / 100
+
     baseline_qs = Prediction.objects.filter(
         resolution_date__gte=baseline_start,
         resolution_date__lt=recent_start,
@@ -357,8 +298,7 @@ def detect_drift(recent_period_days=30, baseline_period_days=90):
     )
     baseline_metrics = calculate_performance_metrics(baseline_qs)
     baseline_f1 = baseline_metrics['f1'] / 100
-    
-    # Detect drift: drop > 10% or absolute drop > 0.1
+
     drift_detected = False
     severity = 'none'
     if baseline_f1 > 0 and recent_f1 > 0:
@@ -372,7 +312,7 @@ def detect_drift(recent_period_days=30, baseline_period_days=90):
                 severity = 'medium'
             else:
                 severity = 'low'
-    
+
     return {
         'drift_detected': drift_detected,
         'severity': severity,
@@ -385,9 +325,7 @@ def detect_drift(recent_period_days=30, baseline_period_days=90):
 
 
 def resolve_all_pending_predictions(resolution_days=7):
-    """
-    Resolve all pending predictions with a 1.5s delay between each to avoid rate limits.
-    """
+    """Resolve all pending predictions with a 1.5s delay between each to avoid rate limits."""
     cutoff_date = datetime.now() - timedelta(days=resolution_days)
     pending = Prediction.objects.filter(
         is_correct__isnull=True,
@@ -396,7 +334,7 @@ def resolve_all_pending_predictions(resolution_days=7):
     results = {'total': pending.count(), 'resolved': 0, 'failed': 0}
     for idx, pred in enumerate(pending):
         if idx > 0:
-            time.sleep(1.5)  # delay between calls
+            time.sleep(1.5)
         success = resolve_prediction(pred, resolution_days)
         if success:
             results['resolved'] += 1

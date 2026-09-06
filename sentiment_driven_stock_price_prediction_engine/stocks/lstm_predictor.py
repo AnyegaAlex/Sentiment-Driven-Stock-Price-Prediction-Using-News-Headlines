@@ -18,10 +18,6 @@ Version: 1.1.0
 
 import os
 import logging
-import torch
-import torch.nn as nn
-import numpy as np
-import yfinance as yf
 from datetime import timedelta
 from django.conf import settings
 from django.core.cache import cache

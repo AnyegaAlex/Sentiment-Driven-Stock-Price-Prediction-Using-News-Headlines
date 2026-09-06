@@ -27,9 +27,6 @@ from typing import List, Dict, Any, Optional, Tuple, Union
 from enum import Enum
 from dataclasses import dataclass
 
-import numpy as np
-import pandas as pd
-import yfinance as yf
 import requests
 from pydantic import BaseModel, Field, field_validator
 from django.core.cache import cache
@@ -40,10 +37,7 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
-# Configure pandas for production
-pd.options.mode.chained_assignment = None
-
-# Import LSTM predictor
+# Import LSTM predictor (already lazy)
 from .lstm_predictor import get_lstm_predictor
 
 # Configure module logger
@@ -99,8 +93,9 @@ class Config:
 # Caching Helpers (using Django cache)
 # ============================================================================
 
-def _get_cached_price_data(symbol: str) -> Optional[pd.DataFrame]:
+def _get_cached_price_data(symbol: str):
     """Retrieve cached price data from Redis."""
+    import pandas as pd  # lazy import
     key = f"price:{symbol.upper()}"
     data = cache.get(key)
     if data is not None and isinstance(data, pd.DataFrame) and not data.empty:
@@ -109,7 +104,7 @@ def _get_cached_price_data(symbol: str) -> Optional[pd.DataFrame]:
     return None
 
 
-def _cache_price_data(symbol: str, data: pd.DataFrame, ttl: int = Config.TTL_PRICE):
+def _cache_price_data(symbol: str, data, ttl: int = Config.TTL_PRICE):
     """Cache price data in Redis."""
     if data is not None and not data.empty:
         key = f"price:{symbol.upper()}"
@@ -117,7 +112,7 @@ def _cache_price_data(symbol: str, data: pd.DataFrame, ttl: int = Config.TTL_PRI
         logger.debug(f"Cached price data for {symbol} for {ttl}s")
 
 
-def _get_cached_technical_data(symbol: str) -> Optional['TechnicalMetrics']:
+def _get_cached_technical_data(symbol: str):
     """Retrieve cached technical metrics from Redis."""
     key = f"technical:{symbol.upper()}"
     data = cache.get(key)
@@ -127,14 +122,14 @@ def _get_cached_technical_data(symbol: str) -> Optional['TechnicalMetrics']:
     return None
 
 
-def _cache_technical_data(symbol: str, metrics: 'TechnicalMetrics', ttl: int = Config.TTL_TECHNICAL):
+def _cache_technical_data(symbol: str, metrics, ttl: int = Config.TTL_TECHNICAL):
     """Cache technical metrics in Redis."""
     key = f"technical:{symbol.upper()}"
     cache.set(key, metrics, timeout=ttl)
     logger.debug(f"Cached technical metrics for {symbol} for {ttl}s")
 
 
-def _get_cached_data(key: str) -> Optional[Any]:
+def _get_cached_data(key: str):
     """Generic cache getter."""
     return cache.get(key)
 
@@ -247,6 +242,7 @@ class MarketRegimeDetector:
 
     def get_current_regime(self, force_refresh: bool = False) -> MarketRegimeResult:
         """Get current market regime with Redis caching."""
+        import numpy as np  # lazy import
         if not force_refresh:
             cached = _get_cached_data("market_regime")
             if cached is not None:
@@ -291,8 +287,11 @@ class MarketRegimeDetector:
             logger.error(f"Market regime detection error: {str(e)}")
             return self._get_neutral_regime()
 
-    def _fetch_spy_data(self) -> pd.DataFrame:
+    def _fetch_spy_data(self):
         """Fetch SPY data with caching."""
+        import pandas as pd  # lazy import
+        import yfinance as yf  # lazy import
+
         now = timezone.now()
         if (self._spy_cache is not None and
             self._spy_cache_timestamp is not None and
@@ -366,11 +365,12 @@ class TechnicalAnalyzer:
         self._initialized = True
         logger.info("TechnicalAnalyzer initialized")
 
-    def _fetch_from_finnhub(self, symbol: str) -> pd.DataFrame:
+    def _fetch_from_finnhub(self, symbol: str):
         """
         Fetch price data from Finnhub API.
         60 calls/min free tier – reliable and fast.
         """
+        import pandas as pd  # lazy import
         if not self.finnhub_key:
             return pd.DataFrame()
 
@@ -421,11 +421,12 @@ class TechnicalAnalyzer:
             logger.warning(f"Finnhub fetch failed for {symbol}: {e}")
             return pd.DataFrame()
 
-    def _fetch_from_twelvedata(self, symbol: str) -> pd.DataFrame:
+    def _fetch_from_twelvedata(self, symbol: str):
         """
         Fetch price data from Twelve Data API.
         800 calls/day free tier – reliable backup.
         """
+        import pandas as pd  # lazy import
         if not self.twelvedata_key:
             return pd.DataFrame()
 
@@ -464,8 +465,11 @@ class TechnicalAnalyzer:
             logger.warning(f"Twelve Data fetch failed for {symbol}: {e}")
             return pd.DataFrame()
 
-    def _fetch_from_yahoo(self, symbol: str) -> pd.DataFrame:
+    def _fetch_from_yahoo(self, symbol: str):
         """Fetch data from Yahoo Finance with rate limit handling."""
+        import pandas as pd  # lazy import
+        import yfinance as yf  # lazy import
+
         periods = ['2y', '5y', 'max']
         data = pd.DataFrame()
 
@@ -502,8 +506,9 @@ class TechnicalAnalyzer:
 
         return data
 
-    def _fetch_from_alpha_vantage(self, symbol: str) -> pd.DataFrame:
+    def _fetch_from_alpha_vantage(self, symbol: str):
         """Fetch data from Alpha Vantage as last resort."""
+        import pandas as pd  # lazy import
         if not self.alpha_vantage_key:
             return pd.DataFrame()
 
@@ -536,7 +541,7 @@ class TechnicalAnalyzer:
 
         return pd.DataFrame()
 
-    def _get_data(self, symbol: str) -> pd.DataFrame:
+    def _get_data(self, symbol: str):
         """
         Get data from Redis cache or fetch from sources.
 
@@ -547,6 +552,7 @@ class TechnicalAnalyzer:
         4. Yahoo Finance (fallback)
         5. Alpha Vantage (last resort)
         """
+        import pandas as pd  # lazy import
         # 1. Try Redis cache first
         cached_data = _get_cached_price_data(symbol)
         if cached_data is not None and not cached_data.empty:
@@ -594,6 +600,9 @@ class TechnicalAnalyzer:
         Returns:
             TechnicalMetrics object with all indicators
         """
+        import numpy as np  # lazy import
+        import pandas as pd  # lazy import
+
         self._ensure_initialized()
 
         try:
@@ -655,7 +664,7 @@ class TechnicalAnalyzer:
             _cache_technical_data(symbol, metrics, Config.TTL_TECHNICAL)
             return metrics
 
-    def _calculate_rsi(self, closes: pd.Series, window: int = 14) -> float:
+    def _calculate_rsi(self, closes, window: int = 14) -> float:
         """Calculate RSI indicator."""
         try:
             delta = closes.diff()
@@ -673,7 +682,7 @@ class TechnicalAnalyzer:
 
     def _calculate_confidence(
         self,
-        data: pd.DataFrame,
+        data,
         sma_50: float,
         sma_200: float,
         current_price: float,
