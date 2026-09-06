@@ -50,41 +50,34 @@ SENTIMENT_THRESHOLD = 0.2
 # 1. LSTM Model Architecture (must match training script)
 # ============================================================================
 
-class LSTMModel(nn.Module):
+def _create_lstm_model(input_size, hidden_size, output_size):
     """
-    Simple 1‑layer LSTM with a linear output head.
-
-    Args:
-        input_size (int): Number of input features.
-        hidden_size (int): Number of hidden units.
-        output_size (int): Number of output units (1 for binary classification).
+    Factory function that imports torch and defines the LSTM model.
+    Called only when the model is actually loaded.
     """
-    def __init__(self, input_size: int, hidden_size: int, output_size: int):
-        super(LSTMModel, self).__init__()
-        self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
-        self.fc = nn.Linear(hidden_size, output_size)
+    import torch
+    import torch.nn as nn
 
-    def forward(self, x):
-        _, (hidden, _) = self.lstm(x)
-        return self.fc(hidden[-1])
+    class LSTMModel(nn.Module):
+        def __init__(self, input_size, hidden_size, output_size):
+            super(LSTMModel, self).__init__()
+            self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
+            self.fc = nn.Linear(hidden_size, output_size)
+
+        def forward(self, x):
+            _, (hidden, _) = self.lstm(x)
+            return self.fc(hidden[-1])
+
+    return LSTMModel(input_size, hidden_size, output_size)
 
 
 # ============================================================================
-# 2. Feature Engineering (with caching)
+# 2. Feature Engineering (lazy imports)
 # ============================================================================
 
 def compute_lstm_features(symbol: str) -> dict:
     """
-    Download historical price data and compute the 7 features required by the model.
-
-    Results are cached for 5 minutes per symbol to reduce yfinance calls.
-
-    Args:
-        symbol (str): Stock ticker (e.g., 'AAPL')
-
-    Returns:
-        dict: Contains 'MA7', 'MA21', 'STD21', 'RSI14', 'UpperBB', 'LowerBB', 'Close'
-        or None if insufficient data or error.
+    Download historical price data and compute the 7 features.
     """
     cache_key = f"lstm_features_{symbol.upper()}"
     cached = cache.get(cache_key)
@@ -92,29 +85,23 @@ def compute_lstm_features(symbol: str) -> dict:
         return cached
 
     try:
-        # Download 2 years of daily data (enough for all indicators)
-        # Use timeout and retry logic via yfinance's built-in retry (it has some)
+        import yfinance as yf
+        import numpy as np
         data = yf.download(symbol, period="2y", progress=False, auto_adjust=True)
         if data.empty or len(data) < 200:
-            logger.warning(f"Insufficient data for {symbol} to compute LSTM features")
             return None
 
         df = data[['Close']].copy()
         df['MA7'] = df['Close'].rolling(window=7).mean()
         df['MA21'] = df['Close'].rolling(window=21).mean()
         df['STD21'] = df['Close'].rolling(window=21).std()
-
-        # RSI 14
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
         df['RSI14'] = 100 - (100 / (1 + rs))
-
-        # Bollinger Bands
         df['UpperBB'] = df['MA21'] + (df['STD21'] * 2)
         df['LowerBB'] = df['MA21'] - (df['STD21'] * 2)
-
         df.dropna(inplace=True)
         if df.empty:
             return None
@@ -131,7 +118,6 @@ def compute_lstm_features(symbol: str) -> dict:
         }
         cache.set(cache_key, result, TECH_CACHE_TIMEOUT)
         return result
-
     except Exception as e:
         logger.error(f"Error computing LSTM features for {symbol}: {e}")
         return None
@@ -245,34 +231,29 @@ class LSTMPredictor:
     """
 
     def __init__(self, model_path=None):
-        self.model_path = model_path or getattr(settings, 'LSTM_MODEL_PATH', None)
-        if not self.model_path:
-            base_dir = getattr(settings, 'BASE_DIR', os.getcwd())
-            self.model_path = os.path.join(base_dir, 'models', 'stock_prediction_model.pth')
-
+        import torch  # lazy import
         self.device = torch.device("cpu")
         self.model = None
         self.input_size = MODEL_INPUT_SIZE
         self.hidden_size = MODEL_HIDDEN_SIZE
         self.output_size = MODEL_OUTPUT_SIZE
-
+        self.model_path = model_path or getattr(settings, 'LSTM_MODEL_PATH', None)
+        if not self.model_path:
+            base_dir = getattr(settings, 'BASE_DIR', os.getcwd())
+            self.model_path = os.path.join(base_dir, 'models', 'stock_prediction_model.pth')
         self._load_model()
 
     def _load_model(self):
-        """Load the .pth model file; gracefully handle missing or corrupt file."""
+        import torch  # lazy import
         try:
             if not os.path.exists(self.model_path):
                 logger.warning(f"LSTM model not found at {self.model_path}")
                 return
-
-            model = LSTMModel(self.input_size, self.hidden_size, self.output_size)
-            # Use weights_only=True for security (if PyTorch >= 1.9)
+            model = _create_lstm_model(self.input_size, self.hidden_size, self.output_size)
             try:
                 state_dict = torch.load(self.model_path, map_location=self.device, weights_only=True)
             except TypeError:
-                # Fallback for older PyTorch versions
                 state_dict = torch.load(self.model_path, map_location=self.device)
-
             model.load_state_dict(state_dict)
             model.to(self.device)
             model.eval()
@@ -282,7 +263,7 @@ class LSTMPredictor:
             logger.error(f"Failed to load LSTM model: {e}", exc_info=True)
             self.model = None
 
-    def predict(self, symbol: str, news_text: str = "", request_id: str = "") -> dict:
+    def predict(self, symbol, news_text="", request_id=""):
         """
         Generate a stock movement prediction for the given symbol.
 
@@ -302,6 +283,9 @@ class LSTMPredictor:
                 'error': str (only if success=False)
             }
         """
+        import torch  # lazy import
+        import numpy as np
+
         ctx = f"symbol={symbol} request_id={request_id}"
 
         # --------------------------------------------------------------------
