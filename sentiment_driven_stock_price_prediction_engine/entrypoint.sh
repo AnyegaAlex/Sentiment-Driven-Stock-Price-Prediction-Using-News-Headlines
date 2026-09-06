@@ -7,16 +7,16 @@ export MKL_NUM_THREADS=1
 export TRANSFORMERS_CACHE=/app/.cache/huggingface
 
 # ============================================================
-# Configuration
+# Configuration (hardcoded for low memory)
 # ============================================================
 APP_USER="appuser"
 APP_GROUP="appuser"
 LOG_DIR="/app/logs"
 STATIC_DIR="/app/staticfiles"
 MEDIA_DIR="/app/media"
-GUNICORN_WORKERS="${GUNICORN_WORKERS:-1}"
-GUNICORN_THREADS="${GUNICORN_THREADS:-1}"
-GUNICORN_TIMEOUT="${GUNICORN_TIMEOUT:-300}"
+GUNICORN_WORKERS=1        # Force 1 worker
+GUNICORN_THREADS=1        # Force 1 thread
+GUNICORN_TIMEOUT=300      # 5 minutes
 PORT="${PORT:-10000}"
 
 mkdir -p "$LOG_DIR" "$STATIC_DIR" "$MEDIA_DIR"
@@ -54,22 +54,16 @@ fi
 echo "Collecting static files..."
 python manage.py collectstatic --noinput || echo "Static files collection skipped"
 
-# Superuser creation (optional, if env vars set)
-if [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ -n "$DJANGO_SUPERUSER_EMAIL" ] && [ -n "$DJANGO_SUPERUSER_PASSWORD" ]; then
-    echo "Creating superuser..."
-    python manage.py createsuperuser --noinput \
-        --username "$DJANGO_SUPERUSER_USERNAME" \
-        --email "$DJANGO_SUPERUSER_EMAIL" 2>/dev/null || echo "Superuser already exists"
-fi
+# Superuser creation REMOVED – do it manually if needed
 
 echo "=========================================="
 echo "Starting Gunicorn on port $PORT..."
 echo "=========================================="
 
 exec su -c "gunicorn \
-    --workers=$GUNICORN_WORKERS \
-    --threads=$GUNICORN_THREADS \
-    --timeout=$GUNICORN_TIMEOUT \
+    --workers=1 \
+    --threads=1 \
+    --timeout=300 \
     --bind 0.0.0.0:$PORT \
     --log-file - \
     sentiment_driven_stock_price_prediction_engine.wsgi:application" -s /bin/bash "$APP_USER"
