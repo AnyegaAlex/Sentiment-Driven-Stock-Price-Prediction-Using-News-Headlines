@@ -345,6 +345,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
     def get_experience_level(self, obj):
         prefs = getattr(obj, 'user_preferences', None)
         return prefs.experience_level if prefs else None
+    
+    def get_persona(self, obj):
+        """Return the user's persona."""
+        return obj.persona
 
 class UpdateProfileSerializer(serializers.ModelSerializer):
     """
