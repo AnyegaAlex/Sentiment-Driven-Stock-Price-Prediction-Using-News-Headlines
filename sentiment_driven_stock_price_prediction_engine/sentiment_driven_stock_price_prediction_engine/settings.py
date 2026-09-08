@@ -146,21 +146,49 @@ WSGI_APPLICATION = 'sentiment_driven_stock_price_prediction_engine.wsgi.applicat
 # Use dj_database_url to parse DATABASE_URL; falls back to SQLite for local dev.
 # Connection pooling disabled (CONN_MAX_AGE=0) to avoid connection leaks on free tier.
 # Health checks enabled (Django 4.1+).
-default_db = 'sqlite:///' + str(BASE_DIR / 'db.sqlite3')
-DATABASES = {
-    'default': dj_database_url.config(
-        default=default_db,
-        conn_max_age=0,
-    )
-}
+# ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
 
-# Add health checks and connection timeout for PostgreSQL
-if DATABASES['default']['ENGINE'] == 'django.db.backends.postgresql':
-    DATABASES['default']['OPTIONS'] = {
-        'connect_timeout': 10,
-        'sslmode': 'require',
+# Get DATABASE_URL from environment
+database_url = os.getenv("DATABASE_URL")
+
+if database_url:
+    # Parse the URL to check if it's PostgreSQL
+    parsed = urlparse(database_url)
+    
+    if parsed.scheme in ('postgres', 'postgresql'):
+        # PostgreSQL - add SSL options for Neon
+        DATABASES = {
+            'default': dj_database_url.config(
+                default=database_url,
+                conn_max_age=600,
+                ssl_require=True,  # Neon requires SSL
+            )
+        }
+        # Additional PostgreSQL options
+        DATABASES['default']['OPTIONS'] = {
+            'connect_timeout': 10,
+            'sslmode': 'require',
+        }
+        DATABASES['default']['CONN_HEALTH_CHECKS'] = True
+    else:
+        # Not PostgreSQL (SQLite, etc.)
+        DATABASES = {
+            'default': dj_database_url.config(
+                default=database_url,
+                conn_max_age=0,
+            )
+        }
+else:
+    # Fallback to SQLite for local development
+    default_db = 'sqlite:///' + str(BASE_DIR / 'db.sqlite3')
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=default_db,
+            conn_max_age=0,
+        )
     }
-    DATABASES['default']['CONN_HEALTH_CHECKS'] = True  # Django 4.1+
 
 # ---------------------------------------------------------------------------
 # Password validation
