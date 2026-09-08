@@ -101,14 +101,11 @@ const Login = () => {
 
       setLoginSuccess(true);
 
-      if (result.user) {
-        setTimeout(() => {
-          if (result.user.onboarded) {
-            navigate('/dashboard', { replace: true });
-          } else {
-            navigate('/onboarding', { replace: true });
-          }
-        }, 200);
+      // result.user is now the refreshed user
+      if (result.user?.onboarded) {
+          navigate('/dashboard', { replace: true });
+      } else {
+          navigate('/onboarding', { replace: true });
       }
     } catch (err) {
       console.error('[Login] ❌ Login error caught:', err);

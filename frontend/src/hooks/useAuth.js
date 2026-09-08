@@ -51,7 +51,7 @@ export const useAuth = () => {
   const activityTimeoutRef = useRef(null);
   const isMountedRef = useRef(true);
   const refreshingRef = useRef(false);
-  const initAuthCalled = useRef(false); // ✅ Guard to prevent multiple init calls
+  const initAuthCalled = useRef(false); //  Guard to prevent multiple init calls
 
   // ============================================================================
   // Storage Helpers
@@ -149,7 +149,7 @@ export const useAuth = () => {
   const validateToken = useCallback(async (token) => {
     if (!token) return { valid: false, user: null };
     try {
-      // ✅ Backend validation – the only secure way
+      //  Backend validation – the only secure way
       const response = await apiClient.get('/auth/profile/', { timeout: 15000 });
       const userData = response.data?.user || response.data;
       if (userData?.id) return { valid: true, user: userData };
@@ -204,11 +204,6 @@ export const useAuth = () => {
       if (userData) {
         const isRemembered = !!localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
         updateUser(userData, isRemembered);
-        console.info('[Auth] User refreshed:', {
-          email: userData.email,
-          email_verified: userData.email_verified,
-          onboarded: userData.onboarded,
-        });
         return userData;
       }
       return null;
@@ -225,7 +220,7 @@ export const useAuth = () => {
   // ============================================================================
 
   const initAuth = useCallback(async () => {
-    // ✅ Prevent multiple calls
+    //  Prevent multiple calls
     if (initAuthCalled.current) {
       console.info('[Auth] initAuth already called, skipping');
       return;
@@ -257,7 +252,7 @@ export const useAuth = () => {
           } else if (parsedUser) {
             updateUser(parsedUser, isRemembered);
           }
-          // ✅ No refresh needed – we already have user data
+          //  No refresh needed – we already have user data
           updateLastActivity();
           startActivityMonitor();
         } else if (validation.error === 'Token expired') {
@@ -311,25 +306,24 @@ export const useAuth = () => {
         onboarded: userData?.onboarded,
         rememberMe,
       });
-  
-      // ✅ Only refresh if user is ALREADY onboarded and verified
-      // For new users (onboarded: false), the onboarding flow will handle the refresh
-      if (userData.onboarded && userData.email_verified) {
-        console.info('[Auth] User already onboarded and verified, refreshing profile...');
-        await refreshUser();
-      } else {
-        console.info('[Auth] User needs onboarding or verification, skipping refresh');
-      }
-  
-      return { success: true, user: userData };
+
+      // ALWAYS refresh user to populate context
+        const refreshedUser = await refreshUser();
+        console.info('[Auth] User refreshed after login:', {
+            onboarded: refreshedUser?.onboarded,
+            email_verified: refreshedUser?.email_verified,
+        });
+
+        // Return the refreshed user (fallback to login response)
+        return { success: true, user: refreshedUser || userData };
     } catch (err) {
-      console.error('[Auth] Login error:', err);
-      setError(err.message || 'Login failed');
-      return { success: false, error: err.message };
+        console.error('[Auth] Login error:', err);
+        setError(err.message || 'Login failed');
+        return { success: false, error: err.message };
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
-  }, [updateUser, updateLastActivity, startActivityMonitor, refreshUser]);
+}, [updateUser, updateLastActivity, startActivityMonitor, refreshUser]);
 
   // ============================================================================
   // Register
@@ -440,7 +434,7 @@ export const useAuth = () => {
       if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
       if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
     };
-  }, []); // ✅ Empty dependency array – runs only once
+  }, []); //  Empty dependency array – runs only once
 
   // ============================================================================
   // Return Auth Context
