@@ -534,6 +534,34 @@ Always consult a qualified financial advisor before making investment decisions.
 
 ---
 
+## Support My Work
+
+If you find my open-source projects useful, you can support ongoing development:
+
+<p align="center">
+  <img width="160" height="160" alt="BNB20QR" src="https://github.com/user-attachments/assets/ffbb43dc-4610-466f-9d4b-56427ca391c0" />
+  <img width="160" height="160" alt="TRONQR" src="https://github.com/user-attachments/assets/833f0bfe-ad8e-450b-8345-f3904879180e" />
+  <img width="160" height="160" alt="BTCQR" src="https://github.com/user-attachments/assets/e46dc59c-cb87-4944-bb4a-4733a1626d57" />
+</p>
+
+<p align="center">
+  <sub>BNB Chain (BEP20) &nbsp;·&nbsp; TRON (TRC20) &nbsp;·&nbsp; Bitcoin</sub>
+</p>
+
+**USDT / USDC (Recommended)**  
+Network: BNB Smart Chain (BEP20)  
+`0xCfB8a1b4Abaec2DEF899F7df6F522D705DE58401`
+
+**USDT (Alternative)**  
+Network: TRON (TRC20)  
+`TVi1M9Kpiaz48eytVzeqJjBd4MBTCbB2TL`
+
+**Bitcoin (BTC)**  
+`bc1qd47q5xmc6edlcspn9f3ecakkfaedwrt932w476`
+
+⚠️ *Please only use the networks listed above. Sending on the wrong network will result in permanent loss of funds.*
+
+---
 ## Acknowledgments
 
 - Alpha Vantage for financial data APIs
