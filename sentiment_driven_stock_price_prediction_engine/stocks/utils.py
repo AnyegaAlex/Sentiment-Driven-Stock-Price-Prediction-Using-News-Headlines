@@ -1,12 +1,16 @@
 import logging
-from datetime import datetime, timedelta
-from decimal import Decimal
-from django.db import IntegrityError
-from django.db.models import Q, Count, Sum, Avg
-from .models import Prediction
 import time
-from django.core.cache import cache
+from datetime import timedelta
+from decimal import Decimal
 from functools import wraps
+from typing import Optional, Dict, Any
+
+from django.db import IntegrityError
+from django.db.models import QuerySet, Avg
+from django.core.cache import cache
+from django.utils import timezone
+
+from .models import Prediction
 
 logger = logging.getLogger(__name__)
 
@@ -24,16 +28,21 @@ def save_prediction(
     user=None,                     
     price_at_prediction=None
 ) -> Prediction:
-    """Save a prediction record with de‑duplication logic."""
+    """
+    Save a prediction record with de-duplication logic.
+    Ensures timezone awareness and prevents duplicate predictions for the same day.
+    """
     symbol = symbol.upper()
     movement = movement.lower()
+    
     if movement not in ('up', 'down', 'neutral'):
         logger.warning(f"Invalid movement '{movement}' for {symbol}, defaulting to 'neutral'")
         movement = 'neutral'
 
     confidence = max(0.0, min(1.0, float(confidence)))
-    today = datetime.utcnow().date()
+    today = timezone.now().date()
 
+    # Check for existing prediction to prevent duplicates
     existing = Prediction.objects.filter(
         stock_symbol=symbol,
         date=today,
@@ -94,31 +103,38 @@ def retry_on_rate_limit(max_retries=3, delay=2):
     return decorator
 
 
-def get_cached_price(symbol, date):
-    cache_key = f"price_{symbol}_{date.strftime('%Y%m%d')}"
+def get_cached_price(symbol: str, target_date) -> Optional[float]:
+    """Retrieve cached price for a specific date."""
+    cache_key = f"price_{symbol}_{target_date.strftime('%Y%m%d')}"
     return cache.get(cache_key)
 
 
-def set_cached_price(symbol, date, price):
-    cache_key = f"price_{symbol}_{date.strftime('%Y%m%d')}"
-    cache.set(cache_key, price, timeout=60*60*24*7)
+def set_cached_price(symbol: str, target_date, price: float):
+    """Cache price for a specific date (7 days TTL)."""
+    cache_key = f"price_{symbol}_{target_date.strftime('%Y%m%d')}"
+    cache.set(cache_key, price, timeout=60 * 60 * 24 * 7)
 
 
 @retry_on_rate_limit(max_retries=3, delay=2)
-def fetch_yfinance_price(symbol, target_date):
+def fetch_yfinance_price(symbol: str, target_date) -> Optional[float]:
     """Fetch closing price for a symbol on target_date using yfinance."""
-    import yfinance as yf  # lazy import
+    import yfinance as yf  # Lazy import to keep web server light
+
     ticker = yf.Ticker(symbol)
     start = target_date - timedelta(days=2)
     end = target_date + timedelta(days=2)
     hist = ticker.history(start=start, end=end)
+    
     if hist.empty:
         return None
+        
     hist.index = hist.index.normalize()
     available_dates = hist.index.date
     valid_dates = [d for d in available_dates if d <= target_date]
+    
     if not valid_dates:
         return None
+        
     closest_date = max(valid_dates)
     price = float(hist.loc[hist.index.date == closest_date, 'Close'].iloc[0])
     return price
@@ -127,36 +143,47 @@ def fetch_yfinance_price(symbol, target_date):
 # – PREDICTION RESOLUTION & METRICS
 # ============================================================
 
-def resolve_prediction(prediction, resolution_days=7):
-    """Resolve a prediction after resolution_days with caching and rate limit handling."""
-    import yfinance as yf  # lazy import
+def resolve_prediction(prediction: Prediction, resolution_days: int = 7) -> bool:
+    """
+    Resolve a single prediction after `resolution_days`.
+    Fetches historical prices, calculates actual direction, and updates user accuracy.
+    Returns True if successfully resolved, False otherwise.
+    """
+    import yfinance as yf
 
     try:
         resolution_date = prediction.date + timedelta(days=resolution_days)
 
+        # 1. Resolve Prediction Price
         pred_price = get_cached_price(prediction.stock_symbol, prediction.date)
         if pred_price is None:
             pred_price = fetch_yfinance_price(prediction.stock_symbol, prediction.date)
             if pred_price is not None:
                 set_cached_price(prediction.stock_symbol, prediction.date, pred_price)
+                
         if pred_price is None:
             if prediction.price_at_prediction:
                 pred_price = float(prediction.price_at_prediction)
             else:
                 logger.warning(f"No price data for {prediction.stock_symbol} on {prediction.date}")
                 return False
+                
         prediction.price_at_prediction = Decimal(str(pred_price))
 
+        # 2. Resolve Resolution Price
         res_price = get_cached_price(prediction.stock_symbol, resolution_date)
         if res_price is None:
             res_price = fetch_yfinance_price(prediction.stock_symbol, resolution_date)
             if res_price is not None:
                 set_cached_price(prediction.stock_symbol, resolution_date, res_price)
+                
         if res_price is None:
             logger.warning(f"No price data for {prediction.stock_symbol} on {resolution_date}")
             return False
+            
         prediction.price_at_resolution = Decimal(str(res_price))
 
+        # 3. Determine Actual Direction
         if res_price > pred_price:
             prediction.actual_direction = 'up'
         elif res_price < pred_price:
@@ -170,6 +197,7 @@ def resolve_prediction(prediction, resolution_days=7):
             change = ((res_price - pred_price) / pred_price) * 100
             prediction.price_change_percent = Decimal(str(round(change, 2)))
 
+        # 4. Market Context (SPY)
         spy_cache_key = f"spy_price_{resolution_date.strftime('%Y%m%d')}"
         spy_data = cache.get(spy_cache_key)
         if spy_data is None:
@@ -182,66 +210,58 @@ def resolve_prediction(prediction, resolution_days=7):
                     'spy_price_start': float(spy_hist['Close'].iloc[0]),
                     'spy_price_end': float(spy_hist['Close'].iloc[-1]),
                 }
-                cache.set(spy_cache_key, spy_data, timeout=60*60*24*7)
+                cache.set(spy_cache_key, spy_data, timeout=60 * 60 * 24 * 7)
         prediction.market_context = spy_data or {}
 
-        prediction.resolution_date = datetime.now()
-        prediction.time_to_resolution = prediction.resolution_date - datetime.combine(prediction.date, datetime.min.time())
+        # 5. Save Resolution Details
+        prediction.resolution_date = timezone.now()
+        prediction.time_to_resolution = prediction.resolution_date - timezone.make_aware(
+            timezone.datetime.combine(prediction.date, timezone.datetime.min.time())
+        )
         prediction.save()
+
+        # 6. Update User Accuracy (if user exists)
         if prediction.user:
             avg = Prediction.objects.filter(
                 user=prediction.user,
                 is_correct__isnull=False
             ).aggregate(avg=Avg('is_correct'))['avg']
+            
             prediction.user.prediction_accuracy = round((avg or 0) * 100, 1)
             prediction.user.save(update_fields=['prediction_accuracy'])
             logger.info(f"Updated accuracy for user {prediction.user.id}: {prediction.user.prediction_accuracy}%")
+            
         logger.info(f"Resolved prediction {prediction.id} for {prediction.stock_symbol}: {prediction.is_correct}")
         return True
 
     except Exception as e:
-        logger.error(f"Error resolving prediction {prediction.id}: {e}")
+        logger.error(f"Error resolving prediction {prediction.id}: {e}", exc_info=True)
         return False
 
 
-def calculate_performance_metrics(queryset):
+def calculate_performance_metrics(queryset: QuerySet) -> Dict[str, Any]:
     """Calculate precision, recall, f1, confusion matrix from queryset."""
+    default_metrics = {
+        'accuracy': 0,
+        'precision': 0,
+        'recall': 0,
+        'f1': 0,
+        'balanced_accuracy': 0,
+        'confusion_matrix': {'TP': 0, 'FP': 0, 'TN': 0, 'FN': 0}
+    }
+
     try:
-        from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
-        import numpy as np
-        SKLEARN_AVAILABLE = True
+        from sklearn.metrics import confusion_matrix
     except ImportError:
-        SKLEARN_AVAILABLE = False
         logger.warning("sklearn not available – returning empty metrics")
-        return {
-            'accuracy': 0,
-            'precision': 0,
-            'recall': 0,
-            'f1': 0,
-            'balanced_accuracy': 0,
-            'confusion_matrix': {'TP': 0, 'FP': 0, 'TN': 0, 'FN': 0}
-        }
+        return default_metrics
 
     if queryset.count() == 0:
-        return {
-            'accuracy': 0,
-            'precision': 0,
-            'recall': 0,
-            'f1': 0,
-            'balanced_accuracy': 0,
-            'confusion_matrix': {'TP': 0, 'FP': 0, 'TN': 0, 'FN': 0}
-        }
+        return default_metrics
 
     resolved = queryset.filter(is_correct__isnull=False)
     if resolved.count() == 0:
-        return {
-            'accuracy': 0,
-            'precision': 0,
-            'recall': 0,
-            'f1': 0,
-            'balanced_accuracy': 0,
-            'confusion_matrix': {'TP': 0, 'FP': 0, 'TN': 0, 'FN': 0}
-        }
+        return default_metrics
 
     y_true = []
     y_pred = []
@@ -251,16 +271,15 @@ def calculate_performance_metrics(queryset):
             y_pred.append(1 if pred.predicted_movement == 'up' else 0)
 
     if len(y_true) == 0:
-        return {
-            'accuracy': 0,
-            'precision': 0,
-            'recall': 0,
-            'f1': 0,
-            'balanced_accuracy': 0,
-            'confusion_matrix': {'TP': 0, 'FP': 0, 'TN': 0, 'FN': 0}
-        }
+        return default_metrics
 
-    tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+    # Defensive check: sklearn throws an error/warning if only one class is present
+    if len(set(y_true)) == 1 and len(set(y_pred)) == 1:
+         # Handle edge case where everything is UP or everything is DOWN
+         tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+    else:
+         tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+
     accuracy = (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
@@ -273,14 +292,12 @@ def calculate_performance_metrics(queryset):
         'recall': round(recall * 100, 1),
         'f1': round(f1 * 100, 1),
         'balanced_accuracy': round(balanced_accuracy * 100, 1),
-        'confusion_matrix': {'TP': tp, 'FP': fp, 'TN': tn, 'FN': fn}
+        'confusion_matrix': {'TP': int(tp), 'FP': int(fp), 'TN': int(tn), 'FN': int(fn)}
     }
 
 
-def detect_drift(recent_period_days=30, baseline_period_days=90):
+def detect_drift(recent_period_days: int = 30, baseline_period_days: int = 90) -> Dict[str, Any]:
     """Detect performance drift by comparing recent vs baseline F1."""
-    from django.utils import timezone
-
     recent_start = timezone.now() - timedelta(days=recent_period_days)
     baseline_start = timezone.now() - timedelta(days=baseline_period_days)
 
@@ -324,21 +341,65 @@ def detect_drift(recent_period_days=30, baseline_period_days=90):
     }
 
 
-def resolve_all_pending_predictions(resolution_days=7):
-    """Resolve all pending predictions with a 1.5s delay between each to avoid rate limits."""
-    cutoff_date = datetime.now() - timedelta(days=resolution_days)
-    pending = Prediction.objects.filter(
+def resolve_all_pending_predictions(
+    resolution_days: int = 7, 
+    batch_size: Optional[int] = None, 
+    delay_seconds: float = 1.0
+) -> Dict[str, int]:
+    """
+    Resolve pending predictions (designed to run in GitHub Actions).
+    
+    Args:
+        resolution_days: Number of days after which to resolve.
+        batch_size: Max records to process in this run. If None, processes all.
+        delay_seconds: Time to sleep between API requests to avoid rate limits.
+        
+    Returns:
+        dict: Summary of resolved/failed counts.
+    """
+    cutoff_date = timezone.now() - timedelta(days=resolution_days)
+    queryset = Prediction.objects.filter(
         is_correct__isnull=True,
         date__lte=cutoff_date
-    )
-    results = {'total': pending.count(), 'resolved': 0, 'failed': 0}
-    for idx, pred in enumerate(pending):
-        if idx > 0:
-            time.sleep(1.5)
-        success = resolve_prediction(pred, resolution_days)
-        if success:
-            results['resolved'] += 1
-        else:
+    ).order_by('date')
+    
+    total_pending = queryset.count()
+    
+    if total_pending == 0:
+        logger.info("No pending predictions to resolve.")
+        return {'total': 0, 'resolved': 0, 'failed': 0}
+
+    # Apply batch size if provided
+    items_to_process = queryset if batch_size is None else queryset[:batch_size]
+    total_to_process = len(items_to_process)
+
+    logger.info(f"Found {total_pending} pending predictions. Processing {total_to_process} in this run.")
+    
+    results = {'total': total_to_process, 'resolved': 0, 'failed': 0}
+    
+    for idx, pred in enumerate(items_to_process):
+        if idx > 0 and delay_seconds > 0:
+            time.sleep(delay_seconds)
+            
+        try:
+            success = resolve_prediction(pred, resolution_days)
+            if success:
+                results['resolved'] += 1
+            else:
+                results['failed'] += 1
+        except Exception as e:
+            logger.error(f"Critical failure resolving prediction {pred.id}: {e}", exc_info=True)
             results['failed'] += 1
-    logger.info(f"Resolved {results['resolved']} predictions, {results['failed']} failed")
+            
+        # Observability: Log progress every 10 records
+        if (idx + 1) % 10 == 0:
+            logger.info(
+                f"Progress: {idx + 1}/{total_to_process} processed. "
+                f"Resolved: {results['resolved']}, Failed: {results['failed']}"
+            )
+            
+    logger.info(
+        f"Resolution complete: {results['resolved']} resolved, {results['failed']} failed "
+        f"out of {results['total']} processed."
+    )
     return results

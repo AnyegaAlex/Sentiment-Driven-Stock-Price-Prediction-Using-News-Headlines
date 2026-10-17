@@ -162,7 +162,7 @@ if database_url:
         DATABASES = {
             'default': dj_database_url.config(
                 default=database_url,
-                conn_max_age=600,
+                conn_max_age=0,
                 ssl_require=True,  # Neon requires SSL
             )
         }
@@ -450,6 +450,7 @@ SENTRY_ATTACH_STACKTRACE = os.getenv("SENTRY_ATTACH_STACKTRACE", "true").lower()
 SENTRY_ENABLE_TRACING = os.getenv("SENTRY_ENABLE_TRACING", "true").lower() == "true"
 SENTRY_ENABLE_PROFILING = os.getenv("SENTRY_ENABLE_PROFILING", "true").lower() == "true"
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
+SENTRY_DEBUG = os.getenv("SENTRY_DEBUG", "False").lower() == "true"
 
 if SENTRY_DSN:
     try:
@@ -467,7 +468,7 @@ if SENTRY_DSN:
 # ---------------------------------------------------------------------------
 # Sentiment model (FinBERT) configuration – memory‑saving defaults
 FINBERT_CONFIG = {
-    'model_name': 'distilbert-base-uncased-finetuned-sst-2-english',
+    'model_name': 'ProsusAI/finbert',
     'min_text_length': 25,
     'max_text_length': 1500,
     'confidence_threshold': 0.45,

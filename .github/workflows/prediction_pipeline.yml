@@ -1,0 +1,43 @@
+name: Stock Prediction Pipeline
+
+on:
+  schedule:
+    # Run every 2 hours
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+
+jobs:
+  process-predictions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          cd sentiment_driven_stock_price_prediction_engine
+          pip install -r requirements.txt
+          pip install psycopg2-binary
+
+      - name: Resolve Old Predictions & Generate New Ones
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: "dummy-key"
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          TWELVEDATA_API_KEY: ${{ secrets.TWELVEDATA_API_KEY }}
+          ALPHA_VANTAGE_KEY: ${{ secrets.ALPHA_VANTAGE_KEY }}
+        run: |
+          cd sentiment_driven_stock_price_prediction_engine
+          # 1. Resolve old predictions
+          python manage.py resolve_predictions --days 7
+          
+          # 2. Generate new predictions
+          python manage.py generate_predictions
+          
+          # 3. Prune old predictions to save Neon space
+          python manage.py prune_predictions --max-per-symbol 500
