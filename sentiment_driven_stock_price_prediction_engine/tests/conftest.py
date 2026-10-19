@@ -145,10 +145,11 @@ def mock_finnhub():
         yield mock_get
 
 
+# The FIXED fixture
 @pytest.fixture(autouse=True)
 def mock_sendgrid():
     """Mock SendGrid email sending to avoid network calls."""
-    with patch("authentication.utils.send_email_async") as mock_send:
+    with patch("authentication.utils.send_email_sync") as mock_send:
         mock_send.return_value = True
         yield mock_send
 

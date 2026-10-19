@@ -1,48 +1,54 @@
 """
 Stock analysis views – unified dashboard, technical indicators, LSTM predictions,
 subscription, and history. All endpoints are documented via OpenAPI (Swagger).
+
+ARCHITECTURE NOTE:
+This module is designed to be LIGHTWEIGHT. It serves as a pure API layer.
+All heavy lifting (Machine Learning inference, yfinance scraping, external API calls) 
+is handled asynchronously by the GitHub Actions Data Pipeline. 
+These views ONLY read from the database and Redis cache.
 """
-from rest_framework.views import APIView
-from rest_framework.response import Response
+
+import logging
+import random
+from datetime import timedelta
+
+from django.contrib.auth import get_user_model
+from django.core.cache import cache
+from django.http import JsonResponse
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+
 from rest_framework import status, serializers
 from rest_framework.permissions import AllowAny
-from django.core.cache import cache
-from django.db import transaction
-import logging
-from datetime import timedelta
-from django.utils import timezone
-from django.db.models import F
-from django.contrib.auth import get_user_model
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 
-User = get_user_model()
-
-# drf-spectacular for OpenAPI
 from drf_spectacular.utils import (
     extend_schema, OpenApiParameter, OpenApiResponse, OpenApiTypes
 )
 
 # Project imports
+from news.models import ProcessedNews
+from authentication.utils import error_response, success_response
 from .models import Prediction, Subscription
 from .serializers import (
     PredictionSerializer,
     PredictionDetailSerializer,
-    PredictionListSerializer,
-    ModelPerformanceSnapshotSerializer,
     StockOpinionSerializer,
     SubscriptionSerializer,
-    StockAnalysisSerializer,
     TechnicalIndicatorsSerializer,
     SymbolSerializer,
 )
-from news.models import ProcessedNews
-from .lstm_predictor import get_lstm_predictor
-from .utils import save_prediction, calculate_performance_metrics, detect_drift
-from authentication.utils import error_response, success_response
+from .utils import calculate_performance_metrics, detect_drift
 
+User = get_user_model()
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-#  CONSOLIDATED FALLBACK DATA (merged from static_data & STATIC_DATA)
+#  CONSOLIDATED FALLBACK DATA
 # ============================================================================
 FALLBACK_DATA = {
     "AAPL": {"company": "Apple Inc.", "price": 116.16, "sma50": 114.84, "sma200": 111.81, "rsi": 70.8, "support": 110.35, "resistance": 121.97, "volume": 12424000, "volatility": 0.15},
@@ -59,168 +65,21 @@ FALLBACK_DATA = {
     "VTI": {"company": "Vanguard Total Stock Market", "price": 250.00, "sma50": 248.00, "sma200": 245.00, "rsi": 55.0, "support": 240.0, "resistance": 260.0, "volume": 3000000, "volatility": 0.12},
 }
 
-
 # ============================================================================
-#  TECHNICAL INDICATORS (with caching)
+#  HELPERS: FALLBACKS & CACHE
 # ============================================================================
-
-def calculate_technical_indicators(symbol):
-    """
-    Fetch real technical indicators using yfinance.
-    Returns dict with all fields, or None if data unavailable.
-    If SMA_50 or SMA_200 cannot be computed (insufficient data),
-    they are approximated from the available history.
-    """
-    import yfinance as yf  # lazy import
-    import numpy as np      # lazy import
-
-    try:
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period="6mo")  # enough for 200-day SMA
-        if hist.empty or len(hist) < 10:
-            return None
-
-        current_price = float(hist['Close'].iloc[-1])
-        price_history = [round(float(p), 2) for p in hist['Close'].tolist()]
-
-        # SMA 50 – if data insufficient, compute SMA of all available data
-        if len(hist) >= 50:
-            sma_50 = float(hist['Close'].rolling(window=50).mean().iloc[-1])
-            if np.isnan(sma_50):
-                sma_50 = float(hist['Close'].mean())
-        else:
-            sma_50 = float(hist['Close'].mean())
-
-        # SMA 200 – if data insufficient, compute SMA of all available data
-        if len(hist) >= 200:
-            sma_200 = float(hist['Close'].rolling(window=200).mean().iloc[-1])
-            if np.isnan(sma_200):
-                sma_200 = float(hist['Close'].mean())
-        else:
-            sma_200 = float(hist['Close'].mean())
-
-        # RSI (14-day) – if insufficient data, fallback to 50
-        if len(hist) >= 15:
-            delta = hist['Close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss
-            rsi = float(100 - (100 / (1 + rs.iloc[-1]))) if rs.iloc[-1] != 0 else 50.0
-            if np.isnan(rsi):
-                rsi = 50.0
-        else:
-            rsi = 50.0
-
-        # Support / Resistance (20-day high/low)
-        recent = hist.tail(20)
-        support = float(recent['Low'].min()) if not recent.empty else current_price * 0.9
-        resistance = float(recent['High'].max()) if not recent.empty else current_price * 1.1
-
-        # Pivot Point
-        pivot = float((recent['High'].iloc[-1] + recent['Low'].iloc[-1] + current_price) / 3) if not recent.empty else current_price
-
-        # Volume
-        volume = int(hist['Volume'].iloc[-1]) if not hist.empty else 0
-
-        # Volatility (daily returns std dev)
-        returns = hist['Close'].pct_change().dropna()
-        volatility = float(returns.std() * 100) if len(returns) > 1 else 0.0
-        if np.isnan(volatility):
-            volatility = 0.0
-
-        return {
-            "current_price": current_price,
-            "sma_50": round(sma_50, 2),
-            "sma_200": round(sma_200, 2),
-            "rsi": round(rsi, 1),
-            "support": round(support, 2),
-            "resistance": round(resistance, 2),
-            "pivot": round(pivot, 2),
-            "volume": volume,
-            "volatility": round(volatility, 2),
-            "price_history": price_history,
-        }
-    except Exception as e:
-        logger.warning(f"yfinance failed for {symbol}: {e}")
-        return None
-
-
-def get_technical_indicators(symbol, timeframe="1d"):
-    """
-    Wrapper around calculate_technical_indicators with Redis caching.
-    """
-    cache_key = f"tech_{symbol}_{timeframe}"
-    cached = cache.get(cache_key)
-    if cached:
-        return cached
-
-    # Get real data (fallback handled inside calculate_technical_indicators)
-    data = calculate_technical_indicators(symbol)
-    if data is None:
-        # Use fallback (pre-generated)
-        data = get_fallback_technical(symbol)
-        # The fallback returns a dict with "technical" key – we want just the data
-        if data and "technical" in data:
-            data = data["technical"]
-        else:
-            data = None
-
-    if data:
-        # Cache for 5 minutes
-        cache.set(cache_key, data, timeout=300)
-    return data
-
-
-# ============================================================================
-#  FALLBACK HELPERS (kept for resilience)
-# ============================================================================
-
-def get_fallback_analysis(symbol: str, risk_type: str = "medium", hold_time: str = "medium-term") -> dict:
-    """Generate realistic fallback when external APIs fail."""
-    symbol = symbol.upper()
-    data = FALLBACK_DATA.get(symbol, {"company": f"{symbol} Inc.", "price": 100.0, "sma50": 98.0, "sma200": 95.0, "rsi": 55.0, "support": 95.0, "resistance": 105.0, "volume": 1000000, "volatility": 0.2})
-    price = data["price"]
-    fallback_sentiment = {"overall": "Neutral", "score": 0.5, "recent_articles": 0}
-    return {
-        "company": data["company"],
-        "symbol": symbol,
-        "recommendation": "HOLD",
-        "confidence": 0.5,
-        "sentiment": fallback_sentiment,
-        "lastUpdated": timezone.now().isoformat() + "Z",
-        "technicalIndicators": {
-            "currentPrice": price,
-            "sma50": data["sma50"],
-            "sma200": data["sma200"],
-            "rsi": data["rsi"],
-            "support": data["support"],
-            "resistance": data["resistance"],
-            "volume": data["volume"],
-        },
-        "priceTargets": {
-            "bearish": round(price * 0.9, 2),
-            "base": round(price, 2),
-            "bullish": round(price * 1.14, 2),
-        },
-        "keyFactors": [
-            {"title": "Market Sentiment", "description": "Based on recent news", "impact": "neutral"}
-        ],
-        "riskAssessment": {"level": risk_type, "horizon": hold_time}
-    }
-
 
 def get_fallback_technical(symbol: str) -> dict:
     """
-    Generate realistic fallback technical data when yfinance fails.
-    Uses a static map for well‑known symbols, and a dynamic generator for others.
+    Generate realistic fallback technical data.
+    Used when the cache is cold or the background pipeline hasn't run yet.
     """
     symbol = symbol.upper()
-    import random
-
-    # If symbol is in static map, use that data
+    
     if symbol in FALLBACK_DATA:
         data = FALLBACK_DATA[symbol]
         price = data["price"]
+        
         random.seed(hash(symbol) % 2**32)  # deterministic per symbol
         price_history = []
         for i in range(30):
@@ -253,46 +112,45 @@ def get_fallback_technical(symbol: str) -> dict:
     price = round(random.uniform(20, 500), 2)
     sma50 = round(price * (1 + random.uniform(-0.05, 0.05)), 2)
     sma200 = round(price * (1 + random.uniform(-0.10, 0.10)), 2)
-    rsi = round(random.uniform(30, 70), 1)
-    support = round(price * (1 - random.uniform(0.05, 0.15)), 2)
-    resistance = round(price * (1 + random.uniform(0.05, 0.15)), 2)
-    pivot = round((price + support + resistance) / 3, 2)
-    volume = random.randint(1000000, 50000000)
-    volatility = round(random.uniform(0.05, 0.35), 2)
-
-    price_history = []
-    current = price * 0.95
-    for i in range(30):
-        change = (random.random() - 0.5) * 0.025
-        new_price = current * (1 + change)
-        price_history.append(round(new_price, 2))
-        current = new_price
-    price_history[-1] = round(price, 2)
-
+    
     return {
         "technical": {
             "current_price": price,
             "sma_50": sma50,
             "sma_200": sma200,
-            "rsi": rsi,
-            "support": support,
-            "resistance": resistance,
-            "pivot": pivot,
-            "volume": volume,
-            "volatility": volatility,
-            "price_history": price_history,
+            "rsi": round(random.uniform(30, 70), 1),
+            "support": round(price * 0.9, 2),
+            "resistance": round(price * 1.1, 2),
+            "pivot": round(price, 2),
+            "volume": random.randint(1000000, 50000000),
+            "volatility": round(random.uniform(0.05, 0.35), 2),
+            "price_history": [round(price * (1 + (random.random() - 0.5) * 0.05), 2) for _ in range(30)],
         }
     }
 
+def get_technical_indicators(symbol: str, timeframe: str = "1d") -> dict:
+    """
+    Retrieves technical indicators.
+    Priority: Redis Cache -> Fallback Data.
+    NEVER calls yfinance synchronously.
+    """
+    cache_key = f"tech_{symbol}_{timeframe}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
 
-# ============================================================================
-#  SENTIMENT HELPER (to avoid code duplication)
-# ============================================================================
+    # Cache miss: use fallback and populate cache so background workers can override later
+    fallback_data = get_fallback_technical(symbol)
+    data = fallback_data.get("technical")
+    
+    if data:
+        cache.set(cache_key, data, timeout=300)
+    return data
 
-def get_sentiment_summary(symbol, days=7):
+def get_sentiment_summary(symbol: str, days: int = 7) -> dict:
     """
     Fetch and summarise sentiment from recent news for a given symbol.
-    Returns a dict with overall, score, recent_articles, source_stats, and history.
+    Reads directly from the database (populated by the news pipeline).
     """
     cutoff = timezone.now() - timedelta(days=days)
     news_items = ProcessedNews.objects.filter(
@@ -325,13 +183,11 @@ def get_sentiment_summary(symbol, days=7):
             tier1_count += 1
             reliability_sum += item.source_reliability or 70
 
-    history = []
-    for item in news_items[:min(days, len(news_items))]:
-        if item.sentiment_score is not None:
-            history.append({
-                "date": item.published_at.isoformat(),
-                "score": round(item.sentiment_score, 4)
-            })
+    history = [
+        {"date": item.published_at.isoformat(), "score": round(item.sentiment_score, 4)}
+        for item in news_items[:min(days, len(news_items))]
+        if item.sentiment_score is not None
+    ]
     history.sort(key=lambda x: x['date'])
 
     return {
@@ -348,14 +204,13 @@ def get_sentiment_summary(symbol, days=7):
 
 
 # ============================================================================
-#  INLINE SERIALIZERS FOR SWAGGER RESPONSE SHAPES
+#  INLINE SERIALIZERS FOR SWAGGER
 # ============================================================================
 
 class SentimentSummarySerializer(serializers.Serializer):
     overall = serializers.CharField()
     score = serializers.FloatField()
     recent_articles = serializers.IntegerField()
-
 
 class TechnicalIndicatorsResponseSerializer(serializers.Serializer):
     currentPrice = serializers.FloatField()
@@ -366,23 +221,19 @@ class TechnicalIndicatorsResponseSerializer(serializers.Serializer):
     resistance = serializers.FloatField()
     volume = serializers.IntegerField()
 
-
 class PriceTargetsSerializer(serializers.Serializer):
     bearish = serializers.FloatField()
     base = serializers.FloatField()
     bullish = serializers.FloatField()
-
 
 class KeyFactorSerializer(serializers.Serializer):
     title = serializers.CharField()
     description = serializers.CharField()
     impact = serializers.CharField()
 
-
 class RiskAssessmentSerializer(serializers.Serializer):
     level = serializers.CharField()
     horizon = serializers.CharField()
-
 
 class StockAnalysisResponseSerializer(serializers.Serializer):
     company = serializers.CharField()
@@ -396,7 +247,6 @@ class StockAnalysisResponseSerializer(serializers.Serializer):
     keyFactors = KeyFactorSerializer(many=True)
     riskAssessment = RiskAssessmentSerializer()
     lstm_prediction = serializers.DictField(required=False)
-
 
 class LSTMPredictionResponseSerializer(serializers.Serializer):
     symbol = serializers.CharField()
@@ -414,102 +264,41 @@ class LSTMPredictionResponseSerializer(serializers.Serializer):
 class StockOpinionView(APIView):
     """
     Legacy endpoint – kept for backward compatibility.
-    Generates a detailed investment analysis.
+    Reads the latest generated opinion from the DB.
     """
     serializer_class = StockOpinionSerializer  
     @extend_schema(
         summary="Generate AI stock opinion (legacy)",
         description="Returns a full investment thesis including recommendation, key points, and risk assessment.",
         parameters=[
-            OpenApiParameter(
-                name='symbol',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='Stock ticker (e.g., AAPL)',
-                required=True
-            ),
-            OpenApiParameter(
-                name='risk_type',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='Risk tolerance: low, medium, high',
-                required=False,
-                default='medium'
-            ),
-            OpenApiParameter(
-                name='hold_time',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='Investment horizon: short-term, medium-term, long-term',
-                required=False,
-                default='medium-term'
-            ),
-            OpenApiParameter(
-                name='detail_level',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='summary or full',
-                required=False,
-                default='summary'
-            ),
+            OpenApiParameter(name='symbol', type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name='risk_type', type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=False, default='medium'),
+            OpenApiParameter(name='hold_time', type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=False, default='medium-term'),
         ],
-        responses={
-            200: StockOpinionSerializer,
-            400: OpenApiResponse(description="Missing symbol or invalid parameters"),
-            500: OpenApiResponse(description="Internal server error"),
-        },
+        responses={200: StockOpinionSerializer, 400: OpenApiResponse(description="Missing symbol")},
         tags=["Legacy"]
     )
     def get(self, request, *args, **kwargs):
-        symbol = request.query_params.get("symbol")
+        symbol = request.query_params.get("symbol", "").upper()
         if not symbol:
-            return Response(
-                error_response("Stock symbol is required.", code=2001),
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response(error_response("Stock symbol is required.", code=2001), status=status.HTTP_400_BAD_REQUEST)
 
-        risk_type = request.query_params.get("risk_type", "medium")
-        hold_time = request.query_params.get("hold_time", "medium-term")
-        detail_level = request.query_params.get("detail_level", "summary")
+        # Fetch latest from DB
+        latest_pred = Prediction.objects.filter(stock_symbol=symbol).order_by('-created_at').first()
+        
+        if not latest_pred:
+            return Response(error_response(f"No analysis available for {symbol} yet.", code=4041), status=status.HTTP_404_NOT_FOUND)
 
-        try:
-            # Lazy import to avoid heavy load
-            from .opinion_generator import generate_stock_opinion, format_investment_analysis
-
-            opinion = generate_stock_opinion(symbol=symbol, risk_type=risk_type)
-            if "error" in opinion:
-                return Response(opinion, status=status.HTTP_400_BAD_REQUEST)
-
-            formatted_opinion = format_investment_analysis(opinion)
-            formatted_opinion['hold_time'] = hold_time
-            formatted_opinion['detail_level'] = detail_level
-
-            if request.query_params.get("format", "json").lower() == "text":
-                text_response = self._format_as_text(formatted_opinion)
-                return Response({"analysis_text": text_response}, status=status.HTTP_200_OK)
-
-            return Response(formatted_opinion, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            logger.exception(f"Error generating stock opinion for {symbol}: {str(e)}")
-            return Response(
-                error_response(f"Internal server error: {str(e)}", code=9001),
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    def _format_as_text(self, opinion: dict) -> str:
-        lines = [
-            f"Stock Analysis for {opinion.get('symbol', 'Unknown')}",
-            f"=" * 40,
-            f"Recommendation: {opinion.get('analysis', {}).get('recommendation', 'N/A')}",
-            f"Confidence: {opinion.get('analysis', {}).get('confidence', 0)}%",
-            f"Current Price: ${opinion.get('analysis', {}).get('current_price', 0)}",
-            f"\nSummary:",
-            f"{opinion.get('summary', 'No summary available')}",
-            f"\nInvestment Thesis:",
-            f"{opinion.get('analysis', {}).get('investment_thesis', 'No thesis available')}",
-        ]
-        return "\n".join(lines)
+        return Response({
+            "symbol": symbol,
+            "analysis": {
+                "recommendation": latest_pred.predicted_movement.upper(),
+                "confidence": latest_pred.confidence * 100,
+                "current_price": float(latest_pred.price_at_prediction or 0.0),
+            },
+            "summary": latest_pred.prediction_explanation or "Analysis generated by background pipeline.",
+            "status": "success"
+        }, status=status.HTTP_200_OK)
 
 
 class PredictionHistoryView(APIView):
@@ -519,64 +308,19 @@ class PredictionHistoryView(APIView):
     serializer_class = PredictionSerializer  
     @extend_schema(
         summary="Get prediction history",
-        description="Returns a paginated list of past predictions. Filter by symbol and control pagination.",
+        description="Returns a paginated list of past predictions.",
         parameters=[
-            OpenApiParameter(
-                name='symbol',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='Filter by stock ticker',
-                required=False
-            ),
-            OpenApiParameter(
-                name='limit',
-                type=OpenApiTypes.INT,
-                location=OpenApiParameter.QUERY,
-                description='Number of results per page (max 200)',
-                required=False,
-                default=50
-            ),
-            OpenApiParameter(
-                name='offset',
-                type=OpenApiTypes.INT,
-                location=OpenApiParameter.QUERY,
-                description='Pagination offset',
-                required=False,
-                default=0
-            ),
+            OpenApiParameter(name='symbol', type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=False),
+            OpenApiParameter(name='limit', type=OpenApiTypes.INT, location=OpenApiParameter.QUERY, required=False, default=50),
+            OpenApiParameter(name='offset', type=OpenApiTypes.INT, location=OpenApiParameter.QUERY, required=False, default=0),
         ],
-        responses={
-            200: OpenApiResponse(
-                response=serializers.Serializer,
-                description='Paginated list of predictions',
-                examples=[
-                    {
-                        "application/json": {
-                            "count": 125,
-                            "next": 100,
-                            "previous": 0,
-                            "results": [
-                                {
-                                    "id": 1,
-                                    "stock_symbol": "AAPL",
-                                    "predicted_movement": "UP",
-                                    "confidence": 0.82,
-                                    "date": "2026-07-12T10:00:00Z"
-                                }
-                            ]
-                        }
-                    }
-                ]
-            ),
-            500: OpenApiResponse(description="Internal server error"),
-        },
+        responses={200: OpenApiResponse(description='Paginated list of predictions')},
         tags=["Prediction History"]
     )
     def get(self, request):
         try:
             symbol = request.query_params.get('symbol')
-            limit = int(request.query_params.get('limit', 50))
-            limit = min(limit, 200)
+            limit = min(int(request.query_params.get('limit', 50)), 200)
             offset = int(request.query_params.get('offset', 0))
 
             cache_key = f"pred_history_{symbol}_{limit}_{offset}"
@@ -604,207 +348,108 @@ class PredictionHistoryView(APIView):
 
         except Exception as e:
             logger.exception(f"Error fetching prediction history: {e}")
-            return Response(
-                error_response("Internal server error", code=9001, errors={"details": str(e)}),
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response(error_response("Internal server error", code=9001), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class StockAnalysisView(APIView):
     """
     Unified endpoint for the dashboard.
-    Combines sentiment, technicals, price targets, and (optionally) LSTM.
+    Combines cached technicals, DB sentiment, and the latest LSTM prediction from the DB.
     """
     serializer_class = StockAnalysisResponseSerializer  
     permission_classes = [AllowAny]
 
     @extend_schema(
         summary="Unified stock analysis",
-        description="Comprehensive analysis: recommendation, sentiment summary, technical indicators, price targets, key factors, risk assessment, and LSTM prediction if available.",
+        description="Comprehensive analysis: recommendation, sentiment summary, technical indicators, price targets, and latest LSTM prediction.",
         parameters=[
-            OpenApiParameter(
-                name='symbol',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='Stock ticker (e.g., AAPL)',
-                required=True
-            ),
-            OpenApiParameter(
-                name='risk_type',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='Risk tolerance: low, medium, high',
-                required=False,
-                default='medium'
-            ),
-            OpenApiParameter(
-                name='hold_time',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='Investment horizon: short-term, medium-term, long-term',
-                required=False,
-                default='medium-term'
-            ),
+            OpenApiParameter(name='symbol', type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name='risk_type', type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=False, default='medium'),
+            OpenApiParameter(name='hold_time', type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=False, default='medium-term'),
         ],
-        responses={
-            200: StockAnalysisResponseSerializer,
-            400: OpenApiResponse(description="Missing symbol"),
-            500: OpenApiResponse(description="Internal server error (fallback used)"),
-        },
+        responses={200: StockAnalysisResponseSerializer, 400: OpenApiResponse(description="Missing symbol")},
         tags=["Stock Analysis"]
     )
     def get(self, request):
-        symbol = request.query_params.get("symbol")
+        symbol = request.query_params.get("symbol", "").upper()
         if not symbol:
-            return Response(
-                error_response("Stock symbol is required.", code=2001),
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response(error_response("Stock symbol is required.", code=2001), status=status.HTTP_400_BAD_REQUEST)
 
         risk_type = request.query_params.get("risk_type", "medium")
         hold_time = request.query_params.get("hold_time", "medium-term")
-
         cache_key = f"stock_analysis_{symbol}_{risk_type}_{hold_time}"
+
+        # 1. Try Cache
         cached_response = cache.get(cache_key)
         if cached_response:
-            return Response(cached_response, status=status.HTTP_200_OK)
+            return Response(success_response(data=cached_response), status=status.HTTP_200_OK)
 
-        # ---------- TRY REAL DATA ----------
+        # 2. Build from DB / Fallback
         try:
-            from .opinion_generator import generate_stock_opinion, format_investment_analysis
-
-            opinion = generate_stock_opinion(symbol=symbol, risk_type=risk_type, news_text="")
-            if "error" in opinion:
-                raise ValueError(opinion["error"])
-
-            formatted = format_investment_analysis(opinion)
-
-            # ---------- SENTIMENT SUMMARY (using helper) ----------
+            # Fetch latest LSTM prediction from DB
+            latest_pred = Prediction.objects.filter(stock_symbol=symbol).order_by('-created_at').first()
+            
+            # Fetch sentiment from News DB
             sentiment_summary = get_sentiment_summary(symbol, days=7)
-
-            # ---------- TECHNICAL INDICATORS (cached) ----------
+            
+            # Fetch Technicals (from cache/fallback)
             tech_data = get_technical_indicators(symbol)
-            if not tech_data:
-                raise ValueError("No technical data available")
 
-            # Convert to the format expected by frontend
-            tech_data_formatted = {
-                "currentPrice": tech_data["current_price"],
-                "sma50": tech_data["sma_50"],
-                "sma200": tech_data["sma_200"],
-                "rsi": tech_data["rsi"],
-                "support": tech_data["support"],
-                "resistance": tech_data["resistance"],
-                "volume": tech_data["volume"],
+            # Format LSTM data
+            lstm_data = {
+                "direction": latest_pred.predicted_movement.upper() if latest_pred else "UNAVAILABLE",
+                "confidence": (latest_pred.confidence * 100) if latest_pred else 0.0,
+                "fallback": not bool(latest_pred),
+                "message": "Loaded from background pipeline" if latest_pred else "No recent prediction available"
             }
 
-            # Price targets (fallback if not present)
-            price_targets = {
-                "bearish": round(tech_data_formatted["currentPrice"] * 0.9, 2),
-                "base": round(tech_data_formatted["currentPrice"], 2),
-                "bullish": round(tech_data_formatted["currentPrice"] * 1.14, 2),
-            }
-            if formatted.get('analysis', {}).get('price_targets'):
-                pt = formatted['analysis']['price_targets']
-                price_targets = {
-                    "bearish": pt.get('bearish', price_targets['bearish']),
-                    "base": pt.get('base', price_targets['base']),
-                    "bullish": pt.get('bullish', price_targets['bullish']),
-                }
+            # Map company names
+            company_name = FALLBACK_DATA.get(symbol, {}).get("company", f"{symbol} Inc.")
 
-            # Key factors
-            key_factors = []
-            if 'key_points' in formatted.get('analysis', {}):
-                key_factors = [
-                    {"title": kp[:30], "description": kp, "impact": "positive"}
-                    for kp in formatted.get('analysis', {}).get('key_points', [])[:5]
-                ]
-            if not key_factors:
-                key_factors = [{"title": "Market Sentiment", "description": "Based on recent news", "impact": "neutral"}]
-
-            # Build response
             response_data = {
-                "company": formatted.get('company', symbol),
-                "symbol": symbol.upper(),
-                "recommendation": formatted.get('analysis', {}).get('recommendation', 'HOLD'),
-                "confidence": formatted.get('analysis', {}).get('confidence', 0.5) / 100.0,
+                "company": company_name,
+                "symbol": symbol,
+                "recommendation": latest_pred.predicted_movement.upper() if latest_pred else "HOLD",
+                "confidence": (latest_pred.confidence if latest_pred else 0.5),
                 "sentiment": {
                     "overall": sentiment_summary["overall"],
                     "score": sentiment_summary["score"],
                     "recent_articles": sentiment_summary["recent_articles"],
                 },
                 "lastUpdated": timezone.now().isoformat() + 'Z',
-                "technicalIndicators": tech_data_formatted,
-                "priceTargets": price_targets,
-                "keyFactors": key_factors,
-                "riskAssessment": {
-                    "level": risk_type,
-                    "horizon": hold_time
-                }
+                "technicalIndicators": {
+                    "currentPrice": tech_data["current_price"],
+                    "sma50": tech_data["sma_50"],
+                    "sma200": tech_data["sma_200"],
+                    "rsi": tech_data["rsi"],
+                    "support": tech_data["support"],
+                    "resistance": tech_data["resistance"],
+                    "volume": tech_data["volume"],
+                },
+                "priceTargets": {
+                    "bearish": round(tech_data["current_price"] * 0.9, 2),
+                    "base": round(tech_data["current_price"], 2),
+                    "bullish": round(tech_data["current_price"] * 1.14, 2),
+                },
+                "keyFactors": [{"title": "Market Sentiment", "description": "Based on recent news", "impact": "neutral"}],
+                "riskAssessment": {"level": risk_type, "horizon": hold_time},
+                "lstm_prediction": lstm_data
             }
 
-            # ---------- LSTM PREDICTION ----------
-            try:
-                from .lstm_predictor import get_lstm_predictor
-                predictor = get_lstm_predictor()
-                lstm_result = predictor.predict(symbol)
-                if lstm_result.get('success', False):
-                    response_data["lstm_prediction"] = {
-                        "direction": lstm_result.get('prediction', 'UNAVAILABLE'),
-                        "confidence": lstm_result.get('confidence', 0.0),
-                        "fallback": lstm_result.get('fallback', False),
-                        "message": lstm_result.get('message', '')
-                    }
-                    if not lstm_result.get('fallback', True):
-                        save_prediction(
-                            symbol=symbol,
-                            movement=lstm_result['prediction'],
-                            confidence=lstm_result['confidence'] / 100.0,
-                            sentiment_score=sentiment_summary["score"],
-                            headline="",
-                            source='lstm'
-                        )
-                else:
-                    response_data["lstm_prediction"] = {
-                        "direction": "UNAVAILABLE",
-                        "confidence": 0.0,
-                        "error": lstm_result.get('error', 'LSTM prediction failed')
-                    }
-            except Exception as e:
-                logger.error(f"LSTM prediction failed for {symbol}: {e}")
-                response_data["lstm_prediction"] = {
-                    "direction": "UNAVAILABLE",
-                    "confidence": 0.0,
-                    "error": str(e)
-                }
-
-            cache.set(cache_key, response_data, timeout=600)
-            return Response(
-                success_response(data=response_data),
-                status=status.HTTP_200_OK
-            )
+            # Cache for 1 hour
+            cache.set(cache_key, response_data, timeout=3600)
+            return Response(success_response(data=response_data), status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.warning(f"Real data failed for {symbol}: {e}. Using fallback.")
-            fallback = get_fallback_analysis(symbol, risk_type, hold_time)
-            # Ensure support/resistance are set from fallback technical
-            tech_fallback = get_fallback_technical(symbol)
-            if fallback.get('technicalIndicators') and tech_fallback.get('technical'):
-                fallback['technicalIndicators']['support'] = tech_fallback['technical']['support']
-                fallback['technicalIndicators']['resistance'] = tech_fallback['technical']['resistance']
-            # Add an empty LSTM field to keep schema consistent
-            fallback['lstm_prediction'] = {"direction": "UNAVAILABLE", "confidence": 0.0}
-            cache.set(cache_key, fallback, timeout=300)
-            return Response(
-                success_response(data=fallback),
-                status=status.HTTP_200_OK
-            )
+            logger.error(f"Failed to build analysis for {symbol}: {e}")
+            # Safe fallback if DB fails
+            return Response(error_response("Analysis temporarily unavailable.", code=5001), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class TechnicalIndicatorsView(APIView):
     """
-    Returns pure technical indicators (SMA, RSI, support, resistance, etc.).
-    Uses yfinance for real data, with fallback to static data.
+    Returns pure technical indicators.
+    Prioritizes cache (populated by pipeline); uses fallback if cold.
     """
     serializer_class = TechnicalIndicatorsResponseSerializer  
     permission_classes = [AllowAny]
@@ -813,129 +458,31 @@ class TechnicalIndicatorsView(APIView):
         summary="Get technical indicators",
         description="Returns technical metrics: SMA50, SMA200, RSI, support, resistance, pivot, volume, volatility, and price history.",
         parameters=[
-            OpenApiParameter(
-                name='symbol',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='Stock ticker',
-                required=True
-            ),
-            OpenApiParameter(
-                name='timeframe',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='Timeframe: 1d, 1w, 1m, 3m',
-                required=False,
-                default='1d'
-            ),
+            OpenApiParameter(name='symbol', type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name='timeframe', type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=False, default='1d'),
         ],
-        responses={
-            200: TechnicalIndicatorsResponseSerializer,
-            400: OpenApiResponse(description="Missing symbol"),
-            500: OpenApiResponse(description="Internal server error (fallback used)"),
-        },
+        responses={200: TechnicalIndicatorsResponseSerializer, 400: OpenApiResponse(description="Missing symbol")},
         tags=["Technical Indicators"]
     )
     def get(self, request):
-        import yfinance as yf  # lazy import
-
-        symbol = request.query_params.get("symbol")
+        symbol = request.query_params.get("symbol", "").upper()
         if not symbol:
-            return Response(
-                error_response("Symbol is required.", code=2001),
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response(error_response("Symbol is required.", code=2001), status=status.HTTP_400_BAD_REQUEST)
 
         timeframe = request.query_params.get("timeframe", "1d")
-
-        cache_key = f"technical_{symbol}_{timeframe}"
-        cached = cache.get(cache_key)
-        if cached:
-            return Response(
-                success_response(data=cached),
-                status=status.HTTP_200_OK
-            )
-
-        # Try to get real data from yfinance
-        try:
-            # Map timeframe to days
-            days_map = {
-                '1d': 5,      # 5 days for 1D
-                '1w': 7,
-                '1m': 30,
-                '3m': 90,
-            }
-            days = days_map.get(timeframe, 30)
-
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(period=f"{days}d")
-
-            if hist.empty:
-                raise ValueError("No historical data returned from yfinance")
-
-            current_price = float(hist['Close'].iloc[-1])
-            price_history = [round(float(p), 2) for p in hist['Close'].tolist()]
-
-            sma_50 = 0
-            sma_200 = 0
-            if len(hist) >= 50:
-                sma_50 = round(float(hist['Close'].rolling(window=50).mean().iloc[-1]), 2)
-            if len(hist) >= 200:
-                sma_200 = round(float(hist['Close'].rolling(window=200).mean().iloc[-1]), 2)
-
-            rsi = 0
-            if len(hist) >= 15:
-                delta = hist['Close'].diff()
-                gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-                loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-                rs = gain / loss
-                rsi = round(100 - (100 / (1 + rs.iloc[-1])), 1) if rs.iloc[-1] != 0 else 50
-
-            recent = hist.tail(20)
-            support = round(float(recent['Low'].min()), 2) if not recent.empty else 0
-            resistance = round(float(recent['High'].max()), 2) if not recent.empty else 0
-
-            last = hist.tail(1)
-            pivot = round(float((last['High'].iloc[-1] + last['Low'].iloc[-1] + last['Close'].iloc[-1]) / 3), 2) if not last.empty else 0
-
-            volume = int(hist['Volume'].iloc[-1]) if not hist.empty else 0
-
-            returns = hist['Close'].pct_change().dropna()
-            volatility = round(float(returns.std() * 100), 2) if len(returns) > 1 else 0
-
-            response_data = {
-                "technical": {
-                    "current_price": current_price,
-                    "sma_50": sma_50,
-                    "sma_200": sma_200,
-                    "rsi": rsi,
-                    "support": support,
-                    "resistance": resistance,
-                    "pivot": pivot,
-                    "volume": volume,
-                    "volatility": volatility,
-                    "price_history": price_history,
-                }
-            }
-            cache.set(cache_key, response_data, timeout=300)
-            return Response(
-                success_response(data=response_data),
-                status=status.HTTP_200_OK
-            )
-
-        except Exception as e:
-            logger.warning(f"yfinance failed for {symbol}: {e}. Using fallback.")
-            response_data = get_fallback_technical(symbol)
-            cache.set(cache_key, response_data, timeout=300)
-            return Response(
-                success_response(data=response_data),
-                status=status.HTTP_200_OK
-            )
+        
+        # get_technical_indicators handles cache and fallback internally now
+        data = get_technical_indicators(symbol, timeframe)
+        
+        return Response(
+            success_response(data={"technical": data}),
+            status=status.HTTP_200_OK
+        )
 
 
 class SymbolsListView(APIView):
     """
-    List available stock symbols with company names and regions.
+    List available stock symbols.
     """
     serializer_class = SymbolSerializer  
     permission_classes = [AllowAny]
@@ -943,10 +490,7 @@ class SymbolsListView(APIView):
     @extend_schema(
         summary="List available symbols",
         description="Returns a list of supported stock symbols with company names and regions.",
-        responses={
-            200: SymbolSerializer(many=True),
-            500: OpenApiResponse(description="Internal server error"),
-        },
+        responses={200: SymbolSerializer(many=True)},
         tags=["Symbols"]
     )
     def get(self, request):
@@ -957,27 +501,15 @@ class SymbolsListView(APIView):
 
         try:
             symbols_data = [
-                {"symbol": "AAPL", "name": "Apple Inc.", "region": "US"},
-                {"symbol": "MSFT", "name": "Microsoft Corp.", "region": "US"},
-                {"symbol": "GOOGL", "name": "Alphabet Inc.", "region": "US"},
-                {"symbol": "AMZN", "name": "Amazon.com Inc.", "region": "US"},
-                {"symbol": "META", "name": "Meta Platforms Inc.", "region": "US"},
-                {"symbol": "TSLA", "name": "Tesla Inc.", "region": "US"},
-                {"symbol": "NVDA", "name": "NVIDIA Corp.", "region": "US"},
-                {"symbol": "JPM", "name": "JPMorgan Chase", "region": "US"},
-                {"symbol": "VTI", "name": "Vanguard Total Stock Market", "region": "US"},
-                {"symbol": "IBM", "name": "International Business Machines", "region": "US"},
+                {"symbol": sym, "name": data["company"], "region": "US"} 
+                for sym, data in FALLBACK_DATA.items()
             ]
             serializer = SymbolSerializer(symbols_data, many=True)
             cache.set(cache_key, serializer.data, timeout=3600)
             return Response(serializer.data, status=status.HTTP_200_OK)
-
         except Exception as e:
             logger.exception(f"Error fetching symbols list: {e}")
-            return Response(
-                error_response(f"Internal server error: {str(e)}", code=9001),
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response(error_response(f"Internal server error: {str(e)}", code=9001), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class SubscribeView(APIView):
@@ -989,12 +521,12 @@ class SubscribeView(APIView):
 
     @extend_schema(
         summary="Subscribe email",
-        description="Add an email address to the subscription list. Returns 201 if new, 200 if reactivated, 400 if already active.",
+        description="Add an email address to the subscription list.",
         request=SubscriptionSerializer,
         responses={
             201: OpenApiResponse(description="Subscribed successfully."),
             200: OpenApiResponse(description="Subscription reactivated."),
-            400: OpenApiResponse(description="Invalid email or already subscribed (active)."),
+            400: OpenApiResponse(description="Invalid email or already active."),
         },
         tags=["Subscription"]
     )
@@ -1007,196 +539,97 @@ class SubscribeView(APIView):
                 defaults={'is_active': True}
             )
             if created:
-                return Response(
-                    success_response(message="Subscribed successfully."),
-                    status=status.HTTP_201_CREATED
-                )
-            else:
-                if not obj.is_active:
-                    obj.is_active = True
-                    obj.save()
-                    return Response(
-                        success_response(message="Subscription reactivated."),
-                        status=status.HTTP_200_OK
-                    )
-                return Response(
-                    error_response("Email already subscribed.", code=4002),
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        return Response(
-            error_response("Validation failed", code=2001, errors=serializer.errors),
-            status=status.HTTP_400_BAD_REQUEST
-        )
+                return Response(success_response(message="Subscribed successfully."), status=status.HTTP_201_CREATED)
+            
+            if not obj.is_active:
+                obj.is_active = True
+                obj.save()
+                return Response(success_response(message="Subscription reactivated."), status=status.HTTP_200_OK)
+                
+            return Response(error_response("Email already subscribed.", code=4002), status=status.HTTP_400_BAD_REQUEST)
+            
+        return Response(error_response("Validation failed", code=2001, errors=serializer.errors), status=status.HTTP_400_BAD_REQUEST)
 
 
 class LSTMPredictionView(APIView):
     """
-    LSTM‑based prediction endpoint.
-    Accepts symbol and optional news text, returns directional prediction with confidence.
+    LSTM prediction endpoint.
+    Reads the latest prediction from the DB instead of running inference synchronously.
     """
     serializer_class = LSTMPredictionResponseSerializer  
     permission_classes = [AllowAny]
 
     @extend_schema(
         summary="LSTM prediction",
-        description="Returns a directional prediction (UP/DOWN) using the LSTM model. Optionally incorporates news text.",
+        description="Returns a directional prediction (UP/DOWN) using the LSTM model.",
         parameters=[
-            OpenApiParameter(
-                name='symbol',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='Stock ticker',
-                required=True
-            ),
-            OpenApiParameter(
-                name='news',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='News headline or text for context',
-                required=False,
-                default=''
-            ),
+            OpenApiParameter(name='symbol', type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=True),
         ],
-        responses={
-            200: LSTMPredictionResponseSerializer,
-            400: OpenApiResponse(description="Missing symbol or prediction failed"),
-            500: OpenApiResponse(description="Internal server error"),
-        },
+        responses={200: LSTMPredictionResponseSerializer, 400: OpenApiResponse(description="Missing symbol")},
         tags=["LSTM"]
     )
     def get(self, request):
-        symbol = request.query_params.get('symbol')
+        symbol = request.query_params.get('symbol', "").upper()
         if not symbol:
-            return Response(
-                error_response("Symbol is required.", code=2001),
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response(error_response("Symbol is required.", code=2001), status=status.HTTP_400_BAD_REQUEST)
 
-        news_text = request.query_params.get('news', '')
-
-        cache_key = f"lstm_{symbol}_{hash(news_text)}"
+        cache_key = f"lstm_{symbol}"
         cached = cache.get(cache_key)
         if cached:
             return Response(cached, status=status.HTTP_200_OK)
 
-        try:
-            predictor = get_lstm_predictor()
-            result = predictor.predict(symbol, news_text)
+        # Query the latest prediction from the DB
+        latest_pred = Prediction.objects.filter(stock_symbol=symbol, source='lstm').order_by('-created_at').first()
 
-            if not result.get('success'):
-                return Response(
-                    error_response(result.get('error', 'Prediction failed'), code=5001),
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # ---------- Save prediction to history with user association ----------
-            try:
-                user = request.user if request.user.is_authenticated else None
-                prediction_obj = save_prediction(
-                    symbol=symbol,
-                    movement=result['prediction'],
-                    confidence=result['confidence'] / 100.0,
-                    sentiment_score=result.get('sentiment_score', 0.0),
-                    headline=news_text,
-                    source='lstm',
-                    user=user,
-                    price_at_prediction=result.get('current_price')
-                )
-
-                if user:
-                    User.objects.filter(id=user.id).update(
-                        predictions_count=F('predictions_count') + 1
-                    )
-
-            except Exception as e:
-                logger.warning(f"Failed to save prediction record for {symbol}: {e}")
-
-            result['symbol'] = symbol.upper()
-            result['timestamp'] = timezone.now().isoformat() + 'Z'
-
-            cache.set(cache_key, result, timeout=300)
+        if not latest_pred:
             return Response(
-                success_response(data=result),
+                success_response(data={
+                    "symbol": symbol,
+                    "prediction": "HOLD",
+                    "confidence": 50.0,
+                    "sentiment_score": 0.0,
+                    "timestamp": timezone.now().isoformat() + 'Z',
+                    "success": True,
+                    "message": "No recent LSTM prediction available. Using fallback."
+                }), 
                 status=status.HTTP_200_OK
             )
 
-        except Exception as e:
-            logger.exception(f"Error in LSTMPredictionView for {symbol}: {e}")
-            return Response(
-                error_response(f"Internal server error: {str(e)}", code=9001),
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        result = {
+            "symbol": symbol,
+            "prediction": latest_pred.predicted_movement.upper(),
+            "confidence": latest_pred.confidence * 100,
+            "sentiment_score": latest_pred.sentiment_score,
+            "timestamp": latest_pred.created_at.isoformat() + 'Z',
+            "success": True
+        }
+
+        cache.set(cache_key, result, timeout=300)
+        return Response(success_response(data=result), status=status.HTTP_200_OK)
 
 
 class SentimentAnalysisView(APIView):
     """
     Dedicated sentiment analysis endpoint.
-    Returns sentiment metrics for a given symbol based on recent news.
+    Reads from the database.
     """
     serializer_class = serializers.Serializer  
     permission_classes = [AllowAny]
 
     @extend_schema(
         summary="Get sentiment analysis",
-        description="Returns sentiment score, distribution, history, and news source statistics for a given symbol.",
+        description="Returns sentiment score, distribution, history, and news source statistics.",
         parameters=[
-            OpenApiParameter(
-                name='symbol',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='Stock ticker (e.g., AAPL)',
-                required=True
-            ),
-            OpenApiParameter(
-                name='time_range',
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description='Time range: 7d, 30d',
-                required=False,
-                default='7d'
-            ),
+            OpenApiParameter(name='symbol', type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=True),
+            OpenApiParameter(name='time_range', type=OpenApiTypes.STR, location=OpenApiParameter.QUERY, required=False, default='7d'),
         ],
-        responses={
-            200: OpenApiResponse(
-                description='Sentiment analysis results',
-                examples=[
-                    {
-                        "application/json": {
-                            "success": True,
-                            "data": {
-                                "sentiment": {
-                                    "score": 0.65,
-                                    "label": "Bullish"
-                                },
-                                "news_count": 142,
-                                "source_stats": {
-                                    "tier1_count": 12,
-                                    "reliability_sum": 9.6,
-                                    "tier1_sources": ["Reuters", "Bloomberg"]
-                                },
-                                "history": [
-                                    {"date": "2026-07-05T00:00:00Z", "score": 0.55},
-                                    {"date": "2026-07-06T00:00:00Z", "score": 0.60}
-                                ]
-                            },
-                            "code": 200,
-                            "timestamp": "2026-07-14T10:00:00Z"
-                        }
-                    }
-                ]
-            ),
-            400: OpenApiResponse(description="Missing symbol"),
-            500: OpenApiResponse(description="Internal server error"),
-        },
+        responses={200: OpenApiResponse(description='Sentiment analysis results'), 400: OpenApiResponse(description="Missing symbol")},
         tags=["Sentiment Analysis"]
     )
     def get(self, request):
-        symbol = request.query_params.get("symbol")
+        symbol = request.query_params.get("symbol", "").upper()
         if not symbol:
-            return Response(
-                error_response("Symbol is required.", code=2001),
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response(error_response("Symbol is required.", code=2001), status=status.HTTP_400_BAD_REQUEST)
 
         time_range = request.query_params.get("time_range", "7d")
         days = 7 if time_range == '7d' else 30
@@ -1204,10 +637,7 @@ class SentimentAnalysisView(APIView):
         cache_key = f"sentiment_{symbol}_{time_range}"
         cached_response = cache.get(cache_key)
         if cached_response:
-            return Response(
-                success_response(data=cached_response),
-                status=status.HTTP_200_OK
-            )
+            return Response(success_response(data=cached_response), status=status.HTTP_200_OK)
 
         try:
             sentiment = get_sentiment_summary(symbol, days)
@@ -1223,40 +653,16 @@ class SentimentAnalysisView(APIView):
             }
 
             cache.set(cache_key, response_data, timeout=600)
-            return Response(
-                success_response(data=response_data),
-                status=status.HTTP_200_OK
-            )
+            return Response(success_response(data=response_data), status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.exception(f"Error in SentimentAnalysisView for {symbol}: {e}")
-            fallback_data = {
-                "sentiment": {
-                    "score": 0.0,
-                    "label": "Neutral"
-                },
-                "news_count": 0,
-                "source_stats": {
-                    "tier1_count": 0,
-                    "reliability_sum": 0,
-                    "tier1_sources": []
-                },
-                "history": []
-            }
-            return Response(
-                success_response(data=fallback_data),
-                status=status.HTTP_200_OK
-            )
+            return Response(error_response("Sentiment analysis temporarily unavailable", code=5001), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-# ============================================================================
-#  PREDICTION HISTORY SYSTEM
-# ============================================================================
 
 class PredictionListView(APIView):
     """
     List predictions with filters.
-    Returns paginated predictions with accuracy and SHAP data.
     """
     serializer_class = PredictionDetailSerializer  
     permission_classes = [AllowAny]
@@ -1267,7 +673,7 @@ class PredictionListView(APIView):
         symbol = request.query_params.get('symbol')
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
-        outcome = request.query_params.get('outcome')  # 'correct', 'incorrect'
+        outcome = request.query_params.get('outcome')
         limit = int(request.query_params.get('limit', 50))
         offset = int(request.query_params.get('offset', 0))
 
@@ -1278,15 +684,13 @@ class PredictionListView(APIView):
 
         if date_from and date_from not in ['null', 'undefined', '']:
             try:
-                parsed_date = dateutil.parser.parse(date_from)
-                qs = qs.filter(date__gte=parsed_date.date())
+                qs = qs.filter(date__gte=dateutil.parser.parse(date_from).date())
             except (ValueError, TypeError, OverflowError) as e:
                 logger.warning(f"Failed to parse date_from: {date_from} - {e}")
 
         if date_to and date_to not in ['null', 'undefined', '']:
             try:
-                parsed_date = dateutil.parser.parse(date_to)
-                qs = qs.filter(date__lte=parsed_date.date())
+                qs = qs.filter(date__lte=dateutil.parser.parse(date_to).date())
             except (ValueError, TypeError, OverflowError) as e:
                 logger.warning(f"Failed to parse date_to: {date_to} - {e}")
 
@@ -1310,7 +714,6 @@ class PredictionListView(APIView):
 class PerformanceSummaryView(APIView):
     """
     Get overall performance metrics.
-    Returns accuracy, precision, recall, F1, and per-symbol breakdown.
     """
     serializer_class = serializers.Serializer  
     permission_classes = [AllowAny]
@@ -1330,19 +733,14 @@ class PerformanceSummaryView(APIView):
         metrics = calculate_performance_metrics(qs)
 
         symbols = qs.values_list('stock_symbol', flat=True).distinct()
-        symbol_metrics = {}
-        for sym in symbols:
-            sym_qs = qs.filter(stock_symbol=sym)
-            symbol_metrics[sym] = calculate_performance_metrics(sym_qs)
+        symbol_metrics = {sym: calculate_performance_metrics(qs.filter(stock_symbol=sym)) for sym in symbols}
 
         total_preds = qs.count()
         correct_preds = qs.filter(is_correct=True).count()
-        resolved_qs = qs.filter(is_correct__isnull=False)
-        total_resolved = resolved_qs.count()
+        total_resolved = qs.filter(is_correct__isnull=False).count()
 
         recent_start = timezone.now() - timedelta(days=7)
-        recent_qs = qs.filter(resolution_date__gte=recent_start)
-        recent_metrics = calculate_performance_metrics(recent_qs)
+        recent_metrics = calculate_performance_metrics(qs.filter(resolution_date__gte=recent_start))
 
         return Response({
             'total_predictions': total_preds,
@@ -1356,7 +754,7 @@ class PerformanceSummaryView(APIView):
 
 class DriftDetectionView(APIView):
     """
-    Detect model drift by comparing recent vs baseline performance.
+    Detect model drift.
     """
     serializer_class = serializers.Serializer  
     permission_classes = [AllowAny]
@@ -1365,11 +763,7 @@ class DriftDetectionView(APIView):
         recent_days = int(request.query_params.get('recent_days', 30))
         baseline_days = int(request.query_params.get('baseline_days', 90))
 
-        result = detect_drift(
-            recent_period_days=recent_days,
-            baseline_period_days=baseline_days
-        )
-
+        result = detect_drift(recent_period_days=recent_days, baseline_period_days=baseline_days)
         return Response(result)
 
 
@@ -1395,26 +789,12 @@ class SHAPExplanationView(APIView):
                 'confidence': pred.confidence,
             })
         except Prediction.DoesNotExist:
-            return Response(
-                {'error': 'Prediction not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({'error': 'Prediction not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
 # ============================================================================
-#  CRON ENDPOINT
+#  DEPRECATED CRON ENDPOINT
 # ============================================================================
-
-import os
-from django.http import JsonResponse
-from django.core.management import call_command
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
-from rest_framework.permissions import AllowAny
-
-logger = logging.getLogger(__name__)
-
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
@@ -1423,24 +803,11 @@ logger = logging.getLogger(__name__)
 @permission_classes([AllowAny])
 def cron_resolve_predictions(request):
     """
-    Endpoint for cron-job.org to trigger prediction resolution.
-    Protected by a secret token passed as 'secret' query parameter.
+    Deprecated: Prediction resolution is now handled by the GitHub Actions Data Pipeline.
+    This endpoint returns a 410 Gone to prevent accidental API usage limits.
     """
-    secret = request.query_params.get('secret') or request.data.get('secret')
-    expected_secret = os.environ.get('CRON_SECRET')
-
-    if not expected_secret:
-        logger.error("CRON_SECRET environment variable not set – cron endpoint disabled")
-        return JsonResponse({'error': 'Cron endpoint not configured'}, status=500)
-
-    if secret != expected_secret:
-        logger.warning(f"Cron trigger rejected – invalid secret from {request.META.get('REMOTE_ADDR')}")
-        return JsonResponse({'error': 'Unauthorized'}, status=403)
-
-    try:
-        call_command('resolve_predictions', days=7)
-        logger.info("Cron trigger: resolve_predictions completed successfully")
-        return JsonResponse({'status': 'ok', 'message': 'Predictions resolved'})
-    except Exception as e:
-        logger.error(f"Cron trigger failed: {e}", exc_info=True)
-        return JsonResponse({'error': str(e)}, status=500)
+    logger.warning("Deprecated cron_resolve_predictions endpoint was hit. Resolution is now handled by GitHub Actions.")
+    return JsonResponse({
+        'status': 'deprecated',
+        'message': 'This endpoint is no longer active. Predictions are resolved automatically by the background pipeline.'
+    }, status=410)

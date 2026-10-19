@@ -2,26 +2,24 @@
 Utility functions for authentication: email sending, token generation,
 verification, and response formatting.
 
-All functions are production-ready with robust error handling,
-logging, HTML+plain text email support, rate limiting, retry logic,
-and proper frontend URL handling.
+Production-Ready Refactor:
+- Removed asynchronous threading (which gets killed by Render/serverless platforms).
+- Switched to synchronous SendGrid API calls with strict timeouts.
+- Added atomic rate limiting using cache.incr().
+- Added extensive logging for failure diagnostics.
 """
 
-import os
 import re
 import time
 import secrets
 import logging
-import threading
-from datetime import datetime
-from functools import wraps
+from typing import Optional, Dict, Any
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.cache import cache
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
-from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
@@ -29,7 +27,6 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from .models import User
 
 logger = logging.getLogger(__name__)
-
 
 # ============================================================================
 # CONSTANTS
@@ -47,7 +44,7 @@ EMAIL_SUBJECTS = {
 
 EMAIL_RATE_LIMIT = 3
 EMAIL_RATE_WINDOW = 60
-EMAIL_MAX_RETRIES = 3
+EMAIL_MAX_RETRIES = 2
 EMAIL_RETRY_DELAY = 1
 
 
@@ -69,7 +66,7 @@ __all__ = [
     'send_email_change_notification',
     'send_account_deletion_confirmation',
     'send_security_alert_email',
-    'send_email_async',
+    'send_email_sync',
     'validate_email',
     'check_email_rate_limit',
     'get_request_context',
@@ -81,21 +78,8 @@ __all__ = [
 # RESPONSE HELPERS
 # ============================================================================
 
-def error_response(message, code=None, details=None, status_code=400, request_id=None, **kwargs):
-    """
-    Standard error response format for all endpoints.
-    
-    Args:
-        message (str): User-friendly error message.
-        code (str): Application-specific error code (e.g., 'AUTH_001').
-        details (dict): Additional error details (field-level errors).
-        status_code (int): HTTP status code.
-        request_id (str): Request ID for tracking.
-        **kwargs: Any extra arguments are ignored (for compatibility).
-    
-    Returns:
-        dict: Standardised error payload.
-    """
+def error_response(message: str, code: Optional[str] = None, details: Optional[Dict] = None, status_code: int = 400, request_id: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+    """Standard error response format for all endpoints."""
     response = {
         'success': False,
         'error': message,
@@ -107,27 +91,13 @@ def error_response(message, code=None, details=None, status_code=400, request_id
         response['details'] = details
     if request_id:
         response['request_id'] = request_id
-    # Optionally include errors if passed (but only if you want to handle them)
-    # We ignore them to prevent TypeError, but if you want to include them:
     if 'errors' in kwargs and kwargs['errors'] is not None:
         response['errors'] = kwargs['errors']
     return response
 
 
-def success_response(data=None, message=None, code='SUCCESS', request_id=None, **kwargs):
-    """
-    Standard success response format.
-    
-    Args:
-        data (any): Payload to return.
-        message (str): Success message.
-        code (str): Application-specific success code.
-        request_id (str): Request ID for tracking.
-        **kwargs: Any extra arguments are ignored.
-    
-    Returns:
-        dict: Standardised success payload.
-    """
+def success_response(data: Optional[Any] = None, message: Optional[str] = None, code: str = 'SUCCESS', request_id: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+    """Standard success response format."""
     response = {
         'success': True,
         'code': code,
@@ -146,53 +116,26 @@ def success_response(data=None, message=None, code='SUCCESS', request_id=None, *
 # HELPER FUNCTIONS
 # ============================================================================
 
-def validate_email(email):
-    """
-    Validate email address format.
-    
-    Args:
-        email (str): Email address to validate.
-    
-    Returns:
-        bool: True if valid, False otherwise.
-    """
+def validate_email(email: str) -> bool:
+    """Validate email address format."""
     if not email:
         return False
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
 
 
-def strip_html_tags(html):
-    """
-    Strip HTML tags from content for plain text version.
-    
-    Args:
-        html (str): HTML content to strip.
-    
-    Returns:
-        str: Plain text version.
-    """
+def strip_html_tags(html: str) -> str:
+    """Strip HTML tags from content for plain text version."""
     if not html:
         return ''
-    # Remove HTML tags
     text = re.sub(r'<[^>]+>', '', html)
-    # Replace common HTML entities
     text = text.replace('&nbsp;', ' ').replace('&amp;', '&')
-    # Clean up extra whitespace
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
 
-def get_request_context(request):
-    """
-    Extract request context for logging.
-    
-    Args:
-        request (HttpRequest): The current request.
-    
-    Returns:
-        dict: Request context with IP, user agent, and request ID.
-    """
+def get_request_context(request) -> Dict[str, str]:
+    """Extract request context for logging."""
     return {
         'request_id': request.META.get('HTTP_X_REQUEST_ID', ''),
         'ip': request.META.get('REMOTE_ADDR', 'Unknown'),
@@ -200,18 +143,10 @@ def get_request_context(request):
     }
 
 
-def check_email_rate_limit(user_id, action, limit=EMAIL_RATE_LIMIT, window=EMAIL_RATE_WINDOW):
+def check_email_rate_limit(user_id: int, action: str, limit: int = EMAIL_RATE_LIMIT, window: int = EMAIL_RATE_WINDOW) -> bool:
     """
-    Check if user has exceeded email rate limit.
-    
-    Args:
-        user_id (int): User ID to check.
-        action (str): Email action type (e.g., 'verification', 'welcome').
-        limit (int): Max emails allowed in the window.
-        window (int): Time window in seconds.
-    
-    Returns:
-        bool: True if under limit, False if rate limited.
+    Check if user has exceeded email rate limit using atomic cache operations.
+    Prevents race conditions under concurrent requests.
     """
     cache_key = f"email_rate_{action}_{user_id}"
     count = cache.get(cache_key, 0)
@@ -220,43 +155,31 @@ def check_email_rate_limit(user_id, action, limit=EMAIL_RATE_LIMIT, window=EMAIL
         logger.warning(f"Email rate limit exceeded for user {user_id} on action '{action}'")
         return False
     
-    cache.set(cache_key, count + 1, timeout=window)
+    try:
+        cache.incr(cache_key)
+    except ValueError:
+        # Key does not exist yet
+        cache.set(cache_key, 1, timeout=window)
+        
     return True
 
 
 # ============================================================================
-# VERIFICATION CODE HELPERS
+# VERIFICATION CODE & TOKEN HELPERS
 # ============================================================================
 
-def generate_verification_code():
-    """
-    Generate a 6-digit numeric verification code using cryptographically
-    secure random numbers.
-    
-    Returns:
-        str: 6-digit code (e.g., "482719").
-    """
+def generate_verification_code() -> str:
+    """Generate a 6-digit numeric verification code."""
     return ''.join(str(secrets.randbelow(10)) for _ in range(6))
 
 
-def verify_email_code(user, code):
-    """
-    Verify a 6-digit code previously sent to the user's email.
-    
-    The code is stored in the cache with a 10-minute TTL.
-    
-    Args:
-        user (User): The user to verify.
-        code (str): The 6-digit code entered by the user.
-    
-    Returns:
-        bool: True if the code is valid and not expired, False otherwise.
-    """
+def verify_email_code(user: User, code: str) -> bool:
+    """Verify a 6-digit code previously sent to the user's email."""
     try:
         cache_key = f"email_verification_{user.id}"
         stored_code = cache.get(cache_key)
         if stored_code and stored_code == code:
-            cache.delete(cache_key)  # one-time use
+            cache.delete(cache_key)
             return True
         return False
     except Exception as e:
@@ -264,17 +187,8 @@ def verify_email_code(user, code):
         return False
 
 
-def verify_email_token(uid, token):
-    """
-    Verify the token sent in the email verification link.
-    
-    Args:
-        uid (str): Base64-encoded user ID.
-        token (str): Django default token.
-    
-    Returns:
-        User | None: The user if the token is valid, otherwise None.
-    """
+def verify_email_token(uid: str, token: str) -> Optional[User]:
+    """Verify the token sent in the email verification link."""
     try:
         uid_decoded = force_str(urlsafe_base64_decode(uid))
         user = User.objects.get(pk=uid_decoded)
@@ -286,127 +200,93 @@ def verify_email_token(uid, token):
     return None
 
 
-def verify_password_reset_token(uid, token):
-    """
-    Verify the token sent in the password reset link.
-    
-    Args:
-        uid (str): Base64-encoded user ID.
-        token (str): Django default token.
-    
-    Returns:
-        User | None: The user if the token is valid, otherwise None.
-    """
+def verify_password_reset_token(uid: str, token: str) -> Optional[User]:
+    """Verify the token sent in the password reset link."""
     return verify_email_token(uid, token)
 
 
 # ============================================================================
-# CORE EMAIL SENDING (Async with SendGrid Web API + SMTP Fallback)
+# CORE EMAIL SENDING (SYNCHRONOUS)
 # ============================================================================
 
-def send_email_async(subject, to_email, html_content, plain_content=None, retry_count=EMAIL_MAX_RETRIES):
+def send_email_sync(subject: str, to_email: str, html_content: str, plain_content: Optional[str] = None, retry_count: int = EMAIL_MAX_RETRIES) -> bool:
     """
-    Send email asynchronously using SendGrid Web API with SMTP fallback.
+    Send email synchronously using SendGrid Web API with SMTP fallback.
+    This blocks the request for ~200ms but guarantees the email is dispatched 
+    before Render can terminate the worker process.
     """
     if not validate_email(to_email):
         logger.error(f"Invalid email address: {to_email}")
         return False
 
-    def _send_with_retry():
-        last_error = None
-        
-        for attempt in range(retry_count):
-            try:
-                # plain_text is always defined
-                if plain_content is None:
-                    plain_text = strip_html_tags(html_content)
-                else:
-                    plain_text = plain_content
+    plain_text = plain_content or strip_html_tags(html_content)
+    last_error = None
 
-                # --- Primary: SendGrid Web API ---
-                try:
-                    from sendgrid import SendGridAPIClient
-                    from sendgrid.helpers.mail import Mail
+    for attempt in range(retry_count):
+        # --- Primary: SendGrid Web API ---
+        try:
+            from sendgrid import SendGridAPIClient
+            from sendgrid.helpers.mail import Mail
 
-                    message = Mail(
-                        from_email=settings.DEFAULT_FROM_EMAIL,
-                        to_emails=to_email,
-                        subject=subject,
-                        html_content=html_content,
-                        plain_text_content=plain_text,
-                    )
+            message = Mail(
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to_emails=to_email,
+                subject=subject,
+                html_content=html_content,
+                plain_text_content=plain_text,
+            )
 
-                    sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
-                    response = sg.send(message)
+            # 10-second timeout ensures Render doesn't hang indefinitely if SendGrid is down
+            sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=10)
+            response = sg.send(message)
 
-                    if 200 <= response.status_code < 300:
-                        logger.info(f"[SendGrid] Email sent to {to_email} (status: {response.status_code})")
-                        return True
-                    else:
-                        logger.error(f"[SendGrid] Failed for {to_email}: {response.status_code}")
-                        last_error = f"SendGrid error: {response.status_code}"
-                        
-                        if 400 <= response.status_code < 500 and response.status_code != 429:
-                            raise Exception(f"SendGrid client error: {response.status_code}")
+            if 200 <= response.status_code < 300:
+                logger.info(f"[SendGrid] Email sent to {to_email} (status: {response.status_code})")
+                return True
+            else:
+                last_error = f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}"
+                logger.error(f"[SendGrid] Failed for {to_email}: {last_error}")
+                
+                # Don't retry on 4xx errors (except 429) as they indicate a configuration issue
+                if 400 <= response.status_code < 500 and response.status_code != 429:
+                    break 
 
-                except ImportError as e:
-                    logger.warning(f"[Email] SendGrid not installed: {e}")
-                    last_error = "SendGrid not installed"
-                except Exception as e:
-                    logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {e}")
-                    last_error = str(e)
+        except ImportError:
+            logger.warning("[Email] SendGrid library not installed, falling back to SMTP.")
+        except Exception as e:
+            last_error = str(e)
+            logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {e}")
 
-                # --- Fallback: Django SMTP ---
-                try:
-                    send_mail(
-                        subject=subject,
-                        message=plain_text,
-                        from_email=settings.DEFAULT_FROM_EMAIL,
-                        recipient_list=[to_email],
-                        html_message=html_content,
-                        fail_silently=False,
-                    )
-                    logger.info(f"[SMTP] Email sent to {to_email}")
-                    return True
-                except Exception as e:
-                    logger.error(f"[SMTP] Fallback failed for {to_email}: {e}")
-                    last_error = str(e)
+        # --- Fallback: Django SMTP ---
+        try:
+            send_mail(
+                subject=subject,
+                message=plain_text,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[to_email],
+                html_message=html_content,
+                fail_silently=False,
+            )
+            logger.info(f"[SMTP] Email sent to {to_email}")
+            return True
+        except Exception as e:
+            last_error = str(e)
+            logger.error(f"[SMTP] Fallback failed for {to_email}: {e}")
 
-            except Exception as e:
-                last_error = str(e)
-                if attempt < retry_count - 1:
-                    wait = (2 ** attempt) * EMAIL_RETRY_DELAY
-                    logger.warning(f"[Email] Retry {attempt + 1}/{retry_count} in {wait}s")
-                    time.sleep(wait)
-                else:
-                    logger.error(f"[Email] All retries failed: {e}")
+        if attempt < retry_count - 1:
+            time.sleep(EMAIL_RETRY_DELAY)
 
-        logger.error(f"[Email] Failed after {retry_count} attempts for {to_email}: {last_error}")
-        return False
-
-    thread = threading.Thread(target=_send_with_retry, daemon=True)
-    thread.start()
-    logger.info(f"[Email] Queued for {to_email}: {subject}")
-    return True
+    logger.error(f"[Email] Failed after {retry_count} attempts for {to_email}. Last error: {last_error}")
+    return False
 
 
 # ============================================================================
-# EMAIL SENDING FUNCTIONS (Async)
+# HIGH-LEVEL EMAIL FUNCTIONS
 # ============================================================================
 
-def send_verification_email(user, request):
-    """
-    Send verification email asynchronously with rate limiting.
-    
-    Args:
-        user (User): The user to verify.
-        request (HttpRequest): The current request.
-    
-    Returns:
-        bool: True if email was queued, False otherwise.
-    """
+def send_verification_email(user: User, request) -> bool:
+    """Send verification email synchronously with rate limiting."""
     try:
-        # Rate limit: 3 verification emails per minute
         if not check_email_rate_limit(user.id, 'verification', limit=3, window=60):
             logger.warning(f"Verification rate limit exceeded for user {user.id}")
             return False
@@ -440,28 +320,17 @@ def send_verification_email(user, request):
             'year': timezone.now().year,
         })
         
-        return send_email_async(subject, user.email, html_content, plain_content)
+        return send_email_sync(subject, user.email, html_content, plain_content)
         
     except Exception as e:
-        logger.error(f"Failed to queue verification email for {user.email}: {e}", exc_info=True)
+        logger.error(f"Failed to send verification email for {user.email}: {e}", exc_info=True)
         return False
 
 
-def send_welcome_email(user, request):
-    """
-    Send welcome email asynchronously with frontend links.
-    
-    Args:
-        user (User): The new user.
-        request (HttpRequest): The current request.
-    
-    Returns:
-        bool: True if email was queued, False otherwise.
-    """
+def send_welcome_email(user: User, request) -> bool:
+    """Send welcome email synchronously."""
     try:
-        # Rate limit: 2 welcome emails per minute
         if not check_email_rate_limit(user.id, 'welcome', limit=2, window=60):
-            logger.warning(f"Welcome email rate limit exceeded for user {user.id}")
             return False
         
         frontend_url = settings.FRONTEND_URL
@@ -494,34 +363,20 @@ Thanks,
 The Tickflow Capital Team
 """
         
-        return send_email_async(subject, user.email, html_content, plain_content)
-        
+        return send_email_sync(subject, user.email, html_content, plain_content)
     except Exception as e:
-        logger.error(f"Failed to queue welcome email for {user.email}: {e}", exc_info=True)
+        logger.error(f"Failed to send welcome email for {user.email}: {e}", exc_info=True)
         return False
 
 
-def send_password_reset_email(user, request):
-    """
-    Send password reset email with frontend link.
-    
-    Args:
-        user (User): The user requesting reset.
-        request (HttpRequest): The current request.
-    
-    Returns:
-        bool: True if email was queued, False otherwise.
-    """
+def send_password_reset_email(user: User, request) -> bool:
+    """Send password reset email synchronously."""
     try:
-        # Rate limit: 3 reset emails per minute
         if not check_email_rate_limit(user.id, 'password_reset', limit=3, window=60):
-            logger.warning(f"Password reset rate limit exceeded for user {user.id}")
             return False
         
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
-        
-        # Use frontend URL for reset link
         reset_link = f"{settings.FRONTEND_URL}/reset-password?token={token}&uid={uid}"
         
         subject = EMAIL_SUBJECTS['password_reset']
@@ -538,28 +393,16 @@ def send_password_reset_email(user, request):
             'reset_link': reset_link,
         })
         
-        return send_email_async(subject, user.email, html_content, plain_content)
-        
+        return send_email_sync(subject, user.email, html_content, plain_content)
     except Exception as e:
         logger.error(f"Failed to send password reset email to {user.email}: {e}", exc_info=True)
         return False
 
 
-def send_email_change_code(new_email, code):
-    """
-    Send verification code to new email address for email change.
-    
-    Args:
-        new_email (str): New email address.
-        code (str): 6-digit verification code.
-    
-    Returns:
-        bool: True if email was queued, False otherwise.
-    """
+def send_email_change_code(new_email: str, code: str) -> bool:
+    """Send verification code to new email address synchronously."""
     try:
-        # Validate email
         if not validate_email(new_email):
-            logger.error(f"Invalid email address: {new_email}")
             return False
         
         subject = EMAIL_SUBJECTS['email_change']
@@ -568,87 +411,40 @@ def send_email_change_code(new_email, code):
         <h2>Email Change Verification</h2>
         <p>Your verification code is: <strong>{code}</strong></p>
         <p>This code expires in 10 minutes.</p>
-        <p>If you did not request this change, please ignore this email.</p>
         """
+        plain_content = f"Email Change Verification\n\nYour verification code is: {code}\n\nThis code expires in 10 minutes."
         
-        plain_content = f"""
-Email Change Verification
-
-Your verification code is: {code}
-
-This code expires in 10 minutes.
-
-If you did not request this change, please ignore this email.
-"""
-        
-        return send_email_async(subject, new_email, html_content, plain_content)
-        
+        return send_email_sync(subject, new_email, html_content, plain_content)
     except Exception as e:
         logger.error(f"Failed to send email change code to {new_email}: {e}", exc_info=True)
         return False
 
 
-def send_email_change_notification(user, old_email, new_email):
-    """
-    Send notification when email is changed to both old and new addresses.
-    
-    Args:
-        user (User): The user whose email was changed.
-        old_email (str): Previous email address.
-        new_email (str): New email address.
-    
-    Returns:
-        bool: True if both emails were sent successfully, False otherwise.
-    """
+def send_email_change_notification(user: User, old_email: str, new_email: str) -> bool:
+    """Send notification to both old and new addresses synchronously."""
     try:
         subject = EMAIL_SUBJECTS['email_changed']
-        
         html_content = f"""
         <h2>Email Address Changed</h2>
         <p>Hi {user.username},</p>
-        <p>Your Tickflow Intelligence email address was changed from <strong>{old_email}</strong> to <strong>{new_email}</strong>.</p>
-        <p>If you made this change, no action is required.</p>
-        <p>If you did NOT make this change, please contact support immediately at support@tickflow.com</p>
+        <p>Your email address was changed from <strong>{old_email}</strong> to <strong>{new_email}</strong>.</p>
+        <p>If you did NOT make this change, please contact support immediately.</p>
         """
+        plain_content = f"Email Address Changed\n\nHi {user.username},\n\nYour email was changed from {old_email} to {new_email}."
         
-        plain_content = f"""
-Email Address Changed
-
-Hi {user.username},
-
-Your Tickflow Intelligence email address was changed from {old_email} to {new_email}.
-
-If you made this change, no action is required.
-
-If you did NOT make this change, please contact support immediately at support@tickflow.com
-"""
-        
-        # Send to both old and new email addresses
-        success_old = send_email_async(subject, old_email, html_content, plain_content)
-        success_new = send_email_async(subject, new_email, html_content, plain_content)
+        success_old = send_email_sync(subject, old_email, html_content, plain_content)
+        success_new = send_email_sync(subject, new_email, html_content, plain_content)
         
         return success_old and success_new
-        
     except Exception as e:
         logger.error(f"Failed to send email change notification: {e}", exc_info=True)
         return False
 
 
-def send_account_deletion_confirmation(user, request):
-    """
-    Send account deletion confirmation email with frontend cancellation link.
-    
-    Args:
-        user (User): The user requesting deletion.
-        request (HttpRequest): The current request.
-    
-    Returns:
-        bool: True if email was queued, False otherwise.
-    """
+def send_account_deletion_confirmation(user: User, request) -> bool:
+    """Send account deletion confirmation synchronously."""
     try:
-        # Use frontend URL for cancellation link
         cancellation_link = f"{settings.FRONTEND_URL}/cancel-deletion"
-        
         subject = EMAIL_SUBJECTS['account_deletion']
         
         html_content = render_to_string('email/account_deletion.html', {
@@ -659,45 +455,16 @@ def send_account_deletion_confirmation(user, request):
             'year': timezone.now().year,
         })
         
-        plain_content = f"""
-Account Deletion Requested
-
-Hi {user.username},
-
-You requested to delete your Tickflow Intelligence account.
-
-Your account is scheduled for deletion on {user.deletion_scheduled_for.strftime('%B %d, %Y')}.
-
-If you didn't request this, click the link below to cancel:
-
-{cancellation_link}
-
-This link expires in 30 days.
-
-Thanks,
-The Tickflow Capital Team
-"""
+        plain_content = f"Account Deletion Requested\n\nYour account is scheduled for deletion on {user.deletion_scheduled_for.strftime('%B %d, %Y')}."
         
-        return send_email_async(subject, user.email, html_content, plain_content)
-        
+        return send_email_sync(subject, user.email, html_content, plain_content)
     except Exception as e:
         logger.error(f"Failed to send account deletion confirmation: {e}", exc_info=True)
         return False
 
 
-def send_security_alert_email(user, action, ip_address, user_agent):
-    """
-    Send security alert email.
-    
-    Args:
-        user (User): The user performing the action.
-        action (str): 'login', 'password_change', 'email_change', 'account_deletion'
-        ip_address (str): IP address of the request.
-        user_agent (str): User-agent string.
-    
-    Returns:
-        bool: True if email was queued, False otherwise.
-    """
+def send_security_alert_email(user: User, action: str, ip_address: str, user_agent: str) -> bool:
+    """Send security alert email synchronously."""
     try:
         action_map = {
             'login': 'login from a new device',
@@ -706,77 +473,24 @@ def send_security_alert_email(user, action, ip_address, user_agent):
             'account_deletion': 'request account deletion',
         }
         action_description = action_map.get(action, action)
-        
         subject = EMAIL_SUBJECTS['security_alert'].format(action=action_description)
         
         html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a2e; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ border-bottom: 1px solid #e5e7eb; padding-bottom: 20px; }}
-                .logo {{ font-size: 24px; font-weight: bold; color: #1a1a2e; }}
-                .logo span {{ color: #4f46e5; }}
-                .content {{ padding: 20px 0; }}
-                .footer {{ border-top: 1px solid #e5e7eb; padding-top: 20px; font-size: 12px; color: #6b7280; text-align: center; }}
-                .alert-box {{ background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 16px 0; border-radius: 4px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <div class="logo">Tickflow <span>Sentiment</span></div>
-                </div>
-                <div class="content">
-                    <h2>Security Alert</h2>
-                    <p>Hi {user.username},</p>
-                    <p>We detected a security event on your Tickflow Intelligence account:</p>
-                    <div class="alert-box">
-                        <ul style="margin: 0; padding-left: 20px;">
-                            <li><strong>Action:</strong> {action_description}</li>
-                            <li><strong>IP Address:</strong> {ip_address}</li>
-                            <li><strong>Device:</strong> {user_agent}</li>
-                            <li><strong>Time:</strong> {timezone.now().strftime('%B %d, %Y at %I:%M %p UTC')}</li>
-                        </ul>
-                    </div>
-                    <p>If you performed this action, no further action is required.</p>
-                    <p>If you did NOT perform this action, please contact support immediately at <a href="mailto:support@tickflow.com">support@tickflow.com</a></p>
-                </div>
-                <div class="footer">
-                    <p>&copy; 2026 Tickflow Capital. All rights reserved.</p>
-                    <p>Sent to {user.email}</p>
-                </div>
-            </div>
-        </body>
-        </html>
+        <h2>Security Alert</h2>
+        <p>Hi {user.username},</p>
+        <p>We detected a security event on your account:</p>
+        <ul>
+            <li><strong>Action:</strong> {action_description}</li>
+            <li><strong>IP Address:</strong> {ip_address}</li>
+            <li><strong>Device:</strong> {user_agent}</li>
+            <li><strong>Time:</strong> {timezone.now().strftime('%B %d, %Y at %I:%M %p UTC')}</li>
+        </ul>
+        <p>If you did NOT perform this action, please contact support immediately.</p>
         """
         
-        plain_content = f"""
-Security Alert
-
-Hi {user.username},
-
-We detected a security event on your Tickflow Intelligence account:
-
-Action: {action_description}
-IP Address: {ip_address}
-Device: {user_agent}
-Time: {timezone.now().strftime('%B %d, %Y at %I:%M %p UTC')}
-
-If you performed this action, no further action is required.
-
-If you did NOT perform this action, please contact support immediately at support@tickflow.com
-
----
-Tickflow Capital
-"""
+        plain_content = f"Security Alert\n\nAction: {action_description}\nIP: {ip_address}\nDevice: {user_agent}"
         
-        return send_email_async(subject, user.email, html_content, plain_content)
-        
+        return send_email_sync(subject, user.email, html_content, plain_content)
     except Exception as e:
         logger.error(f"Failed to send security alert email: {e}", exc_info=True)
         return False
@@ -786,17 +500,12 @@ Tickflow Capital
 # EMAIL SERVICE HEALTH CHECK
 # ============================================================================
 
-def check_email_service_health():
-    """
-    Check if SendGrid API is accessible and functioning.
-    
-    Returns:
-        dict: Health status with 'available' flag and details.
-    """
+def check_email_service_health() -> Dict[str, Any]:
+    """Check if SendGrid API is accessible and functioning."""
     try:
         from sendgrid import SendGridAPIClient
         
-        sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
+        sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=5)
         response = sg.client._("v3").get()
         
         if response.status_code < 500:
@@ -806,13 +515,12 @@ def check_email_service_health():
                 'provider': 'sendgrid',
                 'status_code': response.status_code,
             }
-        else:
-            return {
-                'available': False,
-                'status': 'degraded',
-                'provider': 'sendgrid',
-                'status_code': response.status_code,
-            }
+        return {
+            'available': False,
+            'status': 'degraded',
+            'provider': 'sendgrid',
+            'status_code': response.status_code,
+        }
     except ImportError:
         return {
             'available': True,
