@@ -10,7 +10,7 @@ Production‑ready for Render free tier:
 - Security headers enforced in production.
 
 Author: Tickflow Capital
-Version: 1.1.0
+Version: 1.1.1
 """
 
 import os
@@ -55,7 +55,10 @@ REQUIRED_HOSTS = [
     "0.0.0.0",
     "sentiment-driven-stock-price-prediction.onrender.com",
     "tickflow-sentiment-staging.onrender.com",
-    ".onrender.com",  # wildcard for any Render subdomain
+    # Audit (item 12): wildcard kept for Render PR previews, which all get
+    # *.onrender.com hostnames. Remove this entry when previews are disabled —
+    # it lets any Render-hosted subdomain pass Host validation.
+    ".onrender.com",
 ]
 env_hosts = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
 ALLOWED_HOSTS = list(set(REQUIRED_HOSTS + env_hosts))
@@ -70,7 +73,7 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_BROWSER_XSS_FILTER = True
+    # Audit (item 8): SECURE_BROWSER_XSS_FILTER removed — no-op since Django 4.0.
     SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
     X_FRAME_OPTIONS = 'DENY'
 
@@ -166,8 +169,10 @@ if database_url:
                 ssl_require=True,  # Neon requires SSL
             )
         }
-        # Additional PostgreSQL options
+        # Audit (item 9): merge into any OPTIONS dj_database_url already parsed
+        # instead of overwriting them. Previously this silently dropped URL options.
         DATABASES['default']['OPTIONS'] = {
+            **DATABASES['default'].get('OPTIONS', {}),
             'connect_timeout': 10,
             'sslmode': 'require',
         }
@@ -200,6 +205,10 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
+# Audit (item 2): 24h, not Django's 3-day default. Verification/reset tokens
+# are single-purpose and short-lived.
+PASSWORD_RESET_TIMEOUT = 86400
+
 # ---------------------------------------------------------------------------
 # Internationalization
 # ---------------------------------------------------------------------------
@@ -217,18 +226,37 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# WhiteNoise with compression and immutable caching
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# WhiteNoise with compression and immutable caching.
+# Audit (item 5): STATICFILES_STORAGE was removed in Django 5.1; STORAGES is
+# the replacement and must be used for WhiteNoise's manifest storage to apply.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 WHITENOISE_MAX_AGE = 86400  # 1 day
 WHITENOISE_IMMUTABLE_FILES = True
 
 # ---------------------------------------------------------------------------
 # REST Framework
 # ---------------------------------------------------------------------------
+# Audit (item 3): must match the real proxy hop count for X-Forwarded-For
+# parsing. Render terminates TLS one hop in front of the app.
+# Wrong value here (or absent) makes DRF's AnonRateThrottle bucket everyone
+# under the proxy IP and lets an attacker spoof identity via X-Forwarded-For.
+NUM_PROXIES = 1
+
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ],
+    # Audit (item 6): stock throttles retained deliberately.
+    # The custom `CustomAnonRateThrottle` / `CustomUserRateThrottle` in
+    # authentication.throttles are left unreferenced because
+    # CustomAnonRateThrottle reads REMOTE_ADDR first (the Render proxy IP),
+    # which would bucket all anonymous traffic into one bucket. Stock
+    # AnonRateThrottle, combined with NUM_PROXIES above, correctly identifies
+    # the client IP. CustomUserRateThrottle is functional but redundant.
+    # Both classes are candidates for deletion in a future throttles.py cleanup.
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
@@ -273,6 +301,10 @@ EMAIL_HOST_PASSWORD = os.getenv("SENDGRID_API_KEY")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "info@tickflowcapital.com")
 DEFAULT_FROM_NAME = os.getenv("DEFAULT_FROM_NAME", "Tickflow Sentiment")
 
+# Audit (item 1): bound the SMTP fallback. Without this, SMTP uses
+# timeout=None, and Render free blocks port 587 — each connect waits ~127s.
+EMAIL_TIMEOUT = 10
+
 # If no password, fallback to console (with warning)
 if not EMAIL_HOST_PASSWORD:
     import logging
@@ -310,8 +342,18 @@ CORS_ALLOW_HEADERS = [
 CORS_EXPOSE_HEADERS = ['content-disposition', 'x-request-id']
 CORS_PREFLIGHT_MAX_AGE = 86400
 
-# CSRF trusted origins – same as CORS
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
+# CSRF trusted origins.
+# Audit (item 11): in production, CSRF_TRUSTED_ORIGINS should not contain
+# localhost/127.0.0.1. In DEBUG (local dev), keep them for convenience so the
+# local frontend can call the local backend. CORS_ALLOWED_ORIGINS above is
+# intentionally left untouched (per item 11 preferred option).
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
+else:
+    CSRF_TRUSTED_ORIGINS = [
+        origin for origin in CORS_ALLOWED_ORIGINS
+        if not origin.startswith(('http://localhost', 'http://127.0.0.1'))
+    ]
 
 # ---------------------------------------------------------------------------
 # Sessions & caching
@@ -333,9 +375,16 @@ if REDIS_URL:
                 'SOCKET_CONNECT_TIMEOUT': 10,
                 'SOCKET_TIMEOUT': 5,
                 'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
-                'IGNORE_EXCEPTIONS': True,
-                'MAX_ENTRIES': 1000,
-                'CULL_FREQUENCY': 3,
+                # Audit (item 4): IGNORE_EXCEPTIONS=False so Redis failures
+                # surface instead of silently turning throttles, lockouts,
+                # verification codes, and cache.add() into fail-open paths.
+                # TRADEOFF: any caller that relied on silent failure (throttles,
+                # cached_db session reads, resend cooldown) must now handle
+                # exceptions or implement fail-closed counters. That follow-up
+                # is out of scope for this file — see Risks.
+                'IGNORE_EXCEPTIONS': False,
+                # Audit (item 10): MAX_ENTRIES and CULL_FREQUENCY removed —
+                # they are LocMemCache-only options and django-redis ignores them.
             },
             'KEY_PREFIX': 'sentiment_analysis',
         }
@@ -445,7 +494,9 @@ SENTRY_TRACES_SAMPLE_RATE = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
 SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.1"))
 SENTRY_ENVIRONMENT = os.getenv("SENTRY_ENVIRONMENT", "production")
 SENTRY_RELEASE = os.getenv("SENTRY_RELEASE", None)
-SENTRY_SEND_PII = os.getenv("SENTRY_SEND_PII", "true").lower() == "true"
+# Audit (item 7): PII off by default. The old "true" default shipped headers
+# (Authorization bearer tokens, cookies) and user context to Sentry.
+SENTRY_SEND_PII = os.getenv("SENTRY_SEND_PII", "false").lower() == "true"
 SENTRY_ATTACH_STACKTRACE = os.getenv("SENTRY_ATTACH_STACKTRACE", "true").lower() == "true"
 SENTRY_ENABLE_TRACING = os.getenv("SENTRY_ENABLE_TRACING", "true").lower() == "true"
 SENTRY_ENABLE_PROFILING = os.getenv("SENTRY_ENABLE_PROFILING", "true").lower() == "true"
@@ -491,17 +542,8 @@ RAPIDAPI_HOST = os.getenv("RAPIDAPI_HOST", "apidojo-yahoo-finance-v1.p.rapidapi.
 TWELVEDATA_API_KEY = os.getenv("TWELVEDATA_API_KEY")
 STATIC_API_KEY = os.getenv("STATIC_API_KEY", None)  # fallback for development
 
-# Rate limiting for external calls
-RATE_LIMIT_PERIOD = 60
-RATE_LIMIT_MAX_REQUESTS = 100
-
-# LSTM model
-ENABLE_LSTM = True
-LSTM_MODEL_PATH = os.path.join(BASE_DIR, 'models', 'stock_prediction_model.pth')
-
 # Other
 APPEND_SLASH = True
-EMAIL_VERIFICATION_EXPIRY_HOURS = 24
 
 # ---------------------------------------------------------------------------
 # API documentation (drf-spectacular)
@@ -509,7 +551,9 @@ EMAIL_VERIFICATION_EXPIRY_HOURS = 24
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Sentiment-Driven Stock Prediction API',
     'DESCRIPTION': 'Real-time stock analysis, sentiment, and LSTM forecasts.',
-    'VERSION': '1.0.0',
+    # Audit (item 14): derive from APP_VERSION so OpenAPI, Sentry, and the
+    # module docstring cannot drift from each other.
+    'VERSION': APP_VERSION,
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
 }
