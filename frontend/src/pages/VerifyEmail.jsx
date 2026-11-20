@@ -1,5 +1,5 @@
 // pages/VerifyEmail.jsx
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import apiClient from '@/services/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -18,6 +18,8 @@ const VerifyEmail = () => {
   const navigate = useNavigate();
   const { user: authUser, isAuthenticated, refreshUser } = useAuth();
   const [searchParams] = useSearchParams();
+  const authUserRef = useRef(authUser);
+  authUserRef.current = authUser;
   
   const [status, setStatus] = useState('verifying');
   const [message, setMessage] = useState('');
@@ -76,9 +78,9 @@ const VerifyEmail = () => {
                        error.response?.data?.message ||
                        'Verification failed. The link may be invalid or expired.';
       
-      if (errorMsg.includes('already verified') && authUser) {
+      if (errorMsg.includes('already verified') && authUserRef.current) {
         await refreshUser();
-        if (authUser.onboarded) {
+        if (authUserRef.current.onboarded) {
           navigate('/dashboard', { replace: true });
         } else {
           navigate('/onboarding', { replace: true });
@@ -89,7 +91,7 @@ const VerifyEmail = () => {
       setStatus('error');
       setMessage(errorMsg);
     }
-  }, [refreshUser, navigate, authUser]);
+  }, [refreshUser, navigate]);
 
   // Verify with code (manual fallback)
   const verifyWithCode = useCallback(async () => {

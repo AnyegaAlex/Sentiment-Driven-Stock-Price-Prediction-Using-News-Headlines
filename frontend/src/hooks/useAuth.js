@@ -151,7 +151,7 @@ export const useAuth = () => {
     try {
       //  Backend validation – the only secure way
       const response = await apiClient.get('/auth/profile/', { timeout: 15000 });
-      const userData = response.data?.user || response.data;
+      const userData = response?.user || response;
       if (userData?.id) return { valid: true, user: userData };
       return { valid: false, user: null };
     } catch (err) {
@@ -200,7 +200,7 @@ export const useAuth = () => {
     refreshingRef.current = true;
     try {
       const response = await apiClient.get('/auth/profile/');
-      const userData = response.data?.user || response.data;
+      const userData = response?.user || response;
       if (userData) {
         const isRemembered = !!localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
         updateUser(userData, isRemembered);
