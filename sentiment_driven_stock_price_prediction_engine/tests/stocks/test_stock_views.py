@@ -2,8 +2,12 @@
 Tests for stock views: analysis, technicals, predictions, etc.
 Uses pytest and Django test client.
 
+P1 rewrite: protected endpoints are called with an authenticated client; price- and
+news-derived responses are tested with the gates open (explicit override) and with
+the gates closed (503 / disabled states). No fallback values are expected anywhere.
+
 Author: Tickflow Capital
-Version: 1.0.2
+Version: 1.1.0
 """
 
 import json
@@ -16,8 +20,9 @@ from unittest.mock import patch, MagicMock
 from django.urls import reverse
 from django.core.cache import cache
 from django.utils import timezone
+from django.test import Client, override_settings
 from rest_framework import status
-from django.test import Client
+from rest_framework.test import APIClient
 
 from tests.factories import (
     UserFactory,
@@ -28,6 +33,9 @@ from stocks.models import Prediction, Subscription
 from authentication.models import User
 
 pytestmark = pytest.mark.django_db
+
+# Gates opened explicitly for tests of price- or news-derived responses.
+GATES_OPEN = dict(PRICE_DATA_PUBLIC_ACCESS=True, NEWS_PUBLIC_ACCESS=True)
 
 
 # ============================================================================
@@ -41,10 +49,11 @@ def api_client():
 
 
 @pytest.fixture
-def auth_client(api_client, user):
-    """Authenticated client (using force_login)."""
-    api_client.force_login(user)
-    return api_client
+def auth_client(user):
+    """Authenticated DRF client. The API authenticates with JWT, so force_authenticate is used."""
+    client = APIClient()
+    client.force_authenticate(user=user)
+    return client
 
 
 @pytest.fixture
@@ -90,42 +99,62 @@ class TestStockAnalysis:
         data = response.json()
         assert "error" in data
 
-    def test_analysis_valid_symbol(self, api_client):
-        """Valid symbol returns 200 using fallback (since we mock opinion generator to raise)."""
+    @override_settings(**GATES_OPEN)
+    def test_analysis_no_data_reports_unavailable_without_fallback(self, api_client):
+        """With gates open but no provider data and no stored prediction, nothing is invented."""
         url = reverse("stock-analysis")
-        # Patch the original function in opinion_generator
-        with patch("stocks.opinion_generator.generate_stock_opinion", side_effect=Exception("API down")):
+        with patch("stocks.views.get_technical_indicators", return_value=None), \
+             patch("stocks.views.get_sentiment_summary", return_value={
+                 "overall": "Neutral", "score": 0.0, "recent_articles": 0,
+                 "source_stats": {}, "history": []}):
             response = api_client.get(url, {"symbol": "AAPL"})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert "data" in data
-        assert data["data"]["symbol"] == "AAPL"
-        # Fallback includes lstm_prediction
-        assert data["data"]["lstm_prediction"]["direction"] == "UNAVAILABLE"
+        data = response.json()["data"]
+        assert data["symbol"] == "AAPL"
+        assert data["lstm_prediction"]["direction"] is None
+        assert data["recommendation"] is None
+        assert data["dataStatus"]["technicals"] == "unavailable"
+        assert data["dataStatus"]["prediction"] == "unavailable"
+        assert "UNAVAILABLE" not in response.content.decode()
 
-    def test_analysis_caching(self, api_client):
-        """Analysis response is cached."""
+    @override_settings(**GATES_OPEN)
+    def test_analysis_caching_skips_provider_on_second_call(self, api_client):
+        """A complete response is cached; the second call does not recompute technicals."""
         url = reverse("stock-analysis")
-        # First call populates cache
-        with patch("stocks.opinion_generator.generate_stock_opinion", side_effect=Exception("API down")):
-            response1 = api_client.get(url, {"symbol": "AAPL"})
-        assert response1.status_code == 200
+        with patch("stocks.views.get_technical_indicators", return_value={"current_price": 104.0}) as tech, \
+             patch("stocks.views.get_sentiment_summary", return_value={
+                 "overall": "Neutral", "score": 0.0, "recent_articles": 0,
+                 "source_stats": {}, "history": []}):
+            first = api_client.get(url, {"symbol": "AAPL"})
+            second = api_client.get(url, {"symbol": "AAPL"})
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert tech.call_count == 1
 
-        # Second call should hit cache; patch again but exception should not be raised
-        with patch("stocks.opinion_generator.generate_stock_opinion", side_effect=Exception("Should not be called")):
-            response2 = api_client.get(url, {"symbol": "AAPL"})
-        assert response2.status_code == 200
-
-    def test_analysis_fallback_on_error(self, api_client):
-        """If real data fails, fallback is used."""
+    def test_analysis_closed_gates_disable_price_and_news(self, api_client):
+        """Gates closed (default): technicals and news are disabled and nothing is cached."""
         url = reverse("stock-analysis")
-        with patch("stocks.opinion_generator.generate_stock_opinion", side_effect=Exception("API error")):
+        with patch("stocks.views.get_technical_indicators") as tech, \
+             patch("stocks.views.get_sentiment_summary", return_value={
+                 "overall": "Bullish", "score": 0.9, "recent_articles": 12,
+                 "source_stats": {}, "history": []}):
             response = api_client.get(url, {"symbol": "AAPL"})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert "data" in data
-        assert data["data"]["symbol"] == "AAPL"
-        assert data["data"]["lstm_prediction"]["direction"] == "UNAVAILABLE"
+        data = response.json()["data"]
+        assert data["dataStatus"]["technicals"] == "disabled"
+        assert data["dataStatus"]["news"] == "disabled"
+        assert data["sentiment"]["recent_articles"] == 0
+        assert data["sentiment"]["overall"] is None
+        tech.assert_not_called()
+
+    @override_settings(**GATES_OPEN)
+    def test_analysis_provider_error_returns_500_not_fallback(self, api_client):
+        """If the analysis build fails, the endpoint reports an error rather than fallback data."""
+        url = reverse("stock-analysis")
+        with patch("stocks.views.get_technical_indicators", side_effect=Exception("API error")):
+            response = api_client.get(url, {"symbol": "AAPL"})
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert "UNAVAILABLE" not in response.content.decode()
 
 
 # ============================================================================
@@ -138,85 +167,83 @@ class TestTechnicalIndicators:
         response = api_client.get(url)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    @patch("stocks.views.yf.Ticker")
-    def test_technical_valid_symbol(self, mock_ticker, api_client):
-        """Valid symbol returns technical data."""
-        # Create a mock DataFrame with required columns
-        dates = pd.date_range(end=timezone.now().date(), periods=200)
-        df = pd.DataFrame({
-            'Close': np.linspace(100, 104, 200),
-            'High': np.linspace(101, 105, 200),
-            'Low': np.linspace(99, 103, 200),
-            'Volume': np.linspace(1000, 1400, 200)
-        }, index=dates)
-        # Ensure last close is 104
-        df.iloc[-1, df.columns.get_loc('Close')] = 104.0
-
-        mock_hist = MagicMock()
-        mock_hist.empty = False
-        mock_hist.__len__.return_value = 200
-        mock_hist.__getitem__.side_effect = lambda key: df[key] if key in df else None
-        mock_hist.tail.return_value = df.tail(20)
-        mock_hist.iloc.return_value = df.iloc[-1]
-
-        mock_ticker.return_value.history.return_value = mock_hist
-
+    @override_settings(**GATES_OPEN)
+    def test_technical_valid_symbol(self, api_client):
+        """Valid symbol returns technical data produced by the provider chain."""
         url = reverse("technical-indicators")
-        response = api_client.get(url, {"symbol": "AAPL"})
+        with patch("stocks.views.get_technical_indicators",
+                   return_value={"current_price": 104.0, "sma_50": 102.0}):
+            response = api_client.get(url, {"symbol": "AAPL"})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert "data" in data
-        assert data["data"]["technical"]["current_price"] == 104.0
+        data = response.json()["data"]
+        assert data["status"] == "live"
+        assert data["technical"]["current_price"] == 104.0
 
-    @patch("stocks.views.yf.Ticker")
-    def test_technical_fallback_on_error(self, mock_ticker, api_client):
-        """If yfinance fails, fallback is used."""
-        mock_ticker.side_effect = Exception("Network error")
+    @override_settings(**GATES_OPEN)
+    def test_technical_no_live_data_is_unavailable_not_fabricated(self, api_client):
+        """When the provider chain has no data, the response carries no technical values."""
         url = reverse("technical-indicators")
-        response = api_client.get(url, {"symbol": "AAPL"})
+        with patch("stocks.views.get_technical_indicators", return_value=None):
+            response = api_client.get(url, {"symbol": "AAPL"})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert "data" in data
-        assert data["data"]["technical"]["current_price"] > 0
+        data = response.json()["data"]
+        assert data["technical"] is None
+        assert data["status"] == "unavailable"
+
+    def test_technical_closed_gate_returns_503(self, api_client):
+        """Price gate closed: no provider call and a 503 with code 5031."""
+        url = reverse("technical-indicators")
+        with patch("stocks.views.get_technical_indicators") as tech:
+            response = api_client.get(url, {"symbol": "AAPL"})
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert response.json()["code"] == 5031
+        tech.assert_not_called()
 
 
 # ============================================================================
-# 3. Prediction History (Paginated)
+# 3. Prediction History (Paginated) - authenticated, price gate open
 # ============================================================================
 
 class TestPredictionHistory:
-    def test_history_public(self, api_client):
-        """Prediction history is public (no auth required)."""
+    def test_history_requires_authentication(self, api_client):
+        """Prediction history is account-scoped and rejects anonymous callers."""
         url = reverse("prediction-history")
         response = api_client.get(url, {"symbol": "AAPL"})
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
 
-    def test_history_returns_predictions(self, api_client, user, predictions_for_user):
+    @override_settings(**GATES_OPEN)
+    def test_history_returns_predictions(self, auth_client, user, predictions_for_user):
         url = reverse("prediction-history")
-        response = api_client.get(url, {"symbol": "AAPL", "limit": 5})
+        response = auth_client.get(url, {"symbol": "AAPL", "limit": 5})
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["count"] >= len(predictions_for_user)
         assert len(data["results"]) <= 5
 
-    def test_history_filters_by_symbol(self, api_client, user):
+    @override_settings(**GATES_OPEN)
+    def test_history_filters_by_symbol(self, auth_client, user):
         PredictionFactory(user=user, stock_symbol="AAPL")
         PredictionFactory(user=user, stock_symbol="MSFT")
         url = reverse("prediction-history")
-        response = api_client.get(url, {"symbol": "AAPL"})
+        response = auth_client.get(url, {"symbol": "AAPL"})
         assert response.status_code == 200
         data = response.json()
         results = data["results"]
         assert all(item["stock_symbol"] == "AAPL" for item in results)
 
-    def test_history_pagination(self, api_client, user, predictions_for_user):
+    @override_settings(**GATES_OPEN)
+    def test_history_pagination(self, auth_client, user, predictions_for_user):
         url = reverse("prediction-history")
-        response = api_client.get(url, {"symbol": "AAPL", "limit": 3, "offset": 0})
+        response = auth_client.get(url, {"symbol": "AAPL", "limit": 3, "offset": 0})
         assert response.status_code == 200
         data = response.json()
         assert len(data["results"]) == 3
         assert data["count"] == len(predictions_for_user)
         assert data["next"] == 3
+
+    def test_history_closed_gate_returns_503_for_authenticated_user(self, auth_client, user):
+        response = auth_client.get(reverse("prediction-history"), {"symbol": "AAPL"})
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
 
 
 # ============================================================================
@@ -266,17 +293,13 @@ class TestSubscription:
         assert "Validation failed" in error_msg or "already subscribed" in error_msg
 
     def test_subscribe_reactivate_inactive(self, api_client):
+        """An inactive subscriber who re-subscribes is reactivated (view contract)."""
         Subscription.objects.create(email="test@example.com", is_active=False)
         url = reverse("subscribe")
         data = {"email": "test@example.com"}
         response = api_client.post(url, data, content_type="application/json")
-        # Currently, the ModelSerializer validation fails because of uniqueness,
-        # so reactivation doesn't happen. We expect 400.
-        # If the view is fixed later, change this to 200.
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        # Check that it's still inactive (reactivation didn't happen)
-        sub = Subscription.objects.get(email="test@example.com")
-        assert sub.is_active is False
+        assert response.status_code == status.HTTP_200_OK
+        assert Subscription.objects.get(email="test@example.com").is_active is True
 
     def test_subscribe_invalid_email(self, api_client):
         url = reverse("subscribe")
@@ -288,7 +311,7 @@ class TestSubscription:
 
 
 # ============================================================================
-# 6. LSTM Prediction
+# 6. LSTM Prediction - reads stored predictions, price gate applies
 # ============================================================================
 
 class TestLSTMPrediction:
@@ -297,50 +320,42 @@ class TestLSTMPrediction:
         response = api_client.get(url)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    @patch("stocks.views.get_lstm_predictor")
-    def test_lstm_predict_success(self, mock_get_predictor, api_client):
-        mock_predictor = MagicMock()
-        mock_predictor.predict.return_value = {
-            "prediction": "UP",
-            "confidence": 75.5,
-            "success": True,
-            "sentiment_score": 0.3,
-            "close_price": 116,
-            "fallback": False,
-            "message": "LSTM prediction successful"
-        }
-        mock_get_predictor.return_value = mock_predictor
-
+    @override_settings(**GATES_OPEN)
+    def test_lstm_returns_stored_prediction(self, api_client):
+        Prediction.objects.create(
+            date=timezone.now().date(), stock_symbol="AAPL", headline="h",
+            sentiment_score=0.3, predicted_movement="up", confidence=0.75, source="lstm",
+        )
         url = reverse("lstm-predict")
         response = api_client.get(url, {"symbol": "AAPL"})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert data["data"]["prediction"] == "UP"
-        assert data["data"]["confidence"] == 75.5
+        data = response.json()["data"]
+        assert data["prediction"] == "UP"
+        assert data["confidence"] == 75.0
 
-    @patch("stocks.views.get_lstm_predictor")
-    def test_lstm_predict_fallback(self, mock_get_predictor, api_client):
-        mock_predictor = MagicMock()
-        mock_predictor.predict.return_value = {
-            "prediction": "HOLD",
-            "confidence": 50.0,
-            "success": True,
-            "sentiment_score": 0.0,
-            "fallback": True,
-            "message": "Using sentiment fallback"
-        }
-        mock_get_predictor.return_value = mock_predictor
-
+    @override_settings(**GATES_OPEN)
+    def test_lstm_without_stored_prediction_is_unavailable_not_hold(self, api_client):
+        """No stored prediction: unavailable status with no prediction value (no HOLD fallback)."""
         url = reverse("lstm-predict")
         response = api_client.get(url, {"symbol": "AAPL"})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert data["data"]["prediction"] == "HOLD"
-        assert data["data"]["fallback"] is True
+        data = response.json()["data"]
+        assert data["status"] == "unavailable"
+        assert data["prediction"] is None
+        assert "HOLD" not in response.content.decode()
+
+    def test_lstm_closed_gate_returns_503(self, api_client):
+        Prediction.objects.create(
+            date=timezone.now().date(), stock_symbol="AAPL", headline="h",
+            sentiment_score=0.3, predicted_movement="up", confidence=0.75, source="lstm",
+        )
+        response = api_client.get(reverse("lstm-predict"), {"symbol": "AAPL"})
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert "UP" not in response.content.decode()
 
 
 # ============================================================================
-# 7. Sentiment Analysis
+# 7. Sentiment Analysis - news gate applies
 # ============================================================================
 
 class TestSentimentAnalysis:
@@ -349,6 +364,7 @@ class TestSentimentAnalysis:
         response = api_client.get(url)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    @override_settings(**GATES_OPEN)
     @patch("stocks.views.get_sentiment_summary")
     def test_sentiment_valid_symbol(self, mock_sentiment, api_client):
         mock_sentiment.return_value = {
@@ -365,7 +381,8 @@ class TestSentimentAnalysis:
         assert data["data"]["sentiment"]["label"] == "Bullish"
         assert data["data"]["news_count"] == 10
 
-    def test_sentiment_fallback_on_error(self, api_client):
+    @override_settings(**GATES_OPEN)
+    def test_sentiment_no_articles_is_neutral_and_zero(self, api_client):
         url = reverse("sentiment-analysis")
         response = api_client.get(url, {"symbol": "INVALID"})
         assert response.status_code == status.HTTP_200_OK
@@ -373,33 +390,44 @@ class TestSentimentAnalysis:
         assert data["data"]["sentiment"]["label"] == "Neutral"
         assert data["data"]["news_count"] == 0
 
+    def test_sentiment_closed_gate_returns_503(self, api_client):
+        with patch("stocks.views.get_sentiment_summary") as mock_sentiment:
+            response = api_client.get(reverse("sentiment-analysis"), {"symbol": "AAPL"})
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert response.json()["code"] == 5030
+        mock_sentiment.assert_not_called()
+
 
 # ============================================================================
-# 8. Prediction CRUD (Predictions List and Detail)
+# 8. Prediction CRUD (Predictions List and Detail) - authenticated
 # ============================================================================
 
 class TestPredictionCRUD:
-    def test_predictions_list_filtering(self, api_client, user):
+    @override_settings(**GATES_OPEN)
+    def test_predictions_list_filtering(self, auth_client, user):
         PredictionFactory(user=user, stock_symbol="AAPL")
         PredictionFactory(user=user, stock_symbol="MSFT")
         url = reverse("predictions")
-        response = api_client.get(url, {"symbol": "AAPL"})
+        response = auth_client.get(url, {"symbol": "AAPL"})
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["total"] == 1
         assert data["results"][0]["stock_symbol"] == "AAPL"
 
-    def test_predictions_list_dates(self, api_client, user):
-        pred = PredictionFactory(user=user, date=datetime(2026, 7, 10))
+    @override_settings(**GATES_OPEN)
+    def test_predictions_list_dates(self, auth_client, user):
+        PredictionFactory(user=user, date=datetime(2026, 7, 10))
         url = reverse("predictions")
-        response = api_client.get(url, {"date_from": "2026-07-09"})
+        response = auth_client.get(url, {"date_from": "2026-07-09"})
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 1
 
+    @override_settings(**GATES_OPEN)
     def test_performance_summary(self, api_client, user):
-        PredictionFactory(user=user, is_correct=True, resolution_date=timezone.now() - timedelta(days=1))
-        PredictionFactory(user=user, is_correct=False, resolution_date=timezone.now() - timedelta(days=2))
+        # Performance aggregates use system-generated (user NULL) predictions only.
+        PredictionFactory(user=None, is_correct=True, resolution_date=timezone.now() - timedelta(days=1))
+        PredictionFactory(user=None, is_correct=False, resolution_date=timezone.now() - timedelta(days=2))
         url = reverse("performance")
         response = api_client.get(url)
         assert response.status_code == status.HTTP_200_OK
@@ -407,48 +435,50 @@ class TestPredictionCRUD:
         assert "overall" in data
         assert "accuracy" in data["overall"]
 
-    def test_drift_detection(self, api_client):
+    def test_performance_closed_gate_returns_503(self, api_client):
+        assert api_client.get(reverse("performance")).status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+    @override_settings(**GATES_OPEN)
+    def test_drift_detection(self, auth_client):
         url = reverse("drift")
-        response = api_client.get(url)
+        response = auth_client.get(url)
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "drift_detected" in data
 
-    def test_shap_explanation(self, api_client, prediction):
+    def test_drift_requires_authentication(self, api_client):
+        response = api_client.get(reverse("drift"))
+        assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+    @override_settings(**GATES_OPEN)
+    def test_shap_explanation(self, auth_client, user, prediction):
         url = reverse("shap", args=[prediction.id])
-        response = api_client.get(url)
+        response = auth_client.get(url)
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["id"] == prediction.id
         assert data["stock_symbol"] == prediction.stock_symbol
 
-    def test_shap_not_found(self, api_client):
+    @override_settings(**GATES_OPEN)
+    def test_shap_not_found(self, auth_client):
         url = reverse("shap", args=[99999])
-        response = api_client.get(url)
+        response = auth_client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 # ============================================================================
-# 9. Cron Endpoint
+# 9. Cron Endpoint - deprecated; must do nothing
 # ============================================================================
 
 class TestCronEndpoint:
-    def test_cron_missing_secret(self, api_client):
-        with patch.dict(os.environ, {}, clear=True):
-            url = reverse("cron_resolve")
-            response = api_client.get(url)
-            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-
-    def test_cron_invalid_secret(self, api_client):
+    def test_cron_is_gone_regardless_of_secret(self, api_client, prediction):
+        before = Prediction.objects.count()
         with patch.dict(os.environ, {"CRON_SECRET": "valid-secret"}):
-            url = reverse("cron_resolve")
-            response = api_client.get(url, {"secret": "wrong"})
-            assert response.status_code == status.HTTP_403_FORBIDDEN
+            for params in ({}, {"secret": "wrong"}, {"secret": "valid-secret"}):
+                response = api_client.get(reverse("cron_resolve"), params)
+                assert response.status_code == status.HTTP_410_GONE
+        assert Prediction.objects.count() == before
 
-    @patch("stocks.views.call_command")
-    def test_cron_valid_secret(self, mock_call_command, api_client):
-        with patch.dict(os.environ, {"CRON_SECRET": "valid-secret"}):
-            url = reverse("cron_resolve")
-            response = api_client.get(url, {"secret": "valid-secret"})
-            assert response.status_code == status.HTTP_200_OK
-            mock_call_command.assert_called_once_with("resolve_predictions", days=7)
+    def test_cron_post_is_gone(self, api_client):
+        response = api_client.post(reverse("cron_resolve"), {}, content_type="application/json")
+        assert response.status_code == status.HTTP_410_GONE

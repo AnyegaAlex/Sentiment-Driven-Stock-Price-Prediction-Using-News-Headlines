@@ -46,7 +46,9 @@ class TestErrorPages:
         from django.contrib.auth import get_user_model
         User = get_user_model()
         user = User.objects.create_user(username='testuser', password='testpass')
-        client.force_login(user)
+        from rest_framework.test import APIClient
+        client = APIClient(raise_request_exception=False)
+        client.force_authenticate(user=user)
         url = reverse('profile')
         with patch('authentication.views.ProfileView.get_object', side_effect=Exception('Forced 500')):
             response = client.get(url)

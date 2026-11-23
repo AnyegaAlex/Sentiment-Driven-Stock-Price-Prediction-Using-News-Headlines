@@ -209,23 +209,25 @@ class TestEmailVerification:
         assert unverified_user.email_verified is False
 
     def test_resend_verification(self, api_client, unverified_user):
-        """Resend verification should call send_verification_email."""
-        api_client.force_authenticate(user=unverified_user)
+        # View is now public — no auth needed. But send the email in the body.
         url = reverse("resend-verification")
         with patch("authentication.views.send_verification_email", return_value=True) as mock_send:
-            response = api_client.post(url)
-            assert response.status_code == status.HTTP_200_OK
-            mock_send.assert_called_once_with(unverified_user, ANY)
+            response = api_client.post(url, {"email": unverified_user.email})
+            assert response.status_code == status.HTTP_202_ACCEPTED
+            mock_send.assert_called_once()  # email WAS sent — user exists, unverified
 
     def test_resend_verification_rate_limit(self, api_client, unverified_user):
-        """Resend should be rate-limited (1 per minute)."""
-        api_client.force_authenticate(user=unverified_user)
         url = reverse("resend-verification")
-        with patch("authentication.views.send_verification_email", return_value=True):
-            response = api_client.post(url)
-            assert response.status_code == status.HTTP_200_OK
-            response = api_client.post(url)
-            assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        with patch("authentication.views.send_verification_email", return_value=True) as mock_send:
+            # First call — sends
+            r1 = api_client.post(url, {"email": unverified_user.email})
+            assert r1.status_code == status.HTTP_202_ACCEPTED
+            assert mock_send.call_count == 1
+
+            # Second call — cooldown hit, still 202 (silent), email NOT re-sent
+            r2 = api_client.post(url, {"email": unverified_user.email})
+            assert r2.status_code == status.HTTP_202_ACCEPTED
+            assert mock_send.call_count == 1  # still once — cooldown suppressed 2nd send
 
 
 # ============================================================================

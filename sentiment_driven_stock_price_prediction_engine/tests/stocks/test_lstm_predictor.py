@@ -24,7 +24,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from stocks.lstm_predictor import (
-    LSTMModel,
+    _create_lstm_model,
     compute_lstm_features,
     get_sentiment_fallback,
     _fallback_result,
@@ -36,6 +36,19 @@ from stocks.lstm_predictor import (
     TECH_CACHE_TIMEOUT,
     SENTIMENT_THRESHOLD,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_lstm_singleton():
+    """Reset the module-level get_lstm_predictor() singleton around every test.
+
+    Without this, whichever test first builds the predictor leaks its instance
+    into later tests (e.g. test_singleton saw two constructions).
+    """
+    import stocks.lstm_predictor as lstm_module
+    lstm_module._predictor_instance = None
+    yield
+    lstm_module._predictor_instance = None
 
 pytestmark = pytest.mark.django_db
 
@@ -97,8 +110,12 @@ def mock_lstm_predictor():
 
 class TestLSTMModel:
     def test_lstm_forward(self):
-        """Test forward pass of LSTMModel."""
-        model = LSTMModel(input_size=MODEL_INPUT_SIZE, hidden_size=MODEL_HIDDEN_SIZE, output_size=MODEL_OUTPUT_SIZE)
+        """Test forward pass of the architecture built by _create_lstm_model.
+
+        The model class is defined inside the factory (lazy torch import), so
+        the test goes through the factory rather than a module-level class.
+        """
+        model = _create_lstm_model(input_size=MODEL_INPUT_SIZE, hidden_size=MODEL_HIDDEN_SIZE, output_size=MODEL_OUTPUT_SIZE)
         # Create dummy input: batch_size=1, seq_len=1, input_size
         x = torch.randn(1, 1, MODEL_INPUT_SIZE)
         with torch.no_grad():
@@ -410,17 +427,9 @@ class TestGetLSTMPredictor:
     def test_singleton(self):
         """get_lstm_predictor returns the same instance."""
         with patch('stocks.lstm_predictor.LSTMPredictor') as mock_class:
-            mock_instance1 = MagicMock()
-            mock_instance2 = MagicMock()
-            mock_class.return_value = mock_instance1
-            # First call creates instance
+            mock_class.return_value = MagicMock()
+            # Two calls with no reset in between: the second must reuse the first.
             instance1 = get_lstm_predictor()
-            # Second call should return same instance
-            # But we need to reset the global variable to simulate fresh call
-            # We'll patch the global variable directly
-            import stocks.lstm_predictor
-            stocks.lstm_predictor._predictor_instance = None
-            mock_class.return_value = mock_instance1  # return same mock
             instance2 = get_lstm_predictor()
             assert instance1 is instance2
             assert mock_class.call_count == 1

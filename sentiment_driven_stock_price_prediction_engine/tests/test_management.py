@@ -293,7 +293,7 @@ class TestSendWeeklyDigestCommand:
         PredictionFactory(user=user2, created_at=timezone.now() - timedelta(days=1))
 
         # Patch the local import inside the command module
-        with patch('stocks.management.commands.send_weekly_digest.send_email_async') as mock_send:
+        with patch('stocks.management.commands.send_weekly_digest.send_email_sync') as mock_send:
             mock_send.return_value = True
             out = io.StringIO()
             call_command('send_weekly_digest', stdout=out)
@@ -306,7 +306,7 @@ class TestSendWeeklyDigestCommand:
         prefs.weekly_digest = True
         prefs.save()
 
-        with patch('stocks.management.commands.send_weekly_digest.send_email_async') as mock_send:
+        with patch('stocks.management.commands.send_weekly_digest.send_email_sync') as mock_send:
             out = io.StringIO()
             call_command('send_weekly_digest', '--dry-run', stdout=out)
             mock_send.assert_not_called()
@@ -318,7 +318,7 @@ class TestSendWeeklyDigestCommand:
         prefs.weekly_digest = True
         prefs.save()
 
-        with patch('stocks.management.commands.send_weekly_digest.send_email_async') as mock_send:
+        with patch('stocks.management.commands.send_weekly_digest.send_email_sync') as mock_send:
             mock_send.side_effect = Exception("SMTP error")
             out = io.StringIO()
             call_command('send_weekly_digest', stdout=out)
