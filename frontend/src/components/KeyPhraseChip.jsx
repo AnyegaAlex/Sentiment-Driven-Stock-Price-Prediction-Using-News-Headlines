@@ -1,4 +1,4 @@
-import React, { memo, useCallback } from "react";
+import { memo, useCallback } from 'react';
 import PropTypes from "prop-types";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -20,7 +20,7 @@ const KeyPhraseChip = ({ phrase = "", onClick = () => {} }) => {
             "rounded-full bg-gray-800 px-3 py-1 text-sm text-gray-300",
             "hover:bg-gray-700 transition-colors",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
-            "truncate max-w-[180px] min-h-[32px]"
+            "truncate max-w-[180px] min-h-[44px]"
           )}
           aria-label={`Key phrase: ${trimmedPhrase}`}
           disabled={!trimmedPhrase}

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Radar } from 'lucide-react';
 
@@ -25,7 +24,7 @@ const Privacy = () => {
           <p className="text-gray-500">Last updated: {new Date().toLocaleDateString()}</p>
           
           <h2>Information We Collect</h2>
-          <p>We collect information you provide directly, such as your name, email address, and payment information.</p>
+          <p>We collect information you provide when creating or managing an account, such as your username, email address, and profile details. The app also stores your investment preferences, watchlist, and API access settings. Account creation does not require payment information.</p>
           
           <h2>How We Use Your Information</h2>
           <p>We use your information to provide, maintain, and improve our services, and to communicate with you.</p>

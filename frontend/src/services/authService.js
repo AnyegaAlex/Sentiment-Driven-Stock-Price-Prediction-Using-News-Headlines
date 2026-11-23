@@ -60,6 +60,7 @@ const normalizeError = (err) => ({
   message: err?.error || err?.message || 'An unexpected error occurred.',
   code: err?.code || 500,
   details: err?.details || {},
+  retryAfter: err?.retryAfter,
 });
 
 /**
@@ -255,11 +256,6 @@ export const AuthService = {
         throw new Error('Invalid registration response: no user data');
       }
 
-      console.info('[AuthService] Registration successful:', {
-        username: userData.username,
-        email: userData.email,
-      });
-
       return { success: true, user: userData };
     } catch (err) {
       const e = normalizeError(err);
@@ -336,7 +332,7 @@ export const AuthService = {
         success: false,
         error: e.message,
         code: e.code,
-        retryAfter: e.code === 429 ? 60 : null,
+        retryAfter: e.retryAfter,
       };
     }
   },
@@ -354,7 +350,13 @@ export const AuthService = {
     } catch (err) {
       const e = normalizeError(err);
       console.error('[AuthService] Password reset request failed:', e);
-      return { success: false, error: e.message, code: e.code };
+      return {
+        success: false,
+        error: e.message,
+        code: e.code,
+        details: e.details,
+        retryAfter: e.retryAfter,
+      };
     }
   },
 
@@ -370,7 +372,12 @@ export const AuthService = {
     } catch (err) {
       const e = normalizeError(err);
       console.error('[AuthService] Password reset confirmation failed:', e);
-      return { success: false, error: e.message, code: e.code };
+      return {
+        success: false,
+        error: e.message,
+        code: e.code,
+        details: extractFieldErrors(e.details),
+      };
     }
   },
 
@@ -416,6 +423,7 @@ export const AuthService = {
         error: e.message,
         details: extractFieldErrors(e.details),
         code: e.code,
+        retryAfter: e.retryAfter,
       };
     }
   },

@@ -16,7 +16,8 @@ vi.mock('@/hooks/useAuth', () => ({
 }));
 
 // Mock useErrorHandler
-vi.mock('@/utils/errorHandler', () => ({
+vi.mock('@/utils/errorHandler', async (importOriginal) => ({
+  ...(await importOriginal()),
   useErrorHandler: () => ({
     error: null,
     handleError: vi.fn(),
@@ -29,7 +30,7 @@ vi.mock('@/assets/Primary Icon White.svg', () => ({
   default: 'logo.svg',
 }));
 
-import Login from '../Login';
+import Login from '../../pages/Login';
 
 const renderLogin = () =>
   render(
@@ -44,6 +45,12 @@ const renderLogin = () =>
   );
 
 describe('Login page', () => {
+  it('keeps the recovery link readable as a single line on narrow screens', () => {
+    renderLogin();
+
+    expect(screen.getByRole('link', { name: /forgot password/i })).toHaveClass('shrink-0', 'whitespace-nowrap');
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -54,7 +61,7 @@ describe('Login page', () => {
     const user = userEvent.setup();
     mockLogin.mockResolvedValueOnce({
       success: true,
-      user: { id: 1, username: 'test', onboarded: false },
+      user: { id: 1, username: 'test', onboarded: false, email_verified: true },
     });
 
     renderLogin();
@@ -72,7 +79,7 @@ describe('Login page', () => {
     const user = userEvent.setup();
     mockLogin.mockResolvedValueOnce({
       success: true,
-      user: { id: 1, username: 'test', onboarded: true },
+      user: { id: 1, username: 'test', onboarded: true, email_verified: true },
     });
 
     renderLogin();
@@ -102,7 +109,8 @@ describe('Login page', () => {
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/verify your email/i)).toBeInTheDocument();
+      expect(screen.getByText(/email address still needs to be verified/i)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /resend verification email/i })).toBeInTheDocument();
     });
   });
 
@@ -121,7 +129,7 @@ describe('Login page', () => {
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/too many login attempts/i)).toBeInTheDocument();
+      expect(screen.getByText(/too many sign-in attempts/i)).toBeInTheDocument();
     });
   });
 
@@ -140,7 +148,7 @@ describe('Login page', () => {
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/invalid username or password/i)).toBeInTheDocument();
+      expect(screen.getByText(/username\/email or password is incorrect/i)).toBeInTheDocument();
     });
   });
 
@@ -151,6 +159,6 @@ describe('Login page', () => {
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     expect(mockLogin).not.toHaveBeenCalled();
-    expect(screen.getByText(/please enter both username and password/i)).toBeInTheDocument();
+    expect(screen.getByText(/enter your username or email address and password/i)).toBeInTheDocument();
   });
 });

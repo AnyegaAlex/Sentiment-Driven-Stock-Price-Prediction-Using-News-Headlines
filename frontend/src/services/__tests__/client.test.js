@@ -56,12 +56,6 @@ describe('Unified API Client (client.js)', () => {
       expect(localStorage.getItem('authToken')).toBeNull();
     });
 
-    it('setApiKey attaches X-API-Key header', () => {
-      clientModule.setApiKey('ts_test_api_key');
-
-      expect(mockAxiosInstance.defaults.headers.common['X-API-Key']).toBe('ts_test_api_key');
-    });
-
     it('removeAuthToken clears all storage keys', () => {
       localStorage.setItem('authToken', 'x');
       localStorage.setItem('accessToken', 'y');
@@ -74,6 +68,37 @@ describe('Unified API Client (client.js)', () => {
       expect(localStorage.getItem('accessToken')).toBeNull();
       expect(localStorage.getItem('refreshToken')).toBeNull();
       expect(localStorage.getItem('user')).toBeNull();
+    });
+  });
+
+  describe('API error messages', () => {
+    const getResponseErrorHandler = () =>
+      mockAxiosInstance.interceptors.response.use.mock.calls[0][1];
+
+    it('reports request timeouts separately from connection failures', async () => {
+      const rejectResponse = getResponseErrorHandler();
+
+      await expect(rejectResponse({
+        code: 'ECONNABORTED',
+        message: 'timeout of 30000ms exceeded',
+        config: {},
+      })).rejects.toMatchObject({
+        code: 408,
+        message: 'The request took too long. Check your connection and try again.',
+      });
+    });
+
+    it('reports transport failures with connection guidance', async () => {
+      const rejectResponse = getResponseErrorHandler();
+
+      await expect(rejectResponse({
+        code: 'ERR_NETWORK',
+        message: 'Network Error',
+        config: {},
+      })).rejects.toMatchObject({
+        code: 'NETWORK_ERROR',
+        message: 'Unable to connect to server. Please check your internet connection.',
+      });
     });
   });
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { api } from '@/services/api';
 import {
   Dialog,
@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert } from '@/components/ui/alert';
 import { AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { getActionErrorMessage } from '@/utils/errorHandler';
 
 const ChangePasswordModal = ({ isOpen, onClose }) => {
   const [form, setForm] = useState({
@@ -43,7 +43,7 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
     }
 
     try {
-      await api.post('/auth/change-password/', {
+      await api.post('/auth/profile/change-password/', {
         old_password: form.old_password,
         new_password: form.new_password,
         new_password2: form.new_password2,
@@ -54,7 +54,10 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
         onClose();
       }, 1500);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to change password. Please try again.');
+      setError(getActionErrorMessage(
+        err,
+        'We couldn’t change your password. Check your details and try again.'
+      ));
     } finally {
       setLoading(false);
     }

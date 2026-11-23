@@ -13,6 +13,15 @@ const IS_PRODUCTION = import.meta.env.PROD;
 const IS_DEVELOPMENT = import.meta.env.DEV;
 const GA_MEASUREMENT_ID = import.meta.env.VITE_GA_MEASUREMENT_ID;
 
+// Register the offline shell only in production; API and account responses stay network-only.
+if (IS_PRODUCTION && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // The app remains usable online if optional offline support cannot initialize.
+    });
+  });
+}
+
 // ============================================================
 // Enforce Dark Mode
 // ============================================================

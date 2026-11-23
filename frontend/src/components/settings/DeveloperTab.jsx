@@ -10,10 +10,11 @@
  * @version 4.4.0
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import apiClient from '@/services/client';
+import { getCardErrorMessage } from '@/utils/errorHandler';
 import {
   Card,
   CardContent,
@@ -78,12 +79,6 @@ import { cn } from '@/lib/utils';
 // Constants
 // ============================================================================
 
-const RATE_LIMITS = {
-  free: { daily: 100, label: 'Free', color: 'text-gray-400' },
-  pro: { daily: 5000, label: 'Pro', color: 'text-gray-300' },
-  enterprise: { daily: 'Unlimited', label: 'Enterprise', color: 'text-white' },
-};
-
 const API_ENDPOINTS = [
   {
     method: 'GET',
@@ -131,13 +126,42 @@ const StatCard = ({ title, value, icon: Icon, description, trend }) => (
   </Card>
 );
 
-const ApiKeyTable = ({ keys, onRevoke, isLoading }) => {
+const extractList = (response, candidateFields = []) => {
+  const payload = response?.data ?? response;
+  if (Array.isArray(payload)) return payload;
+
+  for (const field of candidateFields) {
+    if (Array.isArray(payload?.[field])) return payload[field];
+  }
+
+  throw new Error('The server returned data in an unexpected format.');
+};
+
+const formatDateOrUnavailable = (value, withTime = false) => {
+  if (!value) return 'Unavailable';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unavailable';
+  return withTime ? date.toLocaleString() : date.toLocaleDateString();
+};
+
+const ApiKeyTable = ({ keys, onRevoke, isLoading, isError, error, onRetry }) => {
   if (isLoading) {
     return (
       <div className="space-y-2">
         <Skeleton className="h-10 w-full bg-gray-800" />
         <Skeleton className="h-10 w-full bg-gray-800" />
         <Skeleton className="h-10 w-full bg-gray-800" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="rounded-lg border border-gray-800 bg-gray-900 p-4" role="alert">
+        <p className="text-sm text-gray-300">{getCardErrorMessage(error)}</p>
+        <Button variant="outline" size="sm" className="mt-3" onClick={onRetry}>
+          Try again
+        </Button>
       </div>
     );
   }
@@ -172,14 +196,14 @@ const ApiKeyTable = ({ keys, onRevoke, isLoading }) => {
             <TableRow key={key.id} className="border-b border-gray-800 hover:bg-gray-800/50">
               <TableCell className="font-medium text-white">{key.name}</TableCell>
               <TableCell className="hidden sm:table-cell font-mono text-xs text-gray-400">
-                …{key.key_preview}
+                {key.key_preview ? `…${key.key_preview}` : 'Preview unavailable'}
               </TableCell>
               <TableCell className="hidden md:table-cell text-xs text-gray-400">
-                {new Date(key.created_at).toLocaleDateString()}
+                {formatDateOrUnavailable(key.created_at)}
               </TableCell>
               <TableCell className="hidden lg:table-cell text-xs text-gray-400">
                 {key.last_used
-                  ? new Date(key.last_used).toLocaleString()
+                  ? formatDateOrUnavailable(key.last_used, true)
                   : 'Never'}
               </TableCell>
               <TableCell>
@@ -224,13 +248,9 @@ const ApiKeyTable = ({ keys, onRevoke, isLoading }) => {
   );
 };
 
-const UsageChart = ({ data, isLoading, tier }) => {
-  const rateLimit = RATE_LIMITS[tier] || RATE_LIMITS.free;
+const UsageChart = ({ data, isLoading, isError, error, onRetry }) => {
   const totalRequests = data?.reduce((sum, day) => sum + day.count, 0) || 0;
   const todayRequests = data?.[data.length - 1]?.count || 0;
-  const usagePercent = rateLimit.daily !== 'Unlimited' 
-    ? Math.min((todayRequests / rateLimit.daily) * 100, 100)
-    : 0;
 
   if (isLoading) {
     return (
@@ -241,7 +261,18 @@ const UsageChart = ({ data, isLoading, tier }) => {
     );
   }
 
-  const hasData = data && data.some((item) => item.count > 0);
+  if (isError) {
+    return (
+      <div className="rounded-lg border border-gray-800 bg-gray-900 p-4" role="alert">
+        <p className="text-sm text-gray-300">{getCardErrorMessage(error)}</p>
+        <Button variant="outline" size="sm" className="mt-3" onClick={onRetry}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  const hasData = Array.isArray(data) && data.some((item) => Number(item.count) > 0);
 
   return (
     <div className="space-y-6">
@@ -256,55 +287,8 @@ const UsageChart = ({ data, isLoading, tier }) => {
           value={todayRequests.toLocaleString()}
           icon={Zap}
         />
-        <StatCard
-          title="Daily Limit"
-          value={rateLimit.daily === 'Unlimited' ? '∞' : rateLimit.daily.toLocaleString()}
-          icon={Shield}
-        />
-        <StatCard
-          title="Remaining"
-          value={rateLimit.daily === 'Unlimited' ? '∞' : (rateLimit.daily - todayRequests).toLocaleString()}
-          description={rateLimit.daily !== 'Unlimited' ? 'Resets at midnight UTC' : ''}
-          icon={Info}
-        />
       </div>
 
-      {rateLimit.daily !== 'Unlimited' && (
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-400">Daily usage</span>
-            <span className={cn(
-              'font-medium',
-              usagePercent > 80 ? 'text-red-400' : usagePercent > 60 ? 'text-gray-400' : 'text-green-400'
-            )}>
-              {usagePercent.toFixed(0)}%
-            </span>
-          </div>
-          <div className="relative h-2 w-full rounded-full bg-gray-800 overflow-hidden">
-            <div
-              className={cn(
-                'absolute left-0 top-0 h-full rounded-full transition-all',
-                usagePercent > 80 ? 'bg-red-400' : usagePercent > 60 ? 'bg-gray-500' : 'bg-green-400'
-              )}
-              style={{ width: `${usagePercent}%` }}
-              role="progressbar"
-              aria-valuenow={usagePercent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            />
-          </div>
-          {usagePercent > 80 && (
-            <div className="border border-red-400/30 bg-red-400/10 rounded-md p-2">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-red-400" />
-                <p className="text-xs text-red-400">
-                  You're approaching your daily limit. Consider upgrading to Pro.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {!hasData ? (
         <Card className="border-dashed border-gray-700 bg-gray-900">
@@ -339,7 +323,7 @@ const UsageChart = ({ data, isLoading, tier }) => {
   );
 };
 
-const ApiExplorer = ({ user, apiKeys }) => {
+const ApiExplorer = ({ apiKey, onApiKeyChange }) => {
   const [selectedEndpoint, setSelectedEndpoint] = useState(API_ENDPOINTS[0]);
   const [params, setParams] = useState({});
   const [response, setResponse] = useState(null);
@@ -348,17 +332,17 @@ const ApiExplorer = ({ user, apiKeys }) => {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
 
-  const activeKey = apiKeys?.find(k => k.is_active);
+
 
   const handleParamChange = (name, value) => {
     setParams((prev) => ({ ...prev, [name]: value }));
   };
 
   const executeRequest = useCallback(async () => {
-    if (!activeKey) {
+    if (!apiKey?.trim()) {
       toast({
-        title: "No Active API Key",
-        description: "Please generate an API key first.",
+        title: "API key required",
+        description: "Paste an active API key or generate one in the API Keys tab.",
         variant: "destructive",
       });
       return;
@@ -377,20 +361,36 @@ const ApiExplorer = ({ user, apiKeys }) => {
       });
 
       const response = await apiClient.get(
-        `${selectedEndpoint.path}?${queryParams.toString()}`
+        `${selectedEndpoint.path}?${queryParams.toString()}`,
+        {
+          headers: { 'X-API-Key': apiKey.trim() },
+          skipAuth: true,
+        }
       );
       setResponse(response);
     } catch (err) {
-      setError(err.response?.data || err.message);
+      setError(getCardErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
-  }, [selectedEndpoint, params, toast, activeKey]);
+  }, [selectedEndpoint, params, toast, apiKey]);
 
-  const copyToClipboard = (text) => {
-    navigator.clipboard?.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyToClipboard = async (text) => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard access is not available in this browser.');
+      }
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      toast({ title: 'Copied', description: 'Response copied to clipboard.' });
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({
+        title: 'Could not copy',
+        description: 'Select the response text and copy it manually.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -451,28 +451,38 @@ const ApiExplorer = ({ user, apiKeys }) => {
           {/* Auth Status */}
           <div className={cn(
             "flex items-center gap-2 rounded-md border p-2 text-sm",
-            activeKey
+            apiKey?.trim()
               ? "border-green-400/30 bg-green-400/10"
               : "border-gray-700 bg-gray-800/50"
           )}>
-            {activeKey ? (
+            {apiKey?.trim() ? (
               <>
                 <CheckCircle className="h-4 w-4 text-green-400" />
-                <span className="text-green-400">
-                  Using API Key: {activeKey.name}
-                </span>
+                <span className="text-green-400">API key entered. It will be validated when you run a request.</span>
               </>
             ) : (
               <>
                 <AlertCircle className="h-4 w-4 text-gray-400" />
                 <span className="text-gray-400">
-                  No active API key found. Generate one in the API Keys tab.
+                  Enter an API key to authenticate requests from this explorer.
                 </span>
               </>
             )}
           </div>
 
           <div className="space-y-2">
+            <label htmlFor="api-explorer-key" className="text-xs font-medium text-gray-300">
+              API key
+            </label>
+            <Input
+              id="api-explorer-key"
+              type="password"
+              autoComplete="off"
+              value={apiKey}
+              onChange={(event) => onApiKeyChange(event.target.value)}
+              placeholder="Paste your API key"
+              className="min-h-[44px] bg-gray-900 border-gray-800 text-white placeholder:text-gray-500"
+            />
             {selectedEndpoint.params.map((param) => (
               <div key={param.name} className="flex items-center gap-2">
                 <span className="w-24 font-mono text-xs font-medium text-gray-300">
@@ -494,7 +504,7 @@ const ApiExplorer = ({ user, apiKeys }) => {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Button
               onClick={executeRequest}
-              disabled={isLoading}
+              disabled={isLoading || !apiKey?.trim()}
               size="sm"
               className="min-h-[44px] bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black"
             >
@@ -566,88 +576,109 @@ const DeveloperTab = () => {
   const { toast } = useToast();
   const [newKeyName, setNewKeyName] = useState('');
   const [showRawKey, setShowRawKey] = useState(null);
+  const [apiKeyForExplorer, setApiKeyForExplorer] = useState('');
+  const showRawKeyTimeoutRef = useRef(null);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('keys');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
+
+  useEffect(() => () => {
+    if (showRawKeyTimeoutRef.current) clearTimeout(showRawKeyTimeoutRef.current);
+  }, []);
 
   // --- Queries ---
   const {
     data: keys = [],
     isLoading: keysLoading,
+    isError: keysError,
+    error: keysErrorDetails,
     refetch: refetchKeys,
   } = useQuery({
     queryKey: ['api-keys'],
-    queryFn: async () => {
-      try {
-        const res = await apiClient.get('/auth/api-keys/');
-        console.log('[DeveloperTab] Fetched keys:', res);
-        return res || [];
-      } catch (err) {
-        console.warn('[DeveloperTab] Failed to fetch API keys:', err);
-        return [];
-      }
-    },
-    staleTime: 0,
-    retry: 2,
+    queryFn: async () => extractList(
+      await apiClient.get('/auth/api-keys/'),
+      ['results', 'keys']
+    ),
+    staleTime: 30 * 1000,
+    retry: 1,
     refetchOnWindowFocus: true,
     enabled: !!user && isAuthenticated,
   });
 
-  useEffect(() => {
-    if (user && isAuthenticated) {
-      refetchKeys();
-    }
-  }, [user, isAuthenticated, refetchKeys]);
-
-  const { data: usageData, isLoading: usageLoading, refetch: refetchUsage } = useQuery({
+  const {
+    data: usageData,
+    isLoading: usageLoading,
+    isError: usageError,
+    error: usageErrorDetails,
+    refetch: refetchUsage,
+  } = useQuery({
     queryKey: ['usage'],
-    queryFn: async () => {
-      const res = await apiClient.get('/auth/usage/');
-      return res.data || [];
-    },
+    queryFn: async () => extractList(
+      await apiClient.get('/auth/usage/'),
+      ['results', 'usage', 'daily_usage']
+    ),
     staleTime: 60 * 1000,
-    retry: false,
+    retry: 1,
+    enabled: !!user && isAuthenticated,
   });
 
-  const { data: topSymbols = [], isLoading: symbolsLoading } = useQuery({
+  const {
+    data: topSymbolsData,
+    isLoading: symbolsLoading,
+    isError: symbolsError,
+    error: symbolsErrorDetails,
+    refetch: refetchSymbols,
+  } = useQuery({
     queryKey: ['top-symbols'],
-    queryFn: async () => {
-      const res = await apiClient.get('/auth/top-symbols/');
-      return res.data || [];
-    },
+    queryFn: async () => extractList(
+      await apiClient.get('/auth/top-symbols/'),
+      ['results', 'symbols', 'top_symbols']
+    ),
     staleTime: 5 * 60 * 1000,
-    retry: false,
+    retry: 1,
+    enabled: !!user && isAuthenticated,
   });
 
-  const { data: activitiesData, isLoading: activityLoading } = useQuery({
+  const {
+    data: activitiesData,
+    isLoading: activityLoading,
+    isError: activityError,
+    error: activityErrorDetails,
+    refetch: refetchActivity,
+  } = useQuery({
     queryKey: ['activity'],
-    queryFn: async () => {
-      const res = await apiClient.get('/auth/activity/');
-      return res.data?.results || res.data || [];
-    },
+    queryFn: async () => extractList(
+      await apiClient.get('/auth/activity/'),
+      ['results', 'activity', 'activities']
+    ),
     staleTime: 60 * 1000,
-    retry: false,
+    retry: 1,
+    enabled: !!user && isAuthenticated,
   });
 
   const usage = Array.isArray(usageData) ? usageData : [];
+  const topSymbols = Array.isArray(topSymbolsData) ? topSymbolsData : [];
   const activities = Array.isArray(activitiesData) ? activitiesData : [];
   const keysList = Array.isArray(keys) ? keys : [];
-
-  useEffect(() => {
-    console.log('[DeveloperTab] keysList updated:', keysList);
-    console.log('[DeveloperTab] keysList length:', keysList.length);
-  }, [keysList]);
 
   // --- Mutations ---
   const generateMutation = useMutation({
     mutationFn: async (name) => {
-      const res = await apiClient.post('/auth/api-keys/', { name });
-      return res.data;
+      const response = await apiClient.post('/auth/api-keys/', { name });
+      return response?.data ?? response;
     },
     onSuccess: (data) => {
-      console.log('[DeveloperTab] Key generated:', data);
+
       
+      if (!data?.raw_key) {
+        setError('The key may have been created, but the server did not return its secret. Refresh the list; if the key appears, revoke it and create a new one.');
+        refetchKeys();
+        return;
+      }
+
       setShowRawKey(data.raw_key);
+      setApiKeyForExplorer(data.raw_key);
       setNewKeyName('');
       setError(null);
       
@@ -657,13 +688,13 @@ const DeveloperTab = () => {
         const newKey = {
           id: data.id,
           name: data.name,
-          key_preview: data.raw_key ? data.raw_key.slice(-8) : '',
+          key_preview: data.key_preview || data.raw_key.slice(-8),
           created_at: data.created_at,
           last_used: null,
           is_active: true,
         };
         const currentKeys = Array.isArray(oldData) ? oldData : [];
-        console.log('[DeveloperTab] Updating cache with new key:', newKey);
+
         return [...currentKeys, newKey];
       });
       
@@ -672,13 +703,14 @@ const DeveloperTab = () => {
         description: `Key "${data.name}" created successfully. Copy it now.`,
       });
       
-      setTimeout(() => setShowRawKey(null), 15000);
+      if (showRawKeyTimeoutRef.current) clearTimeout(showRawKeyTimeoutRef.current);
+      showRawKeyTimeoutRef.current = setTimeout(() => setShowRawKey(null), 15000);
     },
     onError: (err) => {
-      const message = err.response?.data?.error || 'Failed to generate key. Please try again.';
+      const message = getCardErrorMessage(err);
       setError(message);
       toast({
-        title: "Error",
+        title: "Couldn’t generate API key",
         description: message,
         variant: "destructive",
       });
@@ -704,10 +736,10 @@ const DeveloperTab = () => {
       refetchKeys();
     },
     onError: (err) => {
-      const message = err.response?.data?.error || 'Failed to revoke key. Please try again.';
+      const message = getCardErrorMessage(err);
       setError(message);
       toast({
-        title: "Error",
+        title: "Couldn’t revoke API key",
         description: message,
         variant: "destructive",
       });
@@ -736,18 +768,35 @@ const DeveloperTab = () => {
     }
   };
 
-  const handleRefreshAll = () => {
-    refetchKeys();
-    refetchUsage();
-    toast({
-      title: "Refreshed",
-      description: "All data has been refreshed.",
-    });
+  const handleRefreshAll = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      const results = await Promise.all([
+        refetchKeys(),
+        refetchUsage(),
+        refetchSymbols(),
+        refetchActivity(),
+      ]);
+      const failed = results.find((result) => result.isError);
+      if (failed) {
+        toast({
+          title: "Some information could not be refreshed",
+          description: getCardErrorMessage(failed.error),
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Updated",
+          description: "API keys, usage and account activity are up to date.",
+        });
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
-  const userTier = user?.tier || 'free';
-  const rateLimit = RATE_LIMITS[userTier] || RATE_LIMITS.free;
-  const activeKeyCount = keysList.filter((k) => k.is_active).length;
+  const activeKeyCount = keysError ? null : keysList.filter((k) => k.is_active).length;
 
   return (
     <div className="space-y-6">
@@ -760,10 +809,6 @@ const DeveloperTab = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="flex items-center gap-1 border-gray-700 text-gray-400">
-            <Shield className="h-3 w-3" />
-            {rateLimit.label} Plan
-          </Badge>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -771,9 +816,11 @@ const DeveloperTab = () => {
                   variant="outline"
                   size="icon"
                   onClick={handleRefreshAll}
+                  disabled={isRefreshing}
+                  aria-busy={isRefreshing}
                   className="border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white min-h-[44px] min-w-[44px] focus-visible:ring-gray-500 focus-visible:ring-offset-black"
                 >
-                  <RefreshCw className="h-4 w-4" />
+                  <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
                   <span className="sr-only">Refresh all data</span>
                 </Button>
               </TooltipTrigger>
@@ -883,12 +930,23 @@ const DeveloperTab = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        navigator.clipboard?.writeText(showRawKey);
-                        toast({
-                          title: "Copied!",
-                          description: "API key copied to clipboard.",
-                        });
+                      onClick={async () => {
+                        try {
+                          if (!navigator.clipboard?.writeText) {
+                            throw new Error('Clipboard access is not available.');
+                          }
+                          await navigator.clipboard.writeText(showRawKey);
+                          toast({
+                            title: "Copied",
+                            description: "API key copied to clipboard.",
+                          });
+                        } catch {
+                          toast({
+                            title: "Could not copy",
+                            description: "Select the key above and copy it manually.",
+                            variant: "destructive",
+                          });
+                        }
                       }}
                       className="mt-1 h-7 gap-1 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-white min-h-[44px]"
                     >
@@ -902,6 +960,9 @@ const DeveloperTab = () => {
                 keys={keysList}
                 onRevoke={handleRevoke}
                 isLoading={keysLoading}
+                isError={keysError}
+                error={keysErrorDetails}
+                onRetry={refetchKeys}
               />
             </CardContent>
             <CardFooter className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-800 px-6 py-4">
@@ -910,7 +971,7 @@ const DeveloperTab = () => {
                 Keys are hashed and never stored in plain text.
               </p>
               <Badge variant="secondary" className="text-xs bg-gray-800 text-gray-400 border-0">
-                {activeKeyCount} / 5 active
+                {activeKeyCount === null ? '— / 5 active' : `${activeKeyCount} / 5 active`}
               </Badge>
             </CardFooter>
           </Card>
@@ -922,14 +983,16 @@ const DeveloperTab = () => {
             <CardHeader>
               <CardTitle className="text-white">API Usage</CardTitle>
               <CardDescription className="text-gray-400">
-                Track your API request usage over the last 30 days.
+                Track recorded API-key requests over the last 30 days. Counts are temporary and may reset when the service cache is cleared.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <UsageChart
                 data={usage}
                 isLoading={usageLoading}
-                tier={userTier}
+                isError={usageError}
+                error={usageErrorDetails}
+                onRetry={refetchUsage}
               />
             </CardContent>
           </Card>
@@ -947,6 +1010,11 @@ const DeveloperTab = () => {
                     <Skeleton className="h-8 w-full bg-gray-800" />
                     <Skeleton className="h-8 w-full bg-gray-800" />
                     <Skeleton className="h-8 w-full bg-gray-800" />
+                  </div>
+                ) : symbolsError ? (
+                  <div className="space-y-2" role="alert">
+                    <p className="text-sm text-gray-400">{getCardErrorMessage(symbolsErrorDetails)}</p>
+                    <Button variant="outline" size="sm" onClick={() => refetchSymbols()}>Try again</Button>
                   </div>
                 ) : topSymbols.length === 0 ? (
                   <p className="text-sm text-gray-500">No symbol data yet.</p>
@@ -982,6 +1050,11 @@ const DeveloperTab = () => {
                     <Skeleton className="h-12 w-full bg-gray-800" />
                     <Skeleton className="h-12 w-full bg-gray-800" />
                     <Skeleton className="h-12 w-full bg-gray-800" />
+                  </div>
+                ) : activityError ? (
+                  <div className="space-y-2" role="alert">
+                    <p className="text-sm text-gray-400">{getCardErrorMessage(activityErrorDetails)}</p>
+                    <Button variant="outline" size="sm" onClick={() => refetchActivity()}>Try again</Button>
                   </div>
                 ) : activities.length === 0 ? (
                   <p className="text-sm text-gray-500">No activity yet.</p>
@@ -1028,7 +1101,10 @@ const DeveloperTab = () => {
 
         {/* --- Tab 3: API Explorer --- */}
         <TabsContent value="explorer" className="space-y-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded">
-          <ApiExplorer user={user} apiKeys={keysList} />
+          <ApiExplorer
+            apiKey={apiKeyForExplorer}
+            onApiKeyChange={setApiKeyForExplorer}
+          />
         </TabsContent>
 
         {/* --- Tab 4: Documentation --- */}

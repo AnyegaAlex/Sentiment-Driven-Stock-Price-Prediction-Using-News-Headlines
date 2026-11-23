@@ -13,7 +13,7 @@
  * @component
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import apiClient from '@/services/client';
@@ -24,7 +24,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { AlertCircle, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { getActionErrorMessage } from '@/utils/errorHandler';
 
 // Constants
 const CONFIRM_TEXT = 'DELETE';
@@ -60,19 +60,22 @@ const AccountTab = () => {
     setError('');
 
     try {
-      const response = await apiClient.post('/auth/delete-account/', {
+      await apiClient.post('/auth/delete-account/', {
         password,
         confirm: confirmText,
       });
 
       redirectToLogin();
     } catch (err) {
-      if (err.response?.status === 401) {
+      if (Number(err?.code ?? err?.response?.status) === 401) {
         redirectToLogin();
         return;
       }
 
-      setError(err.response?.data?.error || err.message || 'Failed to delete account. Please try again.');
+      setError(getActionErrorMessage(
+        err,
+        'We couldn’t delete your account. Please try again.'
+      ));
     } finally {
       setLoading(false);
     }

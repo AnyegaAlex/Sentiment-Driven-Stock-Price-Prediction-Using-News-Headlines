@@ -13,12 +13,13 @@
  * @author Tickflow Capital
  */
 
-import React, { Suspense, lazy, useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Suspense, lazy, useEffect, useRef } from "react";
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import ReactGA from 'react-ga4';
+import { MotionConfig } from 'framer-motion';
 
 // ============================================================================
 // Lazy Load Components
@@ -31,12 +32,13 @@ import Breadcrumbs from "./components/Breadcrumbs";
 import ErrorBoundary from "./components/ErrorBoundary";
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import HomeRoute from "./components/auth/HomeRoute";
 
 // Context providers
 import { AuthProvider } from "./context/AuthContext";
+import { useAuth } from "./hooks/useAuth";
 import { OnboardingProvider } from "./context/OnboardingContext";
 import { DashboardProvider, useDashboard } from "./context/DashboardContext";
-import { PersistGate } from "./context/PersistGate";
 
 // Lazy load pages for code splitting
 const LandingPage = lazy(() => import("./pages/LandingPage"));
@@ -67,12 +69,12 @@ const queryClient = new QueryClient({
     queries: {
       refetchOnWindowFocus: false,
       retry: 1,
-      staleTime: 5 * 60 * 1000,
+      staleTime: 60 * 1000,
       gcTime: 10 * 60 * 1000,
-      placeholderData: (previousData) => previousData,
     },
     mutations: {
-      retry: 1,
+      // Never replay account changes, key creation or other POST/PATCH actions automatically.
+      retry: false,
     },
   },
 });
@@ -107,7 +109,8 @@ const AnalyticsTracker = () => {
     if (import.meta.env.PROD) {
       ReactGA.send({
         hitType: 'pageview',
-        page: location.pathname + location.search,
+        // Never send query strings: verification and password-reset links contain one-time tokens.
+        page: location.pathname,
         title: document.title,
       });
     }
@@ -147,13 +150,31 @@ const isAuthRoute = (pathname) => {
 const AppContent = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { setStockSymbol } = useDashboard();
+  const previousUserIdRef = useRef(user?.id ?? null);
+
+  useEffect(() => {
+    const currentUserId = user?.id ?? null;
+    if (previousUserIdRef.current && previousUserIdRef.current !== currentUserId) {
+      // Clear user-scoped query data when an account signs out or changes.
+      queryClient.clear();
+      setStockSymbol(null);
+    }
+    previousUserIdRef.current = currentUserId;
+  }, [user?.id, queryClient, setStockSymbol]);
 
   const handleSymbolSelect = (symbol) => {
-    if (symbol) {
-      setStockSymbol(symbol);
-      navigate(`/dashboard/${symbol}`);
+    if (!symbol) {
+      setStockSymbol(null);
+      navigate('/dashboard');
+      return;
     }
+
+    const normalizedSymbol = symbol.trim().toUpperCase();
+    setStockSymbol(normalizedSymbol);
+    navigate(`/dashboard/${encodeURIComponent(normalizedSymbol)}`);
   };
 
   // Auth routes (no header/footer)
@@ -162,7 +183,7 @@ const AppContent = () => {
       <div className="min-h-screen flex flex-col bg-black">
         <Suspense fallback={<PageLoader />}>
           <main className="flex-grow flex items-center justify-center px-4">
-            <ErrorBoundary>
+            <ErrorBoundary resetKeys={[location.pathname]}>
               <AnalyticsTracker />
               <Routes>
                 <Route path="/signup" element={<Signup />} />
@@ -183,6 +204,7 @@ const AppContent = () => {
                     </ProtectedRoute>
                   }
                 />
+                <Route path="*" element={<NotFound />} />
               </Routes>
             </ErrorBoundary>
           </main>
@@ -195,11 +217,11 @@ const AppContent = () => {
   if (location.pathname === '/') {
     return (
       <div className="min-h-screen flex flex-col bg-black">
-        <ErrorBoundary>
+        <ErrorBoundary resetKeys={[location.pathname]}>
           <Suspense fallback={<PageLoader />}>
             <AnalyticsTracker />
             <Routes>
-              <Route path="/" element={<LandingPage />} />
+              <Route path="/" element={<HomeRoute><LandingPage /></HomeRoute>} />
             </Routes>
           </Suspense>
         </ErrorBoundary>
@@ -214,12 +236,12 @@ const AppContent = () => {
       <main
         className="flex-grow max-w-[1450px] w-full mx-auto px-5 md:px-8"
         style={{
-          paddingTop: 'calc(var(--header-height, 80px) + 1rem)',
+          paddingTop: '1rem',
           paddingBottom: '2rem',
         }}
       >
         <Breadcrumbs />
-        <ErrorBoundary>
+        <ErrorBoundary resetKeys={[location.pathname]}>
           <Suspense fallback={<PageLoader />}>
             <AnalyticsTracker />
             <Routes>
@@ -311,30 +333,23 @@ const AppContent = () => {
 const App = () => {
   useEnforceDarkMode();
 
-  // Initialize Google Analytics
-  useEffect(() => {
-    if (import.meta.env.PROD && import.meta.env.VITE_GA_MEASUREMENT_ID) {
-      ReactGA.initialize(import.meta.env.VITE_GA_MEASUREMENT_ID);
-    }
-  }, []);
-
   return (
-    <QueryClientProvider client={queryClient}>
+    <MotionConfig reducedMotion="user">
+      <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={200}>
         <Router>
           <AuthProvider>
             <OnboardingProvider>
               <DashboardProvider>
-                <PersistGate>
-                  <AppContent />
-                </PersistGate>
+                <AppContent />
               </DashboardProvider>
             </OnboardingProvider>
           </AuthProvider>
         </Router>
         {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
       </TooltipProvider>
-    </QueryClientProvider>
+      </QueryClientProvider>
+    </MotionConfig>
   );
 };
 

@@ -31,8 +31,12 @@ const normalizeUrl = (url) => {
 const getApiUrl = () => {
   let baseUrl = import.meta.env.VITE_API_BASE_URL;
   
-  // ✅ HARDCODE THE CORRECT URL
-  baseUrl = 'https://sentiment-driven-stock-price-prediction.onrender.com';
+  // Use VITE_API_BASE_URL when set; otherwise pick the URL for the build mode
+  if (!baseUrl) {
+    baseUrl = IS_DEVELOPMENT
+      ? 'http://localhost:8000'
+      : 'https://sentiment-driven-stock-price-prediction.onrender.com';
+  }
   
   // Remove or comment out the env variable check
   // if (!baseUrl) {
@@ -109,7 +113,7 @@ const BASE_URL = CONFIG.baseURL.endsWith('/api/v1')
   : `${CONFIG.baseURL.replace(/\/+$/, '')}/api/v1`;
 
 const BASE_URL_CONTAINS_API_V1 = /\/api\/v1/.test(BASE_URL);
-const EXEMPT_PATHS = ['/health/', '/api/docs/', '/api/schema/', '/api/auth/refresh/'];
+const EXEMPT_PATHS = ['/health/', '/api/docs/', '/api/schema/', '/auth/refresh/'];
 
 // ============================================================================
 // Timeout Helper
@@ -144,12 +148,12 @@ const apiClient = axios.create({
 // Token Management
 // ============================================================================
 
-let authToken = null;
 let tokenRefreshPromise = null;
+let authFailureHandled = false;
 
 export const setAuthToken = (token, remember = false) => {
-  authToken = token;
   if (token) {
+    authFailureHandled = false;
     apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     const storage = remember ? localStorage : sessionStorage;
     storage.setItem('authToken', token);
@@ -161,12 +165,15 @@ export const setAuthToken = (token, remember = false) => {
 };
 
 export const removeAuthToken = () => {
-  authToken = null;
   delete apiClient.defaults.headers.common['Authorization'];
   localStorage.removeItem('authToken');
   sessionStorage.removeItem('authToken');
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
+  localStorage.removeItem('user');
+  sessionStorage.removeItem('accessToken');
+  sessionStorage.removeItem('refreshToken');
+  sessionStorage.removeItem('user');
 };
 
 export const restoreAuthToken = () => {
@@ -183,16 +190,33 @@ export const restoreAuthToken = () => {
 // ============================================================================
 
 const ERROR_MESSAGES = {
-  400: 'Invalid request. Please check your input.',
-  401: 'Authentication required. Please login.',
+  400: 'Some of the information needs attention. Please review your input.',
+  401: 'Your sign-in details could not be verified.',
   403: 'You do not have permission to perform this action.',
   404: 'The requested resource was not found.',
-  422: 'Validation error. Please check your input.',
-  429: 'Too many requests. Please try again later.',
-  500: 'A server error occurred. Our team has been notified.',
+  422: 'Some of the information needs attention. Please review your input.',
+  429: 'You have made several requests in a short time. Please try again later.',
+  500: 'TickFlow could not complete that request because of a server problem.',
   502: 'Service temporarily unavailable. Please try again later.',
   503: 'Service is currently unavailable. Please try again later.',
   504: 'Request timed out. Please try again.',
+};
+
+const firstErrorMessage = (value) => {
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = firstErrorMessage(item);
+      if (message) return message;
+    }
+  }
+  if (value && typeof value === 'object') {
+    for (const key of ['detail', 'message', 'error', 'non_field_errors']) {
+      const message = firstErrorMessage(value[key]);
+      if (message) return message;
+    }
+  }
+  return '';
 };
 
 const formatError = (error) => {
@@ -200,11 +224,19 @@ const formatError = (error) => {
   const status = response?.status || 0;
   const data = response?.data || {};
   const config = response?.config || {};
+  const responseMessage = firstErrorMessage(data?.detail)
+    || firstErrorMessage(data?.message)
+    || firstErrorMessage(data?.error);
+  const message = status >= 500
+    ? (ERROR_MESSAGES[status] || 'TickFlow could not complete that request because of a server problem.')
+    : (responseMessage || ERROR_MESSAGES[status] || 'Something unexpected happened. Please try again.');
 
   return {
     code: status,
-    message: data?.message || data?.error || ERROR_MESSAGES[status] || 'An unexpected error occurred.',
-    details: data?.details || data,
+    message,
+    details: data?.details ?? data?.errors ?? data,
+    serviceCode: data?.code ?? data?.error_code ?? null,
+    retryAfter: Number(response?.headers?.['retry-after']) || undefined,
     timestamp: new Date().toISOString(),
     requestId: config?.headers?.['X-Request-ID'],
     technical: IS_DEVELOPMENT ? error.message : undefined,
@@ -217,18 +249,21 @@ const formatError = (error) => {
 
 const handleLogout = () => {
   removeAuthToken();
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
-  localStorage.removeItem('user');
-  sessionStorage.removeItem('authToken');
-  
+  if (authFailureHandled) return;
+  authFailureHandled = true;
+
+  const from = {
+    pathname: window.location.pathname,
+    search: window.location.search,
+    hash: window.location.hash,
+  };
+
   window.dispatchEvent(new CustomEvent('unauthorized', {
-    detail: { message: 'Your session has expired. Please login again.' }
+    detail: {
+      message: 'Your session has expired. Sign in again to continue where you left off.',
+      from,
+    },
   }));
-  
-  if (!window.location.pathname.includes('/login')) {
-    window.location.href = '/login';
-  }
 };
 
 // ============================================================================
@@ -236,7 +271,9 @@ const handleLogout = () => {
 // ============================================================================
 
 const refreshAccessToken = async () => {
-  const refreshToken = localStorage.getItem('refreshToken');
+  const refreshToken =
+    localStorage.getItem('refreshToken') ||
+    sessionStorage.getItem('refreshToken');
   if (!refreshToken) {
     throw new Error('No refresh token available');
   }
@@ -260,11 +297,13 @@ const refreshAccessToken = async () => {
       throw new Error('No access token in refresh response');
     }
     
-    localStorage.setItem('accessToken', newAccessToken);
-    setAuthToken(newAccessToken, !!localStorage.getItem('refreshToken'));
+    const rememberSession = !!localStorage.getItem('refreshToken');
+    const tokenStorage = rememberSession ? localStorage : sessionStorage;
+    tokenStorage.setItem('accessToken', newAccessToken);
+    setAuthToken(newAccessToken, rememberSession);
     return newAccessToken;
   } catch (error) {
-    console.error('[Token Refresh Failed]', error);
+    if (IS_DEVELOPMENT) console.warn('[Token refresh failed]', error?.response?.status || error?.code || 'unknown');
     throw error;
   }
 };
@@ -278,16 +317,25 @@ apiClient.interceptors.request.use(
     // Set method-specific timeout
     config.timeout = getTimeout(config.method);
 
-    // Authentication
-    const accessToken = localStorage.getItem('accessToken') || sessionStorage.getItem('authToken');
-    if (accessToken) {
-      config.headers['Authorization'] = `Bearer ${accessToken}`;
+    // API Explorer requests can explicitly authenticate with an API key
+    // without also sending the browser's JWT.
+    const skipAuth = config.skipAuth === true;
+    delete config.skipAuth;
+
+    if (skipAuth) {
+      delete config.headers.Authorization;
+      delete config.headers.authorization;
     } else {
-      const isPublicEndpoint = EXEMPT_PATHS.some(path => config.url?.includes(path));
-      if (isPublicEndpoint) {
-        const apiKey = import.meta.env.VITE_PUBLIC_API_KEY;
-        if (apiKey) {
-          config.headers['X-API-Key'] = apiKey;
+      const accessToken = localStorage.getItem('accessToken') || sessionStorage.getItem('authToken');
+      if (accessToken) {
+        config.headers['Authorization'] = `Bearer ${accessToken}`;
+      } else {
+        const isPublicEndpoint = EXEMPT_PATHS.some(path => config.url?.includes(path));
+        if (isPublicEndpoint) {
+          const apiKey = import.meta.env.VITE_PUBLIC_API_KEY;
+          if (apiKey) {
+            config.headers['X-API-Key'] = apiKey;
+          }
         }
       }
     }
@@ -329,7 +377,7 @@ apiClient.interceptors.request.use(
     return config;
   },
   (error) => {
-    console.error('[API Request Error]', error);
+    if (IS_DEVELOPMENT) console.warn('[API request setup failed]', error?.message || 'Unknown request error');
     return Promise.reject(formatError(error));
   }
 );
@@ -351,27 +399,43 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Network errors
+    // Distinguish timeouts from connection failures so the UI gives useful guidance.
     if (!error.response) {
-      console.error('[Network Error]', error.message);
+      const timedOut = ['ECONNABORTED', 'ETIMEDOUT'].includes(error?.code);
+      if (IS_DEVELOPMENT) {
+        console.warn(timedOut ? '[API request timed out]' : '[Network request failed]', error.message);
+      }
       return Promise.reject({
-        code: 'NETWORK_ERROR',
-        message: 'Unable to connect to server. Please check your internet connection.',
+        code: timedOut ? 408 : 'NETWORK_ERROR',
+        message: timedOut
+          ? 'The request took too long. Check your connection and try again.'
+          : 'Unable to connect to server. Please check your internet connection.',
         timestamp: new Date().toISOString(),
       });
     }
 
     const { status, data, config } = error.response;
     
-    console.error('[API Error]', {
-      status,
-      url: config?.url,
-      method: config?.method?.toUpperCase(),
-      message: data?.message || data?.error || error.message,
-    });
+    if (IS_DEVELOPMENT) {
+      console.warn('[API request failed]', {
+        status,
+        url: config?.url?.split('?')[0],
+        method: config?.method?.toUpperCase(),
+      });
+    }
 
     // Token refresh on 401
-    if (status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/refresh/')) {
+    // Login/register failures are credential errors, not expired sessions.
+    const authOnlyPaths = [
+      '/login/',
+      '/register/',
+      '/refresh/',
+      '/verify-email/',
+      '/resend-verification/',
+      '/password-reset/',
+    ];
+    const isAuthAttempt = authOnlyPaths.some((path) => originalRequest?.url?.includes(path));
+    if (status === 401 && originalRequest && !originalRequest._retry && !isAuthAttempt) {
       originalRequest._retry = true;
       
       if (!tokenRefreshPromise) {
@@ -381,14 +445,28 @@ apiClient.interceptors.response.use(
       try {
         const newAccessToken = await tokenRefreshPromise;
         tokenRefreshPromise = null;
+        originalRequest.headers = originalRequest.headers || {};
         originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
         return apiClient(originalRequest);
       } catch (refreshError) {
         tokenRefreshPromise = null;
-        handleLogout();
+        const refreshStatus = Number(refreshError?.response?.status || refreshError?.code || 0);
+        const hasRefreshToken = Boolean(
+          localStorage.getItem('refreshToken') || sessionStorage.getItem('refreshToken')
+        );
+        const refreshTokenRejected = !hasRefreshToken || [400, 401, 403].includes(refreshStatus);
+
+        if (refreshTokenRejected) {
+          handleLogout();
+          return Promise.reject({
+            code: 401,
+            message: 'Your session has expired. Sign in again to continue.',
+          });
+        }
+
         return Promise.reject({
-          code: 401,
-          message: 'Your session has expired. Please login again.',
+          code: refreshStatus || 'NETWORK_ERROR',
+          message: 'We couldn’t refresh your session right now. Check your connection and try again.',
         });
       }
     }
@@ -398,17 +476,21 @@ apiClient.interceptors.response.use(
       const retryAfter = parseInt(error.response.headers['retry-after'], 10) || 60;
       return Promise.reject({
         code: status,
-        message: 'Too many requests. Please try again later.',
+        message: 'You have made several requests in a short time. Please try again later.',
         retryAfter,
         timestamp: new Date().toISOString(),
       });
     }
 
-    // Server errors
+    // Server errors. Preserve the application error code so the UI can
+    // distinguish intentionally unavailable data from an unexpected outage.
     if (status >= 500) {
       return Promise.reject({
         code: status,
-        message: 'A server error occurred. Our team has been notified.',
+        serviceCode: data?.code ?? data?.error_code ?? null,
+        message: status === 503
+          ? 'This service is temporarily unavailable. Please try again in a moment.'
+          : 'We couldn’t complete that request. Please try again shortly.',
         timestamp: new Date().toISOString(),
       });
     }

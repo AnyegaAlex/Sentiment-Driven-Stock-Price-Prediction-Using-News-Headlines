@@ -1,55 +1,56 @@
-import React from 'react';
+import { Link } from 'react-router-dom';
 
 const steps = [
   {
-    step: 1,
-    title: 'Search any stock',
-    description: 'Enter a stock symbol (e.g., AAPL, TSLA, NVDA) from the 10 supported symbols to begin analysis.',
+    step: '01',
+    title: 'Create your account',
+    description: 'Register and sign in to access your research workspace and account settings.',
   },
   {
-    step: 2,
-    title: 'Fetch news from 3+ sources',
-    description: 'Aggregate headlines from Alpha Vantage, Finnhub, and Yahoo Finance. Apply SHA-256 deduplication, then FinBERT sentiment analysis with key phrase extraction and source reliability ranking (1-100).',
+    step: '02',
+    title: 'Choose a ticker',
+    description: 'Search by company name or enter a stock symbol directly in the workspace.',
   },
   {
-    step: 3,
-    title: 'LSTM processes 7 features',
-    description: 'The neural network (32 hidden units) processes sentiment plus MA7, MA21, STD21, RSI14, UpperBB, and LowerBB to generate directional predictions.',
+    step: '03',
+    title: 'Review available analysis',
+    description: 'Explore the analysis modules that are enabled for your account. Price and news features depend on provider access.',
   },
   {
-    step: 4,
-    title: 'View dashboard & track accuracy',
-    description: 'Get a unified stock opinion (BUY/SELL/HOLD) with confidence scoring, technical indicators (SMA-50, SMA-200, RSI, support/resistance, volume), sentiment history, price targets, risk assessment, and 7-day prediction resolution.',
+    step: '04',
+    title: 'Set your preferences',
+    description: 'Choose your investment goal, risk tolerance and experience level to shape how research is presented.',
   },
 ];
 
-const HowItWorks = () => {
-  return (
-    <section className="bg-black py-16 px-4 md:px-8 lg:px-16 border-t border-gray-800">
-      <div className="max-w-6xl mx-auto">
-        <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-4">
-          How It Works
-        </h2>
-        <p className="text-gray-400 text-center mb-12 max-w-2xl mx-auto">
-          From stock symbol to prediction in four steps.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {steps.map((step) => (
-            <div 
-              key={step.step} 
-              className="bg-gray-900 border border-gray-800 p-6 rounded-lg hover:border-gray-600 transition duration-200"
-            >
-              <div className="flex items-center justify-center w-12 h-12 bg-gray-800 rounded-full text-white font-bold text-xl mb-4">
-                {step.step}
-              </div>
-              <h3 className="text-lg font-semibold text-white mb-2">{step.title}</h3>
-              <p className="text-gray-400 text-sm leading-relaxed">{step.description}</p>
-            </div>
-          ))}
-        </div>
+const HowItWorks = () => (
+  <section className="border-t border-gray-800 bg-black px-4 py-16 sm:px-6 lg:px-16">
+    <div className="mx-auto max-w-6xl">
+      <h2 className="mb-4 text-center text-3xl font-bold text-white sm:text-4xl">Getting started</h2>
+      <p className="mx-auto mb-12 max-w-2xl text-center text-gray-400">
+        A straightforward path from account setup to reviewing the available research.
+      </p>
+      <ol className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {steps.map((step) => (
+          <li key={step.step} className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+            <span className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-gray-800 font-mono text-sm font-semibold text-white">
+              {step.step}
+            </span>
+            <h3 className="mb-2 text-lg font-semibold text-white">{step.title}</h3>
+            <p className="text-sm leading-relaxed text-gray-400">{step.description}</p>
+          </li>
+        ))}
+      </ol>
+      <div className="mt-8 text-center">
+        <Link
+          to="/signup"
+          className="inline-flex min-h-[44px] items-center justify-center rounded-md border border-gray-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:border-white hover:bg-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
+        >
+          Create an account
+        </Link>
       </div>
-    </section>
-  );
-};
+    </div>
+  </section>
+);
 
 export default HowItWorks;

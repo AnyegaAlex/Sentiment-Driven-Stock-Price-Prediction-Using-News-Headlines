@@ -4,7 +4,7 @@
  * This ensures ONE instance of useAuthState is shared across the app.
  */
 import React, { createContext, useContext } from 'react';
-import { useAuthState } from '@/hooks/useAuthState';
+import { useAuth as useAuthState } from '@/hooks/useAuthState';
 
 export const AuthContext = createContext(null);
 

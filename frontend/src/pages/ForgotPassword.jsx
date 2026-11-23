@@ -12,14 +12,14 @@
  * @version 2.0.0
  */
 
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Mail, ArrowLeft, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import AuthService from '@/services/authService';
+import { getActionErrorMessage } from '@/utils/errorHandler';
 import TfcLogo from '@/assets/Primary Icon White.svg'; 
 
 const ForgotPassword = () => {
-  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -27,17 +27,24 @@ const ForgotPassword = () => {
   const [touched, setTouched] = useState(false);
 
   // Validate email
-  const validateEmail = (email) => {
+  const validateEmail = (value) => {
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    return emailRegex.test(email);
+    return emailRegex.test(value.trim());
   };
+  const emailError = !success && touched
+    ? !email.trim()
+      ? 'Email is required.'
+      : !validateEmail(email)
+        ? 'Enter a valid email address.'
+        : ''
+    : '';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setTouched(true);
 
-    if (!email || !validateEmail(email)) {
-      setError('Please enter a valid email address.');
+    if (!email.trim() || !validateEmail(email)) {
+      setError('');
       return;
     }
 
@@ -46,18 +53,28 @@ const ForgotPassword = () => {
     setSuccess(false);
 
     try {
-      const result = await AuthService.requestPasswordReset(email);
+      const result = await AuthService.requestPasswordReset(email.trim().toLowerCase());
       
       if (result.success) {
         setSuccess(true);
         setEmail('');
-        console.info('[ForgotPassword] Reset email sent to:', email);
       } else {
-        setError(result.error || 'Failed to send reset email. Please try again.');
+        setError(getActionErrorMessage(
+          {
+            code: result.code,
+            message: result.error,
+            details: result.details,
+            retryAfter: result.retryAfter,
+          },
+          'We couldn’t send a password reset email. Please try again.'
+        ));
       }
     } catch (err) {
       console.error('[ForgotPassword] Error:', err);
-      setError('An error occurred. Please try again.');
+      setError(getActionErrorMessage(
+        err,
+        'We couldn’t send a password reset email. Please try again.'
+      ));
     } finally {
       setLoading(false);
     }
@@ -72,21 +89,21 @@ const ForgotPassword = () => {
         <div className="flex flex-col items-center">
           <img
             src={TfcLogo}
-            alt="TFC"
+            alt="TFI"
             className="h-14 w-14 mb-2 opacity-80"
           />
           <span className="text-lg font-semibold text-white tracking-tight">
-            Tickflow Intelligence
+            TickFlow Intelligence
           </span>
           <span className="text-[10px] text-gray-500 mt-0.5 tracking-wide">
-            Hybrid LSTM + FinBERT Stock Intelligence
+            Stock research workspace
           </span>
         </div>
         <h1 className="text-2xl font-bold text-white tracking-tight mt-2">
-          Reset Password
+          Forgot your password?
         </h1>
         <p className="text-gray-400 text-sm max-w-sm mx-auto">
-          Enter your email address and we'll send you a link to reset your password.
+          Enter the email address on your account. If it matches an account, we’ll send a password reset link.
         </p>
       </div>
 
@@ -96,24 +113,37 @@ const ForgotPassword = () => {
       <div className="px-6 pb-8">
         {/* Success Message */}
         {success && (
-          <div className="mb-4 rounded-md border border-green-400 bg-green-400/10 p-4">
+          <>
+          <div role="status" className="mb-4 rounded-md border border-green-400 bg-green-400/10 p-4">
             <div className="flex items-start gap-3">
               <CheckCircle className="h-5 w-5 text-green-400 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-medium text-green-400">
-                  Password reset email sent!
+                  Check your inbox
                 </p>
                 <p className="text-sm text-green-400/80 mt-1">
-                  Please check your inbox and follow the instructions to reset your password.
+                  If an account matches that email address, you’ll receive a reset link. Check your spam folder if it doesn’t arrive.
                 </p>
               </div>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSuccess(false);
+              setTouched(false);
+              setError('');
+            }}
+            className="mb-4 min-h-[40px] text-sm text-gray-300 underline underline-offset-4 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+          >
+            Send another reset link
+          </button>
+          </>
         )}
 
         {/* Error Message */}
         {error && (
-          <div className="mb-4 rounded-md border border-red-400 bg-red-400/10 p-4">
+          <div id="submit-error" role="alert" className="mb-4 rounded-md border border-red-400 bg-red-400/10 p-4">
             <div className="flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
               <p className="text-sm font-medium text-red-400">
@@ -146,12 +176,13 @@ const ForgotPassword = () => {
                 }}
                 onBlur={() => setTouched(true)}
                 disabled={loading || success}
-                aria-describedby={touched && error ? 'email-error' : undefined}
+                aria-invalid={Boolean(emailError)}
+                aria-describedby={emailError ? 'email-error' : undefined}
               />
             </div>
-            {touched && !email && (
-              <p id="email-error" className="mt-1 text-sm text-red-400">
-                Email is required
+            {emailError && (
+              <p id="email-error" role="alert" className="mt-1 text-sm text-red-400">
+                {emailError}
               </p>
             )}
           </div>
@@ -187,7 +218,7 @@ const ForgotPassword = () => {
         {/* Trust Badge */}
         <div className="mt-6 pt-4 border-t border-gray-800">
           <p className="text-[10px] text-center text-gray-500">
-            If you don't receive the email within 5 minutes, check your spam folder.
+            If you don’t see the email after a few minutes, check your spam folder.
           </p>
         </div>
       </div>

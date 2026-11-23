@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import PropTypes from 'prop-types';
 import { Link } from 'react-router-dom';
 import AuthService from '@/services/authService';
 import { Button } from '@/components/ui/button';
@@ -6,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { Eye, EyeOff, Check, X, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getActionErrorMessage } from '@/utils/errorHandler';
 
 // ============================================================================
 // Constants
@@ -13,10 +15,7 @@ import { cn } from '@/lib/utils';
 
 const PASSWORD_REQUIREMENTS = [
   { id: 'length', label: 'At least 8 characters', test: (p) => p.length >= 8 },
-  { id: 'lowercase', label: 'Contains lowercase letter', test: (p) => /[a-z]/.test(p) },
-  { id: 'uppercase', label: 'Contains uppercase letter', test: (p) => /[A-Z]/.test(p) },
-  { id: 'number', label: 'Contains a number', test: (p) => /[0-9]/.test(p) },
-  { id: 'special', label: 'Contains a special character', test: (p) => /[^a-zA-Z0-9]/.test(p) },
+  { id: 'not-numeric', label: 'Not a numbers-only password', test: (p) => p.length > 0 && !/^\d+$/.test(p) },
 ];
 
 const DISPOSABLE_DOMAINS = [
@@ -43,10 +42,10 @@ const PasswordRequirement = React.memo(({ label, met }) => (
 
 PasswordRequirement.displayName = 'PasswordRequirement';
 
-const FieldError = React.memo(({ error }) => {
+const FieldError = React.memo(({ error, id }) => {
   if (!error) return null;
   return (
-    <div className="flex items-start gap-1.5 mt-1 text-red-400 text-sm animate-slide-down" role="alert">
+    <div id={id} className="flex items-start gap-1.5 mt-1 text-red-400 text-sm animate-slide-down" role="alert">
       <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
       <span>{error}</span>
     </div>
@@ -54,6 +53,16 @@ const FieldError = React.memo(({ error }) => {
 });
 
 FieldError.displayName = 'FieldError';
+
+PasswordRequirement.propTypes = {
+  label: PropTypes.string.isRequired,
+  met: PropTypes.bool.isRequired,
+};
+
+FieldError.propTypes = {
+  error: PropTypes.string,
+  id: PropTypes.string,
+};
 
 const PasswordStrength = React.memo(({ password }) => {
   const strength = useMemo(() => {
@@ -101,6 +110,9 @@ const PasswordStrength = React.memo(({ password }) => {
 });
 
 PasswordStrength.displayName = 'PasswordStrength';
+PasswordStrength.propTypes = {
+  password: PropTypes.string.isRequired,
+};
 
 export const SignupForm = ({ onSuccess, onError }) => {
   // ---- State ----
@@ -118,15 +130,20 @@ export const SignupForm = ({ onSuccess, onError }) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
   }, [form.email]);
 
+  const isUsernameValid = useMemo(
+    () => /^[a-zA-Z0-9_]{3,30}$/.test(form.username.trim()),
+    [form.username]
+  );
+
   const isDisposableEmail = useMemo(() => {
     if (!form.email) return false;
     const domain = form.email.split('@')[1]?.toLowerCase();
     return DISPOSABLE_DOMAINS.includes(domain);
   }, [form.email]);
 
-  const passwordMeetsRequirements = useMemo(() => {
-    return PASSWORD_REQUIREMENTS.every((req) => req.test(form.password));
-  }, [form.password]);
+  const passwordMeetsRequirements = useMemo(() => (
+    PASSWORD_REQUIREMENTS.every((req) => req.test(form.password))
+  ), [form.password]);
 
   const passwordsMatch = useMemo(() => {
     return form.password && form.password2 && form.password === form.password2;
@@ -134,14 +151,13 @@ export const SignupForm = ({ onSuccess, onError }) => {
 
   const isFormValid = useMemo(() => {
     return (
-      form.username.trim().length >= 3 &&
-      form.username.trim().length <= 30 &&
+      isUsernameValid &&
       isEmailValid &&
       !isDisposableEmail &&
       passwordMeetsRequirements &&
       passwordsMatch
     );
-  }, [form.username, isEmailValid, isDisposableEmail, passwordMeetsRequirements, passwordsMatch]);
+  }, [isUsernameValid, isEmailValid, isDisposableEmail, passwordMeetsRequirements, passwordsMatch]);
 
   // ---- Handlers ----
   const handleChange = useCallback((e) => {
@@ -175,17 +191,26 @@ export const SignupForm = ({ onSuccess, onError }) => {
       });
 
       if (result.success) {
-        onSuccess?.(form.email);
+        onSuccess?.(form.email.trim().toLowerCase());
       } else {
         if (result.details) {
           setFieldErrors(result.details);
         }
-        const errorMsg = result.error || 'Registration failed. Please try again.';
+        const hasFieldErrors = result.details && Object.keys(result.details).length > 0;
+        const errorMsg = hasFieldErrors
+          ? 'Some details need attention. Review the highlighted fields.'
+          : getActionErrorMessage(
+              { code: result.code, message: result.error, details: result.details },
+              'We couldn’t create your account. Please try again.'
+            );
         setGeneralError(errorMsg);
         onError?.(result);
       }
     } catch (err) {
-      const errorMsg = err.message || 'Registration failed. Please try again.';
+      const errorMsg = getActionErrorMessage(
+        err,
+        'We couldn’t create your account. Please try again.'
+      );
       setGeneralError(errorMsg);
       onError?.(err);
     } finally {
@@ -193,7 +218,35 @@ export const SignupForm = ({ onSuccess, onError }) => {
     }
   };
 
-  const getFieldError = useCallback((field) => fieldErrors[field] || null, [fieldErrors]);
+  const getFieldError = useCallback((field) => {
+    const serverError = fieldErrors[field];
+    const normalizedServerError = Array.isArray(serverError)
+      ? serverError[0]
+      : typeof serverError === 'string' ? serverError : '';
+
+    if (normalizedServerError) return normalizedServerError;
+    if (!touched[field]) return null;
+
+    if (field === 'username') {
+      if (!form.username.trim()) return 'Username is required.';
+      if (!isUsernameValid) return 'Use 3–30 letters, numbers or underscores.';
+    }
+    if (field === 'email') {
+      if (!form.email.trim()) return 'Email address is required.';
+      if (!isEmailValid) return 'Enter a valid email address.';
+      if (isDisposableEmail) return 'Please use a permanent email address.';
+    }
+    if (field === 'password') {
+      if (!form.password) return 'Password is required.';
+      if (form.password.length < 8) return 'Use at least 8 characters.';
+      if (/^\d+$/.test(form.password)) return 'Choose a password that is not numbers only.';
+    }
+    if (field === 'password2') {
+      if (!form.password2) return 'Confirm your password.';
+      if (!passwordsMatch) return 'The passwords do not match.';
+    }
+    return null;
+  }, [fieldErrors, touched, form, isUsernameValid, isEmailValid, isDisposableEmail, passwordsMatch]);
   const isFieldTouched = useCallback((field) => touched[field] || false, [touched]);
 
   return (
@@ -240,14 +293,14 @@ export const SignupForm = ({ onSuccess, onError }) => {
           value={form.email}
           onChange={handleChange}
           onBlur={handleBlur}
-          maxLength={100}
+          maxLength={254}
           className={cn(
             'min-h-[44px] transition-all duration-200 bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500 focus:ring-offset-black',
             getFieldError('email') && isFieldTouched('email')
               ? 'border-red-400'
               : ''
           )}
-          aria-invalid={!!getFieldError('email') || isDisposableEmail}
+          aria-invalid={!!getFieldError('email')}
           aria-describedby={getFieldError('email') ? 'email-error' : undefined}
           required
           disabled={loading}
@@ -255,11 +308,6 @@ export const SignupForm = ({ onSuccess, onError }) => {
         />
         {getFieldError('email') && (
           <FieldError error={getFieldError('email')} id="email-error" />
-        )}
-        {isDisposableEmail && isFieldTouched('email') && (
-          <div className="text-sm text-gray-400 mt-1">
-            Please use a permanent email address
-          </div>
         )}
       </div>
 
@@ -350,7 +398,7 @@ export const SignupForm = ({ onSuccess, onError }) => {
                     ? 'border-green-400'
                     : ''
             )}
-            aria-invalid={!!getFieldError('password2') || (form.password2 && !passwordsMatch)}
+            aria-invalid={!!getFieldError('password2')}
             aria-describedby={getFieldError('password2') ? 'password2-error' : undefined}
             required
             disabled={loading}
@@ -371,19 +419,6 @@ export const SignupForm = ({ onSuccess, onError }) => {
           <FieldError error={getFieldError('password2')} id="password2-error" />
         )}
 
-        {form.password2 && isFieldTouched('password2') && !getFieldError('password2') && (
-          <div className="mt-1 text-sm" role="status" aria-live="polite">
-            {passwordsMatch ? (
-              <span className="text-green-400 flex items-center gap-1">
-                <Check className="h-4 w-4" /> Passwords match
-              </span>
-            ) : (
-              <span className="text-red-400 flex items-center gap-1">
-                <AlertCircle className="h-4 w-4" /> Passwords do not match
-              </span>
-            )}
-          </div>
-        )}
       </div>
 
       {/* General Error */}
@@ -431,6 +466,11 @@ export const SignupForm = ({ onSuccess, onError }) => {
       </p>
     </form>
   );
+};
+
+SignupForm.propTypes = {
+  onSuccess: PropTypes.func,
+  onError: PropTypes.func,
 };
 
 export default SignupForm;

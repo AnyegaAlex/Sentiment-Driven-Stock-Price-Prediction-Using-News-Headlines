@@ -1,32 +1,43 @@
 // onboarding/OnboardingContainer.jsx
-import React, { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useRef } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import Confetti from 'react-confetti';
 import { useAuth } from '../../hooks/useAuth';
 import { useOnboarding } from '../../hooks/useOnboarding';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import WelcomeStep from './WelcomeStep';
 import PersonaSelection from './PersonaSelection';
+import ProfileStep from './ProfileStep';
+import InvestmentProfileStep from './InvestmentProfileStep';
 import DashboardTour from './CompletionStep';
-import { Progress } from '@/components/ui/progress';
+import apiClient from '@/services/client';
+import { getActionErrorMessage } from '@/utils/errorHandler';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
 
-const steps = ['welcome', 'persona', 'tour', 'complete'];
-const stepLabels = ['Welcome', 'Your Persona', 'Dashboard Tour', "You're Ready!"];
+const steps = ['welcome', 'profile', 'persona', 'invest', 'tour', 'complete'];
+const stepLabels = ['Welcome', 'About You', 'Persona', 'Investing', 'Dashboard Tour', "You're Ready!"];
 
 const OnboardingContainer = () => {
+  const navigate = useNavigate();
+  const redirectTimerRef = useRef(null);
+  const prefersReducedMotion = useReducedMotion();
   const { user, isAuthenticated, isLoading, updateUser } = useAuth();
   const { completeOnboarding } = useOnboarding();
   
   const [step, setStep] = useState(() => {
-    return sessionStorage.getItem('onboardingStep') || 'welcome';
+    const savedStep = sessionStorage.getItem('onboardingStep');
+    return steps.includes(savedStep) ? savedStep : 'welcome';
   });
   const [onboardingData, setOnboardingData] = useState({});
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+
+  useEffect(() => () => {
+    if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+  }, []);
 
   const currentStepIndex = steps.indexOf(step);
   const progress = ((currentStepIndex) / (steps.length - 1)) * 100;
@@ -40,7 +51,7 @@ const OnboardingContainer = () => {
     return <Navigate to="/login" replace />;
   }
 
-  if (user?.onboarded) {
+  if (user?.onboarded && !(showConfetti && step === 'complete')) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -56,9 +67,41 @@ const OnboardingContainer = () => {
     
     try {
       await updateUser({ persona });
+      updateStep('invest');
+    } catch (err) {
+      setError(getActionErrorMessage(err, 'We couldn’t save your selection. Please try again.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProfileSave = async (names) => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Skip the request entirely when the user left both fields blank.
+      if (names.first_name || names.last_name) {
+        await apiClient.patch('/auth/profile/', names);
+        await updateUser();
+      }
+      setOnboardingData(prev => ({ ...prev, ...names }));
+      updateStep('persona');
+    } catch (err) {
+      setError(getActionErrorMessage(err, 'We couldn’t save your name. Please try again.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInvestSave = async (profile) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiClient.patch('/auth/preferences/', profile);
+      setOnboardingData(prev => ({ ...prev, ...profile }));
       updateStep('tour');
     } catch (err) {
-      setError(err.message || 'Failed to save persona. Please try again.');
+      setError(getActionErrorMessage(err, 'We couldn’t save your investment preferences. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -69,29 +112,44 @@ const OnboardingContainer = () => {
     setError(null);
     
     try {
-      await completeOnboarding(onboardingData);
-      await updateUser();
+      await completeOnboarding(onboardingData.persona || user?.persona || null);
       setShowConfetti(true);
       updateStep('complete');
-      
-      // Redirect after celebration
-      setTimeout(() => {
-        window.location.href = '/dashboard';
+
+      // Refresh the account after entering the completion step so the
+      // onboarding guard does not redirect before the celebration is shown.
+      try {
+        await updateUser();
+      } catch {
+        setError('Your setup has been saved. We couldn’t refresh your account details, but you can continue to your dashboard.');
+      }
+
+      // Keep the completion moment visible, then navigate without reloading the app.
+      sessionStorage.removeItem('onboardingStep');
+      redirectTimerRef.current = setTimeout(() => {
+        navigate('/dashboard', { replace: true });
       }, 3000);
     } catch (err) {
-      setError(err.message || 'Failed to complete onboarding. Please try again.');
+      setError(getActionErrorMessage(err, 'We couldn’t finish setting up your account. Please try again.'));
     } finally {
       setLoading(false);
     }
   };
 
   const handleSkip = async () => {
+    if (loading) return;
+    setLoading(true);
+    setError(null);
+
     try {
-      await completeOnboarding({ ...onboardingData, skip: true });
+      await completeOnboarding(onboardingData.persona || user?.persona || null);
       await updateUser();
-      window.location.href = '/dashboard';
+      sessionStorage.removeItem('onboardingStep');
+      navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError('Failed to skip onboarding. Please try again.');
+      setError(getActionErrorMessage(err, 'We couldn’t finish setting up your account. Please try again.'));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -105,7 +163,7 @@ const OnboardingContainer = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-black p-4">
       {/* Confetti */}
-      {showConfetti && <Confetti recycle={false} numberOfPieces={200} />}
+      {showConfetti && !prefersReducedMotion && <Confetti recycle={false} numberOfPieces={200} />}
 
       <div className="w-full max-w-3xl mx-auto">
         {/* Progress Bar */}
@@ -168,27 +226,50 @@ const OnboardingContainer = () => {
           >
             {step === 'welcome' && (
               <WelcomeStep
-                onNext={() => updateStep('persona')}
+                onNext={() => updateStep('profile')}
                 onSkip={handleSkip}
-                loading={loading}
+                isLoading={loading}
                 userName={user?.username}
+              />
+            )}
+            {step === 'profile' && (
+              <ProfileStep
+                initial={{ first_name: user?.first_name, last_name: user?.last_name }}
+                onNext={handleProfileSave}
+                onBack={() => updateStep('welcome')}
+                onSkip={() => updateStep('persona')}
+                loading={loading}
               />
             )}
             {step === 'persona' && (
               <PersonaSelection
                 onSelect={handlePersonaSelect}
                 onSkip={handleSkip}
-                loading={loading}
+                isLoading={loading}
                 error={error}
                 selectedPersona={onboardingData.persona}
+              />
+            )}
+            {step === 'invest' && (
+              <InvestmentProfileStep
+                initial={{
+                  investment_goal: onboardingData.investment_goal,
+                  risk_tolerance: onboardingData.risk_tolerance,
+                  experience_level: onboardingData.experience_level,
+                }}
+                onNext={handleInvestSave}
+                onBack={() => updateStep('persona')}
+                onSkip={() => updateStep('tour')}
+                loading={loading}
+                error={error}
               />
             )}
             {step === 'tour' && (
               <DashboardTour
                 onFinish={handleFinish}
                 onSkip={handleSkip}
-                loading={loading}
-                persona={onboardingData.persona}
+                isLoading={loading}
+                persona={onboardingData.persona || user?.persona || ''}
               />
             )}
             {step === 'complete' && (
@@ -205,7 +286,7 @@ const OnboardingContainer = () => {
                   </div>
                 </motion.div>
                 <h2 className="text-3xl font-bold text-white mb-2">
-                  You're All Set!
+                  You&apos;re All Set!
                 </h2>
                 <p className="text-gray-400">
                   Redirecting to your dashboard...

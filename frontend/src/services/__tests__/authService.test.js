@@ -145,7 +145,9 @@ describe('AuthService', () => {
       expect(result.success).toBe(true);
       expect(result.user.email_verified).toBe(true);
       expect(result.redirect).toBe('/onboarding');
-      expect(localStorage.getItem('accessToken')).toBe('acc');
+      expect(sessionStorage.getItem('accessToken')).toBe('acc');
+      expect(sessionStorage.getItem('refreshToken')).toBe('ref');
+      expect(localStorage.getItem('accessToken')).toBeNull();
     });
 
     it('falls back to onboarded-based redirect if redirect missing', async () => {
@@ -202,17 +204,18 @@ describe('AuthService', () => {
       expect(apiClient.post).toHaveBeenCalledWith('/auth/resend-verification/', {});
     });
 
-    it('sets retryAfter on 429', async () => {
+    it('preserves the server retryAfter on 429', async () => {
       apiClient.post.mockRejectedValue({
         success: false,
         error: 'Rate limited',
         code: 429,
+        retryAfter: 37,
       });
 
       const result = await AuthService.resendVerification('x@y.com');
 
       expect(result.success).toBe(false);
-      expect(result.retryAfter).toBe(60);
+      expect(result.retryAfter).toBe(37);
     });
   });
 

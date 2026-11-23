@@ -39,52 +39,31 @@ import { queryKeys } from '@/lib/queryKeys';
  * @returns {Object} Transformed sentiment data
  */
 export const transformSentimentData = (response) => {
-  // Handle different response structures
   const data = response?.data || response || {};
-  
+
   return {
-    sentiment: data.sentiment || { score: 0, label: 'Neutral' },
-    news_count: data.news_count || 0,
-    source_stats: data.source_stats || {
-      tier1_count: 0,
-      reliability_sum: 0,
-      tier1_sources: []
-    },
+    sentiment: data.sentiment ?? null,
+    news_count:
+      data.news_count !== null &&
+      data.news_count !== undefined &&
+      Number.isFinite(Number(data.news_count))
+        ? Number(data.news_count)
+        : null,
+    source_stats: data.source_stats ?? null,
+    distribution: data.distribution ?? null,
     history: Array.isArray(data.history) ? data.history : [],
-    success: response?.success !== false
+    success: response?.success !== false,
   };
 };
 
 const fetchSentimentAnalysis = async ({ symbol, timeRange }) => {
-  try {
-    const response = await apiClient.get('/sentiment-analysis/', {
-      params: {
-        symbol: symbol.toUpperCase(),
-        time_range: timeRange,
-      },
-    });
-    
-    // Return the full response - component will use transformSentimentData
-    return response;
-  } catch (error) {
-    console.error('Error fetching sentiment analysis:', error);
-    // Return empty data structure on error
-    return {
-      success: false,
-      data: {
-        sentiment: { score: 0, label: 'Neutral' },
-        news_count: 0,
-        source_stats: {
-          tier1_count: 0,
-          reliability_sum: 0,
-          tier1_sources: []
-        },
-        history: []
-      },
-      code: error.code || 500,
-      timestamp: new Date().toISOString()
-    };
-  }
+  // Let React Query retain the failure state so the UI can show an actionable error.
+  return apiClient.get('/sentiment-analysis/', {
+    params: {
+      symbol: symbol.toUpperCase(),
+      time_range: timeRange,
+    },
+  });
 };
 
 /**
