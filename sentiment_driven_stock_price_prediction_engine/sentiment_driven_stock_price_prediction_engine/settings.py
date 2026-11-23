@@ -293,11 +293,12 @@ SIMPLE_JWT = {
 # Email (SendGrid SMTP)
 # ---------------------------------------------------------------------------
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.sendgrid.net"
+EMAIL_HOST = "smtp-relay.brevo.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = "apikey"  # literal
-EMAIL_HOST_PASSWORD = os.getenv("SENDGRID_API_KEY")
+EMAIL_HOST_USER = "c49d83001@smtp-brevo.com"  # Brevo SMTP login
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+EMAIL_HOST_PASSWORD = os.getenv("BREVO_SMTP_KEY")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "info@tickflowcapital.com")
 DEFAULT_FROM_NAME = os.getenv("DEFAULT_FROM_NAME", "Tickflow Sentiment")
 
@@ -309,7 +310,7 @@ EMAIL_TIMEOUT = 10
 if not EMAIL_HOST_PASSWORD:
     import logging
     logger = logging.getLogger(__name__)
-    logger.warning("SENDGRID_API_KEY not set – using console email backend for development.")
+    logger.warning("BREVO_SMTP_KEY not set – using console email backend for development.")
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 CONTACT_EMAIL = os.getenv('CONTACT_EMAIL', 'info@tickflowcapital.com')
 # ---------------------------------------------------------------------------
@@ -538,6 +539,19 @@ FINBERT_CONFIG = {
 ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY")
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
+
+# P0.3 licensed-news gate. Both default off. NEWS_PUBLIC_ACCESS lets non-staff
+# users see provider news; enable only after the provider license permits it.
+# NEWS_INGESTION_ENABLED lets fetch_news call providers at all.
+NEWS_PUBLIC_ACCESS = os.getenv("NEWS_PUBLIC_ACCESS", "false").lower() in ("1", "true", "yes")
+NEWS_INGESTION_ENABLED = os.getenv("NEWS_INGESTION_ENABLED", "false").lower() in ("1", "true", "yes")
+# P0.3 price-data gate. Off by default: live provider prices and technicals are
+# served to staff only until the provider permissions allow public use.
+PRICE_DATA_PUBLIC_ACCESS = os.getenv("PRICE_DATA_PUBLIC_ACCESS", "false").lower() in ("1", "true", "yes")
+
+# PREDICTION_GENERATION_ENABLED lets generate_predictions write price-derived predictions.
+# Off until provider terms, datasets and output storage are reviewed. Default off.
+PREDICTION_GENERATION_ENABLED = os.getenv("PREDICTION_GENERATION_ENABLED", "false").lower() in ("1", "true", "yes")
 RAPIDAPI_HOST = os.getenv("RAPIDAPI_HOST", "apidojo-yahoo-finance-v1.p.rapidapi.com")
 TWELVEDATA_API_KEY = os.getenv("TWELVEDATA_API_KEY")
 STATIC_API_KEY = os.getenv("STATIC_API_KEY", None)  # fallback for development

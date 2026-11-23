@@ -21,7 +21,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from rest_framework import status, serializers
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from django.db.models import Q
+from django.conf import settings
+from news.views import _news_public_allowed
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
@@ -44,94 +47,37 @@ from .serializers import (
 )
 from .utils import calculate_performance_metrics, detect_drift
 
+from stocks.opinion_generator import build_technical_payload
+
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-#  CONSOLIDATED FALLBACK DATA
+#  SUPPORTED SYMBOLS (names only; no prices or indicators are hard-coded)
 # ============================================================================
-FALLBACK_DATA = {
-    "AAPL": {"company": "Apple Inc.", "price": 116.16, "sma50": 114.84, "sma200": 111.81, "rsi": 70.8, "support": 110.35, "resistance": 121.97, "volume": 12424000, "volatility": 0.15},
-    "MSFT": {"company": "Microsoft Corp.", "price": 420.50, "sma50": 418.20, "sma200": 410.00, "rsi": 65.0, "support": 400.0, "resistance": 430.0, "volume": 8000000, "volatility": 0.12},
-    "NVDA": {"company": "NVIDIA Corp.", "price": 130.00, "sma50": 128.50, "sma200": 125.00, "rsi": 60.0, "support": 120.0, "resistance": 140.0, "volume": 15000000, "volatility": 0.25},
-    "GOOGL": {"company": "Alphabet Inc.", "price": 180.00, "sma50": 178.00, "sma200": 175.00, "rsi": 58.0, "support": 170.0, "resistance": 190.0, "volume": 5000000, "volatility": 0.10},
-    "AMZN": {"company": "Amazon.com Inc.", "price": 190.00, "sma50": 188.00, "sma200": 185.00, "rsi": 55.0, "support": 180.0, "resistance": 200.0, "volume": 6000000, "volatility": 0.18},
-    "META": {"company": "Meta Platforms Inc.", "price": 510.00, "sma50": 505.00, "sma200": 500.00, "rsi": 62.0, "support": 490.0, "resistance": 520.0, "volume": 4000000, "volatility": 0.14},
-    "TSLA": {"company": "Tesla Inc.", "price": 250.00, "sma50": 245.00, "sma200": 240.00, "rsi": 70.0, "support": 230.0, "resistance": 260.0, "volume": 3000000, "volatility": 0.35},
-    "JPM": {"company": "JPMorgan Chase", "price": 160.00, "sma50": 158.00, "sma200": 155.00, "rsi": 50.0, "support": 150.0, "resistance": 170.0, "volume": 2000000, "volatility": 0.08},
-    "IBM": {"company": "International Business Machines", "price": 180.00, "sma50": 178.00, "sma200": 175.00, "rsi": 52.0, "support": 170.0, "resistance": 190.0, "volume": 1500000, "volatility": 0.09},
-    "PLTR": {"company": "Palantir Technologies", "price": 132.38, "sma50": 132.48, "sma200": 155.64, "rsi": 53.0, "support": 120.0, "resistance": 145.0, "volume": 31841300, "volatility": 1.8},
-    "NFLX": {"company": "Netflix Inc.", "price": 620.00, "sma50": 615.00, "sma200": 600.00, "rsi": 65.0, "support": 590.0, "resistance": 650.0, "volume": 2000000, "volatility": 0.20},
-    "VTI": {"company": "Vanguard Total Stock Market", "price": 250.00, "sma50": 248.00, "sma200": 245.00, "rsi": 55.0, "support": 240.0, "resistance": 260.0, "volume": 3000000, "volatility": 0.12},
+SUPPORTED_SYMBOLS = {
+    "AAPL": "Apple Inc.",
+    "MSFT": "Microsoft Corp.",
+    "NVDA": "NVIDIA Corp.",
+    "GOOGL": "Alphabet Inc.",
+    "AMZN": "Amazon.com Inc.",
+    "META": "Meta Platforms Inc.",
+    "TSLA": "Tesla Inc.",
+    "JPM": "JPMorgan Chase",
+    "IBM": "International Business Machines",
+    "PLTR": "Palantir Technologies",
+    "NFLX": "Netflix Inc.",
+    "VTI": "Vanguard Total Stock Market",
 }
 
 # ============================================================================
 #  HELPERS: FALLBACKS & CACHE
 # ============================================================================
 
-def get_fallback_technical(symbol: str) -> dict:
-    """
-    Generate realistic fallback technical data.
-    Used when the cache is cold or the background pipeline hasn't run yet.
-    """
-    symbol = symbol.upper()
-    
-    if symbol in FALLBACK_DATA:
-        data = FALLBACK_DATA[symbol]
-        price = data["price"]
-        
-        random.seed(hash(symbol) % 2**32)  # deterministic per symbol
-        price_history = []
-        for i in range(30):
-            change = (random.random() - 0.5) * 0.02
-            if i == 0:
-                price_history.append(round(price * (1 - 0.02), 2))
-            else:
-                prev = price_history[-1]
-                new_price = prev * (1 + change)
-                price_history.append(round(new_price, 2))
-        price_history[-1] = round(price, 2)
-
-        return {
-            "technical": {
-                "current_price": price,
-                "sma_50": data["sma50"],
-                "sma_200": data["sma200"],
-                "rsi": data["rsi"],
-                "support": data["support"],
-                "resistance": data["resistance"],
-                "pivot": (price + data["support"] + data["resistance"]) / 3,
-                "volume": data["volume"],
-                "volatility": data["volatility"],
-                "price_history": price_history,
-            }
-        }
-
-    # Dynamic fallback for unknown symbols
-    random.seed(hash(symbol) % 2**32)
-    price = round(random.uniform(20, 500), 2)
-    sma50 = round(price * (1 + random.uniform(-0.05, 0.05)), 2)
-    sma200 = round(price * (1 + random.uniform(-0.10, 0.10)), 2)
-    
-    return {
-        "technical": {
-            "current_price": price,
-            "sma_50": sma50,
-            "sma_200": sma200,
-            "rsi": round(random.uniform(30, 70), 1),
-            "support": round(price * 0.9, 2),
-            "resistance": round(price * 1.1, 2),
-            "pivot": round(price, 2),
-            "volume": random.randint(1000000, 50000000),
-            "volatility": round(random.uniform(0.05, 0.35), 2),
-            "price_history": [round(price * (1 + (random.random() - 0.5) * 0.05), 2) for _ in range(30)],
-        }
-    }
-
 def get_technical_indicators(symbol: str, timeframe: str = "1d") -> dict:
     """
     Retrieves technical indicators.
-    Priority: Redis Cache -> Fallback Data.
+    Priority: Redis cache -> live computation. Never returns synthetic data.
     NEVER calls yfinance synchronously.
     """
     cache_key = f"tech_{symbol}_{timeframe}"
@@ -139,10 +85,8 @@ def get_technical_indicators(symbol: str, timeframe: str = "1d") -> dict:
     if cached:
         return cached
 
-    # Cache miss: use fallback and populate cache so background workers can override later
-    fallback_data = get_fallback_technical(symbol)
-    data = fallback_data.get("technical")
-    
+    # Cache miss: compute from live market data; None when no live data exists.
+    data = build_technical_payload(symbol, timeframe)
     if data:
         cache.set(cache_key, data, timeout=300)
     return data
@@ -164,7 +108,8 @@ def get_sentiment_summary(symbol: str, days: int = 7) -> dict:
             "score": 0.0,
             "recent_articles": 0,
             "source_stats": {"tier1_count": 0, "reliability_sum": 0, "tier1_sources": []},
-            "history": []
+            "history": [],
+            "distribution": {"positive": 0, "neutral": 0, "negative": 0},
         }
 
     scores = [n.sentiment_score for n in news_items if n.sentiment_score is not None]
@@ -183,6 +128,12 @@ def get_sentiment_summary(symbol: str, days: int = 7) -> dict:
             tier1_count += 1
             reliability_sum += item.source_reliability or 70
 
+    distribution = {
+        "positive": sum(1 for n in news_items if n.sentiment_score is not None and n.sentiment_score > 0.2),
+        "neutral": sum(1 for n in news_items if n.sentiment_score is not None and -0.2 <= n.sentiment_score <= 0.2),
+        "negative": sum(1 for n in news_items if n.sentiment_score is not None and n.sentiment_score < -0.2),
+    }
+
     history = [
         {"date": item.published_at.isoformat(), "score": round(item.sentiment_score, 4)}
         for item in news_items[:min(days, len(news_items))]
@@ -191,6 +142,7 @@ def get_sentiment_summary(symbol: str, days: int = 7) -> dict:
     history.sort(key=lambda x: x['date'])
 
     return {
+        "distribution": distribution,
         "overall": label,
         "score": round(avg_score, 4),
         "recent_articles": len(news_items),
@@ -283,6 +235,15 @@ class StockOpinionView(APIView):
         if not symbol:
             return Response(error_response("Stock symbol is required.", code=2001), status=status.HTTP_400_BAD_REQUEST)
 
+        # Predictions are price-derived: restricted (no prediction, no price) unless price data is public.
+        if not _price_public_allowed(request):
+            return Response({
+                "symbol": symbol,
+                "analysis": {"recommendation": None, "confidence": None, "current_price": None},
+                "summary": "Predictions are unavailable until price data is licensed for public use.",
+                "status": "restricted",
+            }, status=status.HTTP_200_OK)
+
         # Fetch latest from DB
         latest_pred = Prediction.objects.filter(stock_symbol=symbol).order_by('-created_at').first()
         
@@ -294,17 +255,50 @@ class StockOpinionView(APIView):
             "analysis": {
                 "recommendation": latest_pred.predicted_movement.upper(),
                 "confidence": latest_pred.confidence * 100,
-                "current_price": float(latest_pred.price_at_prediction or 0.0),
+                "current_price": (float(latest_pred.price_at_prediction) if (latest_pred.price_at_prediction is not None and _price_public_allowed(request)) else None),
             },
             "summary": latest_pred.prediction_explanation or "Analysis generated by background pipeline.",
             "status": "success"
         }, status=status.HTTP_200_OK)
 
 
+def _price_public_allowed(request) -> bool:
+    """
+    Price-data gate (P0.3). Live provider prices, technical indicators, and cached
+    price-derived responses are served to non-staff users only when
+    PRICE_DATA_PUBLIC_ACCESS is enabled. Enable it only once the provider permissions
+    allow public use.
+    """
+    if getattr(settings, "PRICE_DATA_PUBLIC_ACCESS", False):
+        return True
+    user = getattr(request, "user", None)
+    return bool(user is not None and user.is_authenticated and user.is_staff)
+
+
+def _derived_unavailable():
+    """
+    Response for prediction-derived outputs while price data is not licensed for
+    public use. Stored predictions are price-derived, so they share the price gate.
+    """
+    return Response(
+        error_response("Prediction data is unavailable until price data is licensed for public use.", code=5032),
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
+
+
+def _visible_predictions(user):
+    """
+    Predictions a requester may see: system-generated rows (user is NULL)
+    plus rows owned by that user. Other users' rows are never returned.
+    """
+    return Prediction.objects.filter(Q(user__isnull=True) | Q(user=user))
+
+
 class PredictionHistoryView(APIView):
     """
     Paginated prediction history with Redis caching.
     """
+    permission_classes = [IsAuthenticated]
     serializer_class = PredictionSerializer  
     @extend_schema(
         summary="Get prediction history",
@@ -318,17 +312,19 @@ class PredictionHistoryView(APIView):
         tags=["Prediction History"]
     )
     def get(self, request):
+        if not _price_public_allowed(request):
+            return _derived_unavailable()
         try:
             symbol = request.query_params.get('symbol')
             limit = min(int(request.query_params.get('limit', 50)), 200)
             offset = int(request.query_params.get('offset', 0))
 
-            cache_key = f"pred_history_{symbol}_{limit}_{offset}"
+            cache_key = f"pred_history_u{request.user.id}_{symbol}_{limit}_{offset}"
             cached_response = cache.get(cache_key)
             if cached_response:
                 return Response(cached_response, status=status.HTTP_200_OK)
 
-            queryset = Prediction.objects.all().order_by('-date')
+            queryset = _visible_predictions(request.user).order_by('-date')
             if symbol:
                 queryset = queryset.filter(stock_symbol=symbol.upper())
 
@@ -349,6 +345,10 @@ class PredictionHistoryView(APIView):
         except Exception as e:
             logger.exception(f"Error fetching prediction history: {e}")
             return Response(error_response("Internal server error", code=9001), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# LSTM direction -> display recommendation. Only LSTM rows are ever mapped.
+LSTM_RECOMMENDATION = {"up": "BUY", "down": "SELL", "neutral": "HOLD"}
 
 
 class StockAnalysisView(APIView):
@@ -379,65 +379,81 @@ class StockAnalysisView(APIView):
         hold_time = request.query_params.get("hold_time", "medium-term")
         cache_key = f"stock_analysis_{symbol}_{risk_type}_{hold_time}"
 
-        # 1. Try Cache
-        cached_response = cache.get(cache_key)
+        price_allowed = _price_public_allowed(request)
+        news_allowed = _news_public_allowed(request)
+        full_allowed = price_allowed and news_allowed
+
+        # 1. Try Cache (entries holding price or news data are served only to allowed requesters)
+        cached_response = cache.get(cache_key) if full_allowed else None
         if cached_response:
             return Response(success_response(data=cached_response), status=status.HTTP_200_OK)
 
         # 2. Build from DB / Fallback
         try:
             # Fetch latest LSTM prediction from DB
-            latest_pred = Prediction.objects.filter(stock_symbol=symbol).order_by('-created_at').first()
+            # Stored predictions are price-derived: load them only when the price gate is open.
+            latest_pred = (
+                Prediction.objects.filter(stock_symbol=symbol, source='lstm').order_by('-created_at').first()
+                if price_allowed else None
+            )
             
             # Fetch sentiment from News DB
             sentiment_summary = get_sentiment_summary(symbol, days=7)
             
-            # Fetch Technicals (from cache/fallback)
-            tech_data = get_technical_indicators(symbol)
+            # Fetch technicals (cache, else live computation; None if unavailable)
+            tech_data = get_technical_indicators(symbol) if price_allowed else None
 
-            # Format LSTM data
+            # LSTM: report what exists; never invent a direction or confidence.
             lstm_data = {
-                "direction": latest_pred.predicted_movement.upper() if latest_pred else "UNAVAILABLE",
-                "confidence": (latest_pred.confidence * 100) if latest_pred else 0.0,
-                "fallback": not bool(latest_pred),
-                "message": "Loaded from background pipeline" if latest_pred else "No recent prediction available"
+                "direction": latest_pred.predicted_movement.upper() if latest_pred else None,
+                "confidence": (latest_pred.confidence * 100) if latest_pred else None,
+                "fallback": False,
+                "message": (
+                    "Loaded from background pipeline" if latest_pred else "No prediction has been generated for this symbol yet"
+                ) if price_allowed else "Predictions are disabled until price data is licensed for public use.",
             }
 
-            # Map company names
-            company_name = FALLBACK_DATA.get(symbol, {}).get("company", f"{symbol} Inc.")
+            technical = tech_data or {}
+            recent_articles = sentiment_summary["recent_articles"] if news_allowed else 0
 
             response_data = {
-                "company": company_name,
+                "company": SUPPORTED_SYMBOLS.get(symbol, symbol),
                 "symbol": symbol,
-                "recommendation": latest_pred.predicted_movement.upper() if latest_pred else "HOLD",
-                "confidence": (latest_pred.confidence if latest_pred else 0.5),
+                "dataStatus": {
+                    "technicals": "live" if tech_data else ("unavailable" if price_allowed else "disabled"),
+                    "prediction": (("available" if latest_pred else "unavailable") if price_allowed else "disabled"),
+                    "news": ("available" if recent_articles else "no_recent_articles") if news_allowed else "disabled",
+                },
+                "recommendation": LSTM_RECOMMENDATION.get(latest_pred.predicted_movement) if latest_pred else None,
+                "confidence": latest_pred.confidence if latest_pred else None,
                 "sentiment": {
-                    "overall": sentiment_summary["overall"],
-                    "score": sentiment_summary["score"],
-                    "recent_articles": sentiment_summary["recent_articles"],
+                    "overall": sentiment_summary["overall"] if recent_articles else None,
+                    "score": sentiment_summary["score"] if recent_articles else None,
+                    "recent_articles": recent_articles,
                 },
-                "lastUpdated": timezone.now().isoformat() + 'Z',
+                "lastUpdated": timezone.now().isoformat(),
                 "technicalIndicators": {
-                    "currentPrice": tech_data["current_price"],
-                    "sma50": tech_data["sma_50"],
-                    "sma200": tech_data["sma_200"],
-                    "rsi": tech_data["rsi"],
-                    "support": tech_data["support"],
-                    "resistance": tech_data["resistance"],
-                    "volume": tech_data["volume"],
+                    "currentPrice": technical.get("current_price"),
+                    "sma50": technical.get("sma_50"),
+                    "sma200": technical.get("sma_200"),
+                    "rsi": technical.get("rsi"),
+                    "support": technical.get("support"),
+                    "resistance": technical.get("resistance"),
+                    "volume": technical.get("volume"),
                 },
-                "priceTargets": {
-                    "bearish": round(tech_data["current_price"] * 0.9, 2),
-                    "base": round(tech_data["current_price"], 2),
-                    "bullish": round(tech_data["current_price"] * 1.14, 2),
-                },
-                "keyFactors": [{"title": "Market Sentiment", "description": "Based on recent news", "impact": "neutral"}],
+                "priceTargets": None,  # No model produces these yet; never estimated from price.
+                "keyFactors": (
+                    [{"title": "Market Sentiment", "description": f"{recent_articles} articles in the last 7 days",
+                      "impact": sentiment_summary["overall"].lower()}]
+                    if recent_articles else []
+                ),
                 "riskAssessment": {"level": risk_type, "horizon": hold_time},
-                "lstm_prediction": lstm_data
+                "lstm_prediction": lstm_data,
             }
 
-            # Cache for 1 hour
-            cache.set(cache_key, response_data, timeout=3600)
+            # Cache complete live results for an hour; partial results retry sooner.
+            if full_allowed:
+                cache.set(cache_key, response_data, timeout=3600 if tech_data else 60)
             return Response(success_response(data=response_data), status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -449,7 +465,8 @@ class StockAnalysisView(APIView):
 class TechnicalIndicatorsView(APIView):
     """
     Returns pure technical indicators.
-    Prioritizes cache (populated by pipeline); uses fallback if cold.
+    Prioritizes cache (populated by pipeline); computes from live data if cold.
+    Returns technical=None with status "unavailable" when no live data exists.
     """
     serializer_class = TechnicalIndicatorsResponseSerializer  
     permission_classes = [AllowAny]
@@ -469,14 +486,25 @@ class TechnicalIndicatorsView(APIView):
         if not symbol:
             return Response(error_response("Symbol is required.", code=2001), status=status.HTTP_400_BAD_REQUEST)
 
+        if not _price_public_allowed(request):
+            return Response(
+                error_response("Technical indicators are unavailable until price data is licensed for public use.", code=5031),
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         timeframe = request.query_params.get("timeframe", "1d")
         
-        # get_technical_indicators handles cache and fallback internally now
+        # get_technical_indicators returns None when no live data is available
         data = get_technical_indicators(symbol, timeframe)
-        
+        if data is None:
+            return Response(
+                success_response(data={"technical": None, "status": "unavailable",
+                                       "message": f"Live technical data for {symbol} is unavailable right now."}),
+                status=status.HTTP_200_OK,
+            )
         return Response(
-            success_response(data={"technical": data}),
-            status=status.HTTP_200_OK
+            success_response(data={"technical": data, "status": "live"}),
+            status=status.HTTP_200_OK,
         )
 
 
@@ -501,8 +529,8 @@ class SymbolsListView(APIView):
 
         try:
             symbols_data = [
-                {"symbol": sym, "name": data["company"], "region": "US"} 
-                for sym, data in FALLBACK_DATA.items()
+                {"symbol": sym, "name": name, "region": "US"} 
+                for sym, name in SUPPORTED_SYMBOLS.items()
             ]
             serializer = SymbolSerializer(symbols_data, many=True)
             cache.set(cache_key, serializer.data, timeout=3600)
@@ -573,10 +601,15 @@ class LSTMPredictionView(APIView):
         if not symbol:
             return Response(error_response("Symbol is required.", code=2001), status=status.HTTP_400_BAD_REQUEST)
 
+        # Predictions are price-derived: gate before any cache read or DB lookup.
+        if not _price_public_allowed(request):
+            return _derived_unavailable()
+
         cache_key = f"lstm_{symbol}"
         cached = cache.get(cache_key)
         if cached:
-            return Response(cached, status=status.HTTP_200_OK)
+            # Same envelope as a cache miss, so the response shape does not depend on cache state.
+            return Response(success_response(data=cached), status=status.HTTP_200_OK)
 
         # Query the latest prediction from the DB
         latest_pred = Prediction.objects.filter(stock_symbol=symbol, source='lstm').order_by('-created_at').first()
@@ -585,12 +618,13 @@ class LSTMPredictionView(APIView):
             return Response(
                 success_response(data={
                     "symbol": symbol,
-                    "prediction": "HOLD",
-                    "confidence": 50.0,
-                    "sentiment_score": 0.0,
-                    "timestamp": timezone.now().isoformat() + 'Z',
-                    "success": True,
-                    "message": "No recent LSTM prediction available. Using fallback."
+                    "prediction": None,
+                    "confidence": None,
+                    "sentiment_score": None,
+                    "timestamp": None,
+                    "success": False,
+                    "status": "unavailable",
+                    "message": "No LSTM prediction has been generated for this symbol yet."
                 }), 
                 status=status.HTTP_200_OK
             )
@@ -634,6 +668,12 @@ class SentimentAnalysisView(APIView):
         time_range = request.query_params.get("time_range", "7d")
         days = 7 if time_range == '7d' else 30
 
+        if not _news_public_allowed(request):
+            return Response(
+                error_response("Sentiment analysis is unavailable until news data is licensed for public use.", code=5030),
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         cache_key = f"sentiment_{symbol}_{time_range}"
         cached_response = cache.get(cache_key)
         if cached_response:
@@ -649,7 +689,8 @@ class SentimentAnalysisView(APIView):
                 },
                 "news_count": sentiment['recent_articles'],
                 "source_stats": sentiment['source_stats'],
-                "history": sentiment['history']
+                "history": sentiment['history'],
+                "distribution": sentiment.get('distribution'),
             }
 
             cache.set(cache_key, response_data, timeout=600)
@@ -665,9 +706,12 @@ class PredictionListView(APIView):
     List predictions with filters.
     """
     serializer_class = PredictionDetailSerializer  
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _price_public_allowed(request):
+            return _derived_unavailable()
+
         import dateutil.parser
 
         symbol = request.query_params.get('symbol')
@@ -677,7 +721,7 @@ class PredictionListView(APIView):
         limit = int(request.query_params.get('limit', 50))
         offset = int(request.query_params.get('offset', 0))
 
-        qs = Prediction.objects.all().order_by('-date')
+        qs = _visible_predictions(request.user).order_by('-date')
 
         if symbol:
             qs = qs.filter(stock_symbol=symbol.upper())
@@ -719,12 +763,16 @@ class PerformanceSummaryView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        if not _price_public_allowed(request):
+            return _derived_unavailable()
+
         symbol = request.query_params.get('symbol')
         days = int(request.query_params.get('days', 30))
 
         start_date = timezone.now() - timedelta(days=days)
         qs = Prediction.objects.filter(
             resolution_date__gte=start_date,
+            user__isnull=True,  # aggregates use system-generated predictions only
             is_correct__isnull=False
         )
         if symbol:
@@ -734,6 +782,23 @@ class PerformanceSummaryView(APIView):
 
         symbols = qs.values_list('stock_symbol', flat=True).distinct()
         symbol_metrics = {sym: calculate_performance_metrics(qs.filter(stock_symbol=sym)) for sym in symbols}
+
+        # Weekly real buckets for the performance chart (no interpolation).
+        series = []
+        now = timezone.now()
+        bucket_count = max(1, -(-days // 7))
+        for i in range(bucket_count - 1, -1, -1):
+            bucket_end = now - timedelta(days=7 * i)
+            bucket_start = bucket_end - timedelta(days=7)
+            bucket_qs = qs.filter(resolution_date__gte=bucket_start, resolution_date__lt=bucket_end)
+            m = calculate_performance_metrics(bucket_qs)
+            series.append({
+                'week_start': bucket_start.date().isoformat(),
+                'resolved': bucket_qs.count(),
+                'accuracy': m.get('accuracy', 0),
+                'precision': m.get('precision', 0),
+                'f1': m.get('f1', 0),
+            })
 
         total_preds = qs.count()
         correct_preds = qs.filter(is_correct=True).count()
@@ -748,7 +813,8 @@ class PerformanceSummaryView(APIView):
             'correct_predictions': correct_preds,
             'overall': metrics,
             'recent_accuracy': recent_metrics.get('accuracy', 0),
-            'by_symbol': symbol_metrics
+            'by_symbol': symbol_metrics,
+            'series': series,
         })
 
 
@@ -757,9 +823,12 @@ class DriftDetectionView(APIView):
     Detect model drift.
     """
     serializer_class = serializers.Serializer  
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if not _price_public_allowed(request):
+            return _derived_unavailable()
+
         recent_days = int(request.query_params.get('recent_days', 30))
         baseline_days = int(request.query_params.get('baseline_days', 90))
 
@@ -772,11 +841,13 @@ class SHAPExplanationView(APIView):
     Get SHAP explanation for a specific prediction.
     """
     serializer_class = serializers.Serializer  
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, prediction_id):
+        if not _price_public_allowed(request):
+            return _derived_unavailable()
         try:
-            pred = Prediction.objects.get(id=prediction_id)
+            pred = _visible_predictions(request.user).get(id=prediction_id)
             return Response({
                 'id': pred.id,
                 'stock_symbol': pred.stock_symbol,

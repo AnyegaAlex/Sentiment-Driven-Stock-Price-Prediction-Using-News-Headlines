@@ -123,6 +123,24 @@ def compute_lstm_features(symbol: str) -> dict:
 # 3. Sentiment Fallback
 # ============================================================================
 
+def _lstm_unavailable(reason: str) -> dict:
+    """
+    LSTM output is unavailable for this request. Never substitute a sentiment
+    estimate here: that output must not be recorded or shown as an LSTM prediction.
+    """
+    return {
+        'prediction': None,
+        'confidence': None,
+        'success': False,
+        'sentiment_score': None,
+        'close_price': None,
+        'fallback': False,
+        'unavailable': True,
+        'message': reason,
+        'error': reason,
+    }
+
+
 def get_sentiment_fallback(symbol: str, news_text: str = "", request_id: str = "") -> dict:
     """
     Generate a directional prediction based on recent news sentiment.
@@ -289,9 +307,7 @@ class LSTMPredictor:
         # --------------------------------------------------------------------
         if self.model is None:
             logger.warning(f"Model not loaded – using fallback for {ctx}")
-            result = get_sentiment_fallback(symbol, news_text, request_id)
-            result['error'] = 'Model not loaded'
-            return result
+            return _lstm_unavailable('Model not loaded')
 
         # --------------------------------------------------------------------
         # 2. Compute technical features (cached)
@@ -299,9 +315,7 @@ class LSTMPredictor:
         tech_features = compute_lstm_features(symbol)
         if tech_features is None:
             logger.warning(f"Failed to compute features for {ctx} – using fallback")
-            result = get_sentiment_fallback(symbol, news_text, request_id)
-            result['error'] = 'Insufficient price data'
-            return result
+            return _lstm_unavailable('Insufficient price data')
 
         # Validate required keys and types
         required_keys = ['MA7', 'MA21', 'STD21', 'RSI14', 'UpperBB', 'LowerBB', 'Close']
@@ -309,9 +323,7 @@ class LSTMPredictor:
             value = tech_features.get(key)
             if value is None or not np.isfinite(value):
                 logger.warning(f"Invalid feature {key} for {ctx} – using fallback")
-                result = get_sentiment_fallback(symbol, news_text, request_id)
-                result['error'] = f'Invalid feature: {key}'
-                return result
+                return _lstm_unavailable(f'Invalid feature: {key}')
 
         # --------------------------------------------------------------------
         # 3. Compute sentiment score from FinBERT
@@ -340,16 +352,12 @@ class LSTMPredictor:
             ], dtype=np.float32)
         except (TypeError, ValueError) as e:
             logger.warning(f"Feature conversion error for {ctx}: {e}")
-            result = get_sentiment_fallback(symbol, news_text, request_id)
-            result['error'] = f'Feature conversion error: {e}'
-            return result
+            return _lstm_unavailable(f'Feature conversion error: {e}')
 
         # Check for NaN/Inf
         if not np.isfinite(features).all():
             logger.warning(f"Invalid features (NaN/Inf) for {ctx}")
-            result = get_sentiment_fallback(symbol, news_text, request_id)
-            result['error'] = 'Invalid features (NaN or Inf)'
-            return result
+            return _lstm_unavailable('Invalid features (NaN or Inf)')
 
         # --------------------------------------------------------------------
         # 4. Run LSTM model
@@ -361,9 +369,7 @@ class LSTMPredictor:
                 prob = torch.sigmoid(output).item()
         except Exception as e:
             logger.error(f"Model inference error for {ctx}: {e}")
-            result = get_sentiment_fallback(symbol, news_text, request_id)
-            result['error'] = f'Inference error: {str(e)}'
-            return result
+            return _lstm_unavailable(f'Inference error: {str(e)}')
 
         prediction = 'UP' if prob >= 0.5 else 'DOWN'
         confidence = round((prob if prob >= 0.5 else 1 - prob) * 100, 1)

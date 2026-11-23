@@ -46,6 +46,18 @@ _TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,10}$")
 # Helper functions for views
 # ============================================================================
 
+def _news_public_allowed(request) -> bool:
+    """
+    Licensed-news gate (P0.3). Provider-sourced news is served, and provider
+    calls are made for a request, only for staff unless NEWS_PUBLIC_ACCESS is
+    enabled. Enable it only once the provider license permits public use.
+    """
+    if getattr(settings, "NEWS_PUBLIC_ACCESS", False):
+        return True
+    user = getattr(request, "user", None)
+    return bool(user is not None and user.is_authenticated and user.is_staff)
+
+
 def _normalize_symbol(raw: str) -> str:
     return (raw or "").strip().upper()
 
@@ -142,6 +154,12 @@ def get_news(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    if not _news_public_allowed(request):
+        return Response(
+            error_response("News is unavailable until its data license is confirmed.", code=5030),
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
     # 1. Try Cache (Instant response)
     cached_data = _get_cached_news_response(symbol)
     if cached_data is not None:
@@ -233,10 +251,11 @@ def symbol_search(request):
             status=status.HTTP_200_OK
         )
 
+    external_allowed = _news_public_allowed(request)
     results = []
 
     # 2. Try Finnhub (primary)
-    finnhub_key = getattr(settings, 'FINNHUB_API_KEY', '')
+    finnhub_key = getattr(settings, 'FINNHUB_API_KEY', '') if external_allowed else ''
     if finnhub_key:
         try:
             fh = requests.get(
@@ -264,7 +283,7 @@ def symbol_search(request):
 
     # 3. Try Alpha Vantage if Finnhub returned nothing
     if not results:
-        av_key = getattr(settings, 'ALPHA_VANTAGE_KEY', '')
+        av_key = getattr(settings, 'ALPHA_VANTAGE_KEY', '') if external_allowed else ''
         if av_key:
             try:
                 av = requests.get(
@@ -296,7 +315,7 @@ def symbol_search(request):
 
     # 4. Try RapidAPI (Yahoo) if previous providers returned nothing
     if not results:
-        rapid_key = getattr(settings, 'RAPIDAPI_KEY', '')
+        rapid_key = getattr(settings, 'RAPIDAPI_KEY', '') if external_allowed else ''
         rapid_host = getattr(settings, 'RAPIDAPI_HOST', '')
         if rapid_key and rapid_host:
             try:

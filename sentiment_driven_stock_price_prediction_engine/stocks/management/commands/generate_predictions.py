@@ -1,4 +1,5 @@
 # stocks/management/commands/generate_predictions.py
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from stocks.lstm_predictor import get_lstm_predictor
 from stocks.utils import save_prediction
@@ -11,6 +12,14 @@ class Command(BaseCommand):
     help = 'Generate LSTM predictions and save to DB'
 
     def handle(self, *args, **kwargs):
+        # Price-derived predictions stay disabled until the provider terms and output
+        # storage are reviewed (see P0 derived-output policy). History is not touched.
+        if not getattr(settings, "PREDICTION_GENERATION_ENABLED", False):
+            self.stdout.write(self.style.WARNING(
+                "Prediction generation is disabled (PREDICTION_GENERATION_ENABLED is not set). No predictions were generated."
+            ))
+            return
+
         # Get active symbols from the news app's StockSymbol table
         symbols = list(StockSymbol.objects.filter(is_active=True).values_list('symbol', flat=True))
         if not symbols:
@@ -27,7 +36,7 @@ class Command(BaseCommand):
                 # Run the heavy PyTorch model
                 result = predictor.predict(symbol, news_text=news_text)
                 
-                if result.get('success'):
+                if result.get('success') and not result.get('fallback') and result.get('prediction') in ('UP', 'DOWN'):
                     save_prediction(
                         symbol=symbol,
                         movement=result['prediction'].lower(),
@@ -39,6 +48,6 @@ class Command(BaseCommand):
                     )
                     self.stdout.write(self.style.SUCCESS(f"{symbol}: {result['prediction']} ({result['confidence']}%)"))
                 else:
-                    self.stdout.write(self.style.WARNING(f"{symbol}: Fallback used - {result.get('message')}"))
+                    self.stdout.write(self.style.WARNING(f"{symbol}: LSTM unavailable - {result.get('message')}"))
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"{symbol}: Failed - {e}"))

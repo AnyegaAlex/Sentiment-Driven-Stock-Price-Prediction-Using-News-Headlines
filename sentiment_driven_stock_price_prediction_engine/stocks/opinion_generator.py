@@ -1,12 +1,11 @@
 """
 Institutional Stock Analysis Engine v5.3
-Production-ready with multi-source data fetching, LSTM integration, and robust fallbacks.
+Production-ready with multi-source data fetching and LSTM integration. Never substitutes synthetic values.
 
 Key Features:
 - Multi-source data fetching (Finnhub primary, Twelve Data secondary, Yahoo Finance, Alpha Vantage)
 - Redis caching with TTL
 - Rate limit handling with exponential backoff
-- Static fallback prices for major symbols
 - Market regime detection with caching
 - LSTM integration for enhanced predictions
 - Memory-efficient caching with LRU eviction
@@ -65,14 +64,6 @@ class Config:
     # Market regime
     MARKET_REGIME_WINDOW = 63  # 3 months in trading days
 
-    # Static fallback prices for major symbols
-    FALLBACK_PRICES = {
-        "AAPL": 116.16, "MSFT": 420.50, "NVDA": 130.00,
-        "GOOGL": 180.00, "AMZN": 190.00, "META": 510.00,
-        "TSLA": 250.00, "JPM": 160.00, "IBM": 180.00,
-        "VTI": 280.00
-    }
-    DEFAULT_FALLBACK_PRICE = 100.0
 
     # Sector ETFs
     SECTOR_ETFS = {
@@ -327,6 +318,15 @@ class MarketRegimeDetector:
 # Technical Analyzer
 # ============================================================================
 
+class DataUnavailableError(Exception):
+    """Raised when live market data cannot produce a result. Never replaced by synthetic values."""
+
+    def __init__(self, symbol, reason):
+        super().__init__(f"{symbol}: {reason}")
+        self.symbol = symbol
+        self.reason = reason
+
+
 class TechnicalAnalyzer:
     """
     Technical analysis engine with multi-source data fetching and Redis caching.
@@ -336,7 +336,7 @@ class TechnicalAnalyzer:
     2. Twelve Data (secondary – 800 calls/day)
     3. Yahoo Finance (fallback – unlimited but unreliable)
     4. Alpha Vantage (last resort – 5 calls/min)
-    5. Static fallback (ultimate fallback)
+    5. (no static or synthetic price fallback; unavailable data is reported)
     """
 
     def __init__(self):
@@ -616,10 +616,7 @@ class TechnicalAnalyzer:
             data = self._get_data(symbol)
 
             if data.empty or len(data) < self._min_data_points:
-                logger.warning(f"Insufficient data for {symbol}, using fallback")
-                metrics = self._get_fallback_metrics(symbol)
-                _cache_technical_data(symbol, metrics, Config.TTL_TECHNICAL)
-                return metrics
+                raise DataUnavailableError(symbol, "insufficient price history")
 
             # 3. Calculate metrics
             closes = data['Close']
@@ -638,9 +635,8 @@ class TechnicalAnalyzer:
             volume = float(data['Volume'].iloc[-1]) if 'Volume' in data.columns else None
 
             # Ensure price is valid
-            if current_price <= 0:
-                current_price = Config.FALLBACK_PRICES.get(symbol, Config.DEFAULT_FALLBACK_PRICE)
-                logger.warning(f"Zero price detected for {symbol}, using fallback {current_price}")
+            if not current_price or current_price <= 0:
+                raise DataUnavailableError(symbol, "no valid closing price")
 
             metrics = TechnicalMetrics(
                 sma_50=float(sma_50),
@@ -658,11 +654,11 @@ class TechnicalAnalyzer:
 
             return metrics
 
+        except DataUnavailableError:
+            raise
         except Exception as e:
             logger.error(f"Technical analysis failed for {symbol}: {str(e)}")
-            metrics = self._get_fallback_metrics(symbol)
-            _cache_technical_data(symbol, metrics, Config.TTL_TECHNICAL)
-            return metrics
+            raise DataUnavailableError(symbol, "analysis failed") from e
 
     def _calculate_rsi(self, closes, window: int = 14) -> float:
         """Calculate RSI indicator."""
@@ -719,23 +715,6 @@ class TechnicalAnalyzer:
         except Exception:
             return 50.0
 
-    def _get_fallback_metrics(self, symbol: str) -> TechnicalMetrics:
-        """Generate fallback metrics when data fetching fails."""
-        price = Config.FALLBACK_PRICES.get(symbol.upper(), Config.DEFAULT_FALLBACK_PRICE)
-        return TechnicalMetrics(
-            sma_50=price * 0.98,
-            sma_200=price * 0.95,
-            rsi=50.0,
-            current_price=price,
-            volatility=0.2,
-            confidence=30.0,
-            volume=None,
-            market_regime=MarketRegimeResult(
-                regime=MarketRegime.NEUTRAL,
-                confidence=50.0
-            )
-        )
-
     def clear_cache(self):
         """Clear all cached data."""
         from django.core.cache import cache
@@ -786,10 +765,15 @@ class InstitutionalAnalysisEngine:
             Complete analysis result dictionary
         """
         try:
-            technicals = self.technical_analyzer.analyze(self.symbol)
-            if technicals.current_price <= 0:
-                logger.warning(f"Fallback price still zero for {self.symbol}, forcing default")
-                technicals = self.technical_analyzer._get_fallback_metrics(self.symbol)
+            try:
+                technicals = self.technical_analyzer.analyze(self.symbol)
+            except DataUnavailableError as exc:
+                logger.warning(f"No live data for {self.symbol}: {exc.reason}")
+                return {
+                    "symbol": self.symbol,
+                    "status": "unavailable",
+                    "message": "Live market data is unavailable for this symbol right now.",
+                }
 
             result = self._format_response(technicals)
 
@@ -818,14 +802,14 @@ class InstitutionalAnalysisEngine:
             else:
                 return {
                     'direction': 'UNAVAILABLE',
-                    'confidence': 0.0,
+                    'confidence': None,
                     'error': lstm_result.get('error', 'Unknown error')
                 }
         except Exception as e:
             logger.warning(f"LSTM prediction failed for {self.symbol}: {e}")
             return {
                 'direction': 'UNAVAILABLE',
-                'confidence': 0.0,
+                'confidence': None,
                 'error': str(e)
             }
 
@@ -979,8 +963,8 @@ def format_investment_analysis(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
             }
 
         symbol = analysis_data.get("symbol", "UNKNOWN")
-        recommendation = analysis_data.get("recommendation", "HOLD")
-        confidence = analysis_data.get("confidence", 0)
+        recommendation = analysis_data.get("recommendation")
+        confidence = analysis_data.get("confidence")
         price = analysis_data.get("price", 0)
 
         formatted = {
@@ -1112,3 +1096,67 @@ def get_technical_analyzer() -> TechnicalAnalyzer:
 # ============================================================================
 
 logger.debug("Institutional Analysis Engine v5.3 loaded (refactored)")
+
+
+TIMEFRAME_WINDOWS = {"1d": 30, "1w": 5, "1m": 21, "3m": 63}
+
+
+def build_technical_payload(symbol: str, timeframe: str = "1d"):
+    """
+    Compute technical indicators from live market data.
+    Returns None when live data is unavailable. Never returns synthetic values.
+    """
+    import numpy as np
+
+    symbol = symbol.upper()
+    try:
+        analyzer = get_technical_analyzer()
+        analyzer._ensure_initialized()
+        data = analyzer._get_data(symbol)
+        if data is None or data.empty or len(data) < 30:
+            return None
+        if not {"Close", "High", "Low"} <= set(data.columns):
+            return None
+
+        closes = data["Close"]
+        last = float(closes.iloc[-1])
+        if last <= 0:
+            return None
+
+        recent = data.tail(20)
+        support = float(recent["Low"].min())
+        resistance = float(recent["High"].max())
+        pivot = (float(data["High"].iloc[-1]) + float(data["Low"].iloc[-1]) + last) / 3
+
+        delta = closes.diff()
+        avg_gain = delta.clip(lower=0).ewm(alpha=1 / 14, adjust=False).mean().iloc[-1]
+        avg_loss = (-delta.clip(upper=0)).ewm(alpha=1 / 14, adjust=False).mean().iloc[-1]
+        rsi = 100.0 if avg_loss == 0 else float(100 - 100 / (1 + avg_gain / avg_loss))
+
+        returns = closes.pct_change().dropna().tail(60)
+        volatility = float(returns.std() * np.sqrt(252)) if len(returns) > 1 else None
+
+        window = TIMEFRAME_WINDOWS.get(timeframe, TIMEFRAME_WINDOWS["1d"])
+
+        def _series(values, n):
+            return [None if v != v else round(float(v), 2) for v in values.tail(n)]
+
+        return {
+            "current_price": round(last, 2),
+            "sma_50": round(float(closes.rolling(50).mean().iloc[-1]), 2) if len(closes) >= 50 else None,
+            "sma_200": round(float(closes.rolling(200).mean().iloc[-1]), 2) if len(closes) >= 200 else None,
+            "rsi": round(rsi, 1),
+            "support": round(support, 2),
+            "resistance": round(resistance, 2),
+            "pivot": round(pivot, 2),
+            "volume": float(data["Volume"].iloc[-1]) if "Volume" in data.columns else None,
+            "volatility": round(volatility, 4) if volatility is not None else None,
+            "timeframe": timeframe if timeframe in TIMEFRAME_WINDOWS else "1d",
+            "price_dates": [str(d.date()) if hasattr(d, "date") else str(d) for d in closes.tail(window).index],
+            "price_history": [round(float(x), 2) for x in closes.tail(window)],
+            "sma_50_series": _series(closes.rolling(50).mean(), window),
+            "sma_200_series": _series(closes.rolling(200).mean(), window),
+        }
+    except Exception as exc:
+        logger.error(f"Technical payload failed for {symbol}: {exc}")
+        return None
