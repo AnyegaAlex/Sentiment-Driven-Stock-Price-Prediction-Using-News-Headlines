@@ -19,7 +19,7 @@ from django.test import Client
 from tests.factories import ProcessedNewsFactory
 from news.models import ProcessedNews, SymbolSearchCache
 from news.serializers import ProcessedNewsSerializer
-from news.views import CACHE_TTL_SECONDS, MAX_ARTICLES, fetch_and_save_news
+from news.views import CACHE_TTL_SECONDS, MAX_ARTICLES
 
 pytestmark = pytest.mark.django_db
 
@@ -103,6 +103,13 @@ def mock_requests_get():
 # Tests for get_news
 # ============================================================================
 
+NEWS_REWRITE_REASON = (
+    "P2 ticket: fetch_and_save_news was removed. Ingestion now lives in news/services "
+    "(ProviderManager, IngestionService) and the fetch_news command, and get_news no longer "
+    "fetches on cache miss. These tests encode the old design and need a rewrite."
+)
+
+
 class TestGetNews:
     def test_get_news_missing_symbol(self, api_client):
         """Missing symbol returns 400."""
@@ -120,6 +127,7 @@ class TestGetNews:
         response = api_client.get(url, {"symbol": "AAPL!"})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    @pytest.mark.xfail(strict=True, reason=NEWS_REWRITE_REASON)
     def test_get_news_cached_response(self, api_client, existing_news):
         """Return cached response if available and not stale."""
         symbol, articles = existing_news
@@ -141,6 +149,7 @@ class TestGetNews:
         assert data["data"] == cached_data
 
     @patch("news.views.fetch_and_save_news")
+    @pytest.mark.xfail(strict=True, reason=NEWS_REWRITE_REASON)
     def test_get_news_force_refresh(self, mock_fetch, api_client, existing_news):
         """force_refresh=True bypasses cache and fetches fresh."""
         symbol, articles = existing_news
@@ -169,6 +178,7 @@ class TestGetNews:
         assert cached is not None
 
     @patch("news.views.fetch_and_save_news")
+    @pytest.mark.xfail(strict=True, reason=NEWS_REWRITE_REASON)
     def test_get_news_stale_cache(self, mock_fetch, api_client, existing_news):
         """When cache is absent and articles are stale, fetch new data."""
         symbol, articles = existing_news
@@ -196,6 +206,7 @@ class TestGetNews:
         assert data["data"]["cache_stale"] is False
 
     @patch("news.views.fetch_and_save_news")
+    @pytest.mark.xfail(strict=True, reason=NEWS_REWRITE_REASON)
     def test_get_news_fetch_fails(self, mock_fetch, api_client, existing_news):
         """If fetch fails, return existing news and keep stale flag True."""
         symbol, articles = existing_news
@@ -216,6 +227,7 @@ class TestGetNews:
         assert data["data"]["count"] > 0
         assert data["data"]["cache_stale"] is True  # remains stale
 
+    @pytest.mark.xfail(strict=True, reason=NEWS_REWRITE_REASON)
     def test_get_news_no_articles(self, api_client):
         """If no articles exist, fetch tries to get some."""
         symbol = "AAPL"
@@ -233,6 +245,7 @@ class TestGetNews:
             assert data["data"]["count"] == 0
             assert data["data"]["cache_stale"] is True
 
+    @pytest.mark.xfail(strict=True, reason=NEWS_REWRITE_REASON)
     def test_get_news_returns_limited_articles(self, api_client):
         """Only up to MAX_ARTICLES are returned."""
         symbol = "AAPL"
@@ -245,6 +258,7 @@ class TestGetNews:
         data = response.json()
         assert data["data"]["count"] == MAX_ARTICLES
 
+    @pytest.mark.xfail(strict=True, reason=NEWS_REWRITE_REASON)
     def test_get_news_serializes_correctly(self, api_client):
         """Check serialization format matches expected fields."""
         article = ProcessedNewsFactory(
@@ -436,6 +450,7 @@ class TestSymbolSearch:
 # ============================================================================
 
 class TestGetAnalyzedNews:
+    @pytest.mark.xfail(strict=True, reason=NEWS_REWRITE_REASON)
     def test_get_analyzed_news_alias(self, api_client):
         """Alias endpoint should behave like get-news."""
         # Test that it returns 200 for a valid symbol and that fetch is attempted if needed.
@@ -460,6 +475,7 @@ class TestGetAnalyzedNews:
 # Integration-like tests for fetch_and_save_news
 # ============================================================================
 
+@pytest.mark.xfail(strict=True, reason=NEWS_REWRITE_REASON)
 class TestFetchAndSaveNews:
     def test_fetch_and_save_news_success(self):
         """Test fetch_and_save_news with mocked fetchers."""
