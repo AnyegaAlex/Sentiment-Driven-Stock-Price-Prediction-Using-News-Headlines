@@ -211,7 +211,7 @@ def verify_password_reset_token(uid: str, token: str) -> Optional[User]:
 
 def send_email_sync(subject: str, to_email: str, html_content: str, plain_content: Optional[str] = None, retry_count: int = EMAIL_MAX_RETRIES) -> bool:
     """
-    Send email synchronously using SendGrid Web API with SMTP fallback.
+    Send email synchronously through Django SMTP (Brevo relay).
     This blocks the request for ~200ms but guarantees the email is dispatched 
     before Render can terminate the worker process.
     """
@@ -223,41 +223,7 @@ def send_email_sync(subject: str, to_email: str, html_content: str, plain_conten
     last_error = None
 
     for attempt in range(retry_count):
-        # --- Primary: SendGrid Web API ---
-        try:
-            from sendgrid import SendGridAPIClient
-            from sendgrid.helpers.mail import Mail
-
-            message = Mail(
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to_emails=to_email,
-                subject=subject,
-                html_content=html_content,
-                plain_text_content=plain_text,
-            )
-
-            # 10-second timeout ensures Render doesn't hang indefinitely if SendGrid is down
-            sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=10)
-            response = sg.send(message)
-
-            if 200 <= response.status_code < 300:
-                logger.info(f"[SendGrid] Email sent to {to_email} (status: {response.status_code})")
-                return True
-            else:
-                last_error = f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}"
-                logger.error(f"[SendGrid] Failed for {to_email}: {last_error}")
-                
-                # Don't retry on 4xx errors (except 429) as they indicate a configuration issue
-                if 400 <= response.status_code < 500 and response.status_code != 429:
-                    break 
-
-        except ImportError:
-            logger.warning("[Email] SendGrid library not installed, falling back to SMTP.")
-        except Exception as e:
-            last_error = str(e)
-            logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {e}")
-
-        # --- Fallback: Django SMTP ---
+        # --- Django SMTP (Brevo relay) ---
         try:
             send_mail(
                 subject=subject,
@@ -505,7 +471,7 @@ def check_email_service_health() -> Dict[str, Any]:
     try:
         from sendgrid import SendGridAPIClient
         
-        sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=5)
+        sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
         response = sg.client._("v3").get()
         
         if response.status_code < 500:
