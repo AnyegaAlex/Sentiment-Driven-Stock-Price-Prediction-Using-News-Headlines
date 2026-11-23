@@ -421,6 +421,21 @@ class TestPasswordReset:
         response = api_client.post(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_password_reset_confirm_inactive_user(self, api_client, user):
+        """Inactive user with a valid token gets the invalid-token response, not an account-status one."""
+        from django.contrib.auth.tokens import default_token_generator
+        from django.utils.encoding import force_bytes
+        from django.utils.http import urlsafe_base64_encode
+        token = default_token_generator.make_token(user)
+        user.is_active = False
+        user.save()
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        url = reverse("reset-password-confirm") + f"?uid={uid}"
+        data = {"token": token, "password": "NewSecurePass123!", "password2": "NewSecurePass123!"}
+        response = api_client.post(url, data)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'deactivated' not in response.content.decode().lower()
+
 
 # ============================================================================
 # 6. PROFILE

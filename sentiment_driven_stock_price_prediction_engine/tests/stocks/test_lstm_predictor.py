@@ -4,8 +4,6 @@ Tests for stocks/lstm_predictor.py.
 Covers:
 - LSTMModel architecture (forward pass)
 - compute_lstm_features: caching, yfinance, insufficient data, errors
-- get_sentiment_fallback: with/without news, DB queries, sentiment mapping
-- _fallback_result: dict construction
 - LSTMPredictor: initialization, model loading (success, missing, corrupt)
 - predict: model not loaded, feature failures, invalid features, sentiment failure,
   inference success/errors, NaN/Inf handling
@@ -26,8 +24,6 @@ from django.utils import timezone
 from stocks.lstm_predictor import (
     _create_lstm_model,
     compute_lstm_features,
-    get_sentiment_fallback,
-    _fallback_result,
     LSTMPredictor,
     get_lstm_predictor,
     MODEL_INPUT_SIZE,
@@ -177,113 +173,6 @@ class TestComputeLSTMFeatures:
 
 
 # ============================================================================
-# Test: get_sentiment_fallback
-# ============================================================================
-
-class TestGetSentimentFallback:
-    def test_fallback_with_news_text_positive(self):
-        """Positive sentiment from news text -> UP."""
-        with patch('stocks.lstm_predictor.analyze_sentiment') as mock_sent:
-            mock_sent.return_value = {'label': 'positive', 'score': 0.8}
-            result = get_sentiment_fallback('AAPL', news_text='Great earnings')
-            assert result['prediction'] == 'UP'
-            assert result['confidence'] > 0
-            assert result['success'] is True
-            assert result['fallback'] is True
-            assert 'sentiment-based fallback' in result['message']
-
-    def test_fallback_with_news_text_negative(self):
-        """Negative sentiment -> DOWN."""
-        with patch('stocks.lstm_predictor.analyze_sentiment') as mock_sent:
-            mock_sent.return_value = {'label': 'negative', 'score': 0.6}
-            result = get_sentiment_fallback('AAPL', news_text='Bad news')
-            assert result['prediction'] == 'DOWN'
-            assert result['confidence'] > 0
-
-    def test_fallback_with_news_text_neutral(self):
-        """Neutral sentiment -> HOLD."""
-        with patch('stocks.lstm_predictor.analyze_sentiment') as mock_sent:
-            mock_sent.return_value = {'label': 'neutral', 'score': 0.0}
-            result = get_sentiment_fallback('AAPL', news_text='Mixed')
-            assert result['prediction'] == 'HOLD'
-            assert result['confidence'] == 50.0
-
-    def test_fallback_without_news_db_has_news(self):
-        """No news text, but DB has recent news -> average sentiment."""
-        mock_news_qs = MagicMock()
-        mock_news_qs.exists.return_value = True
-        mock_news_qs.__iter__.return_value = [
-            MagicMock(sentiment_score=0.5),
-            MagicMock(sentiment_score=-0.3),
-            MagicMock(sentiment_score=0.2),
-        ]
-        with patch('news.models.ProcessedNews') as mock_model:
-            mock_model.objects.filter.return_value = mock_news_qs
-            result = get_sentiment_fallback('AAPL')
-            # Average sentiment = (0.5-0.3+0.2)/3 ≈ 0.133 → above threshold? 0.133 < 0.2 -> HOLD
-            assert result['prediction'] == 'HOLD'
-            assert result['sentiment_score'] == round(0.133, 3)
-
-    def test_fallback_without_news_no_news(self):
-        """No news in DB -> HOLD with 0.0 confidence."""
-        mock_news_qs = MagicMock()
-        mock_news_qs.exists.return_value = False
-        with patch('news.models.ProcessedNews') as mock_model:
-            mock_model.objects.filter.return_value = mock_news_qs
-            result = get_sentiment_fallback('AAPL')
-            assert result['prediction'] == 'HOLD'
-            assert result['confidence'] == 0.0
-            assert result['message'] == 'No recent news found'
-
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Defect (latent, dead code): get_sentiment_fallback returns a HOLD recommendation "
-            "with success=True when the news model is unavailable. That is a fallback "
-            "recommendation, which the no-fallback policy forbids. The function has no "
-            "production callers; recommend deleting it together with these tests."
-        ),
-    )
-    def test_fallback_import_error(self):
-        """ProcessedNews import fails -> must not return a successful HOLD."""
-        import sys
-        # A None entry in sys.modules makes `from news.models import ...` raise ImportError.
-        with patch.dict(sys.modules, {'news.models': None}):
-            result = get_sentiment_fallback('AAPL')
-            assert result['prediction'] == 'HOLD'
-            assert result['success'] is False
-            assert 'News model unavailable' in result['error']
-
-    def test_fallback_exception_in_sentiment_analysis(self):
-        """analyze_sentiment raises exception -> fallback error."""
-        with patch('stocks.lstm_predictor.analyze_sentiment', side_effect=Exception('Model crash')):
-            result = get_sentiment_fallback('AAPL', news_text='Something')
-            assert result['success'] is False
-            assert 'Fallback error' in result['error']
-
-
-# ============================================================================
-# Test: _fallback_result helper
-# ============================================================================
-
-class TestFallbackResult:
-    def test_fallback_result_success(self):
-        result = _fallback_result('UP', 75.0, 0.3, 'Test message', success=True)
-        assert result['prediction'] == 'UP'
-        assert result['confidence'] == 75.0
-        assert result['sentiment_score'] == 0.3
-        assert result['success'] is True
-        assert result['fallback'] is True
-        assert result['message'] == 'Test message'
-        assert 'error' not in result
-
-    def test_fallback_result_failure(self):
-        result = _fallback_result('HOLD', 0.0, 0.0, 'Error message', success=False)
-        assert result['success'] is False
-        assert result['error'] == 'Error message'
-
-
-# ============================================================================
 # Test: LSTMPredictor
 # ============================================================================
 
@@ -337,28 +226,24 @@ class TestLSTMPredictor:
         """Model not loaded -> explicit unavailable result, never a sentiment estimate.
 
         Policy (see _lstm_unavailable): LSTM output must not be substituted with a
-        sentiment-based estimate, so get_sentiment_fallback must not be called here.
+        sentiment-based estimate.
         """
         predictor = LSTMPredictor()
         predictor.model = None  # simulate failure
-        with patch('stocks.lstm_predictor.get_sentiment_fallback') as mock_fallback:
-            result = predictor.predict('AAPL')
-            assert result['success'] is False
-            assert result['unavailable'] is True
-            assert result['prediction'] is None
-            assert result['error'] == 'Model not loaded'
-            mock_fallback.assert_not_called()
+        result = predictor.predict('AAPL')
+        assert result['success'] is False
+        assert result['unavailable'] is True
+        assert result['prediction'] is None
+        assert result['error'] == 'Model not loaded'
 
     def test_predict_feature_failure(self, mock_lstm_predictor):
         """Feature computation returns None -> explicit unavailable result, no sentiment estimate."""
         with patch('stocks.lstm_predictor.compute_lstm_features', return_value=None) as mock_features:
-            with patch('stocks.lstm_predictor.get_sentiment_fallback') as mock_fallback:
-                result = mock_lstm_predictor.predict('AAPL')
-                assert result['success'] is False
-                assert result['unavailable'] is True
-                assert result['error'] == 'Insufficient price data'
-                mock_features.assert_called_with('AAPL')
-                mock_fallback.assert_not_called()
+            result = mock_lstm_predictor.predict('AAPL')
+            assert result['success'] is False
+            assert result['unavailable'] is True
+            assert result['error'] == 'Insufficient price data'
+            mock_features.assert_called_with('AAPL')
 
     def test_predict_invalid_feature_value(self, mock_lstm_predictor):
         """One of the features is invalid (None or non-finite) -> fallback."""
@@ -366,61 +251,36 @@ class TestLSTMPredictor:
         with patch('stocks.lstm_predictor.compute_lstm_features', return_value=features) as mock_features:
             # Set one feature to None
             features['MA7'] = None
-            with patch('stocks.lstm_predictor.get_sentiment_fallback') as mock_fallback:
-                mock_fallback.return_value = {'prediction': 'HOLD', 'success': False, 'error': 'Invalid feature'}
-                result = mock_lstm_predictor.predict('AAPL')
-                assert result['success'] is False
-                assert result['unavailable'] is True
-                assert result['error'] == 'Invalid feature: MA7'
-                mock_fallback.assert_not_called()
+            result = mock_lstm_predictor.predict('AAPL')
+            assert result['success'] is False
+            assert result['unavailable'] is True
+            assert result['error'] == 'Invalid feature: MA7'
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Defect: when analyze_sentiment raises, predict() silently sets sentiment_score "
-            "to 0.0 and returns a successful LSTM prediction. That is a defaulted input, "
-            "which the no-substitution policy forbids. Fix changes serving output; needs sign-off."
-        ),
-    )
     def test_predict_sentiment_failure(self, mock_lstm_predictor):
         """A sentiment failure must make the LSTM output unavailable, not default to 0.0."""
         features = {'MA7': 149.0, 'MA21': 148.0, 'STD21': 2.0, 'RSI14': 55.0, 'UpperBB': 152.0, 'LowerBB': 144.0, 'Close': 150.0}
         with patch('stocks.lstm_predictor.compute_lstm_features', return_value=features):
             with patch('stocks.lstm_predictor.analyze_sentiment', side_effect=Exception('Sentiment crash')):
-                result = mock_lstm_predictor.predict('AAPL')
+                result = mock_lstm_predictor.predict('AAPL', news_text='Some news')
                 assert result['success'] is False
                 assert result['unavailable'] is True
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Defect: a non-numeric feature (e.g. 'invalid') raises TypeError inside the "
-            "required-keys loop in LSTMPredictor.predict (np.isfinite on a string), before "
-            "the conversion try block, so predict() raises instead of returning the "
-            "unavailable result. Fix changes serving behaviour; needs sign-off."
-        ),
-    )
     def test_predict_feature_conversion_error(self, mock_lstm_predictor):
         """A non-numeric feature must yield an explicit unavailable result, not an exception."""
         features = {'MA7': 'invalid', 'MA21': 148.0, 'STD21': 2.0, 'RSI14': 55.0, 'UpperBB': 152.0, 'LowerBB': 144.0, 'Close': 150.0}
         with patch('stocks.lstm_predictor.compute_lstm_features', return_value=features):
-            with patch('stocks.lstm_predictor.get_sentiment_fallback') as mock_fallback:
-                result = mock_lstm_predictor.predict('AAPL')
-                assert result['success'] is False
-                assert result['unavailable'] is True
-                mock_fallback.assert_not_called()
+            result = mock_lstm_predictor.predict('AAPL')
+            assert result['success'] is False
+            assert result['unavailable'] is True
 
     def test_predict_nan_feature(self, mock_lstm_predictor):
         """NaN in features -> fallback."""
         features = {'MA7': 149.0, 'MA21': 148.0, 'STD21': np.nan, 'RSI14': 55.0, 'UpperBB': 152.0, 'LowerBB': 144.0, 'Close': 150.0}
         with patch('stocks.lstm_predictor.compute_lstm_features', return_value=features):
-            with patch('stocks.lstm_predictor.get_sentiment_fallback') as mock_fallback:
-                mock_fallback.return_value = {'prediction': 'HOLD', 'success': False, 'error': 'NaN'}
-                result = mock_lstm_predictor.predict('AAPL')
-                # The required-key loop reports the first non-finite feature by name.
-                assert result['success'] is False
-                assert result['error'] == 'Invalid feature: STD21'
-                mock_fallback.assert_not_called()
+            result = mock_lstm_predictor.predict('AAPL')
+            # The required-key loop reports the first non-finite feature by name.
+            assert result['success'] is False
+            assert result['error'] == 'Invalid feature: STD21'
 
     def test_predict_inference_success(self, mock_lstm_predictor):
         """Happy path: successful inference."""
@@ -446,14 +306,11 @@ class TestLSTMPredictor:
         """Exception during model inference -> fallback."""
         features = {'MA7': 149.0, 'MA21': 148.0, 'STD21': 2.0, 'RSI14': 55.0, 'UpperBB': 152.0, 'LowerBB': 144.0, 'Close': 150.0}
         with patch('stocks.lstm_predictor.compute_lstm_features', return_value=features):
-            with patch('stocks.lstm_predictor.get_sentiment_fallback') as mock_fallback:
-                mock_fallback.return_value = {'prediction': 'HOLD', 'success': False, 'error': 'Inference crash'}
-                # Make model raise an exception
-                mock_lstm_predictor.model.side_effect = RuntimeError('CUDA error')
-                result = mock_lstm_predictor.predict('AAPL')
-                assert result['success'] is False
-                assert 'Inference error' in result['error']
-                mock_fallback.assert_not_called()
+            # Make model raise an exception
+            mock_lstm_predictor.model.side_effect = RuntimeError('CUDA error')
+            result = mock_lstm_predictor.predict('AAPL')
+            assert result['success'] is False
+            assert 'Inference error' in result['error']
 
     def test_predict_with_news_text(self, mock_lstm_predictor):
         """news_text is passed to analyze_sentiment and used."""

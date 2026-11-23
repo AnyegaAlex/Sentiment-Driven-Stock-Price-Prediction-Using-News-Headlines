@@ -629,11 +629,10 @@ class TestDetectDrift:
                             assert result['drift_detected'] is False
                             assert result['severity'] == 'none'
 
-    @pytest.mark.xfail(strict=True, reason="Defect: detect_drift only flags drift when recent_f1 > 0 (stocks/utils.py), so a recent window where every prediction is wrong (F1 = 0) is never reported. Unmasking the zero-F1 case changes monitoring behaviour and needs review.")
     def test_detect_drift_detected(self, test_user):
         """Drift detected when performance drops."""
         # Recent predictions (poor accuracy)
-        for i in range(10):
+        for i in range(4):
             Prediction.objects.create(
                 date=timezone.now().date() - timedelta(days=i),
                 stock_symbol='AAPL',
@@ -649,7 +648,7 @@ class TestDetectDrift:
             )
         
         # Baseline predictions (good accuracy)
-        for i in range(10, 20):
+        for i in range(7, 13):
             Prediction.objects.create(
                 date=timezone.now().date() - timedelta(days=i),
                 stock_symbol='AAPL',
@@ -664,23 +663,18 @@ class TestDetectDrift:
                 resolution_date=timezone.now() - timedelta(days=i),
             )
         
-        with nullcontext():  # SKLEARN_AVAILABLE no longer exists; sklearn is imported lazily inside calculate_performance_metrics
-            with patch('sklearn.metrics.confusion_matrix') as mock_cm:
-                # Return different values for recent vs baseline
-                mock_cm.return_value.ravel.return_value = [5, 5, 5, 0]  # 50% accuracy
-                with patch('sklearn.metrics.precision_score', side_effect=[0.0, 1.0]):
-                    with patch('sklearn.metrics.recall_score', side_effect=[0.0, 1.0]):
-                        with patch('sklearn.metrics.f1_score', side_effect=[0.0, 1.0]):
-                            result = detect_drift(recent_period_days=5, baseline_period_days=15)
-                            assert result['drift_detected'] is True
-                            assert result['severity'] in ['low', 'medium', 'high']
-                            assert result['drop_percent'] > 0
+        # Real sklearn metrics: baseline is all correct (F1 100), recent is all wrong (F1 0).
+        result = detect_drift(recent_period_days=5, baseline_period_days=15)
+        assert result['baseline_f1'] == 100.0
+        assert result['recent_f1'] == 0.0
+        assert result['drift_detected'] is True
+        assert result['severity'] in ['low', 'medium', 'high']
+        assert result['drop_percent'] > 0
 
-    @pytest.mark.xfail(strict=True, reason="Defect: detect_drift only flags drift when recent_f1 > 0 (stocks/utils.py), so a recent window where every prediction is wrong (F1 = 0) is never reported. Unmasking the zero-F1 case changes monitoring behaviour and needs review.")
     def test_detect_drift_high_severity(self, test_user):
         """High severity when drop > 20%."""
         # Recent predictions (very poor)
-        for i in range(5):
+        for i in range(3):
             Prediction.objects.create(
                 date=timezone.now().date() - timedelta(days=i),
                 stock_symbol='AAPL',
@@ -711,18 +705,12 @@ class TestDetectDrift:
                 resolution_date=timezone.now() - timedelta(days=i),
             )
         
-        with nullcontext():  # SKLEARN_AVAILABLE no longer exists; sklearn is imported lazily inside calculate_performance_metrics
-            # Mock metrics to create a large drop
-            with patch('sklearn.metrics.confusion_matrix') as mock_cm:
-                mock_cm.return_value.ravel.return_value = [0, 5, 5, 0]  # 0% recent accuracy
-                with patch('sklearn.metrics.precision_score', side_effect=[0.0, 1.0]):
-                    with patch('sklearn.metrics.recall_score', side_effect=[0.0, 1.0]):
-                        with patch('sklearn.metrics.f1_score', side_effect=[0.0, 1.0]):
-                            result = detect_drift(recent_period_days=3, baseline_period_days=10)
-                            assert result['drift_detected'] is True
-                            # Severity should be 'high' if drop > 20%
-                            # The drop is 100% in this case
-                            assert result['severity'] == 'high'
+        # Real sklearn metrics: recent window is all wrong (F1 0); baseline F1 is above 0.
+        result = detect_drift(recent_period_days=3, baseline_period_days=10)
+        assert result['recent_f1'] == 0.0
+        assert result['drift_detected'] is True
+        # A drop of 100% from a non-zero baseline is above the 20% high-severity threshold.
+        assert result['severity'] == 'high'
 
     def test_detect_drift_empty_data(self):
         """Empty data returns no drift."""

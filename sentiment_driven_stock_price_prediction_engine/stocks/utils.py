@@ -324,7 +324,8 @@ def detect_drift(recent_period_days: int = 30, baseline_period_days: int = 90) -
 
     drift_detected = False
     severity = 'none'
-    if baseline_f1 > 0 and recent_f1 > 0:
+    # A recent F1 of 0 is the worst case; it must still be compared against the baseline.
+    if baseline_f1 > 0:
         drop = baseline_f1 - recent_f1
         drop_pct = (drop / baseline_f1) * 100
         if drop_pct > 10 or drop > 0.1:

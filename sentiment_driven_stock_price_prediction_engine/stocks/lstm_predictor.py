@@ -141,92 +141,6 @@ def _lstm_unavailable(reason: str) -> dict:
     }
 
 
-def get_sentiment_fallback(symbol: str, news_text: str = "", request_id: str = "") -> dict:
-    """
-    Generate a directional prediction based on recent news sentiment.
-
-    This is used when the LSTM model cannot produce a prediction (e.g.,
-    insufficient price history, model not loaded, feature errors).
-
-    Args:
-        symbol (str): Stock ticker.
-        news_text (str): Optional news headline provided in the request.
-        request_id (str): Optional request ID for logging context.
-
-    Returns:
-        dict: {
-            'prediction': 'UP' / 'DOWN' / 'HOLD',
-            'confidence': float (0-100),
-            'success': bool,
-            'sentiment_score': float,
-            'fallback': True,
-            'message': str,
-            'error': str (only if success=False)
-        }
-    """
-    try:
-        sentiment_score = 0.0
-
-        if news_text:
-            # Use provided news text
-            result = analyze_sentiment(news_text)
-            label = result.get('label', 'neutral')
-            score = result.get('score', 0.0)
-            sentiment_score = score if label == 'positive' else -score if label == 'negative' else 0.0
-        else:
-            # Query recent news from the database (last 7 days)
-            try:
-                from news.models import ProcessedNews
-                cutoff = timezone.now() - timedelta(days=7)
-                news = ProcessedNews.objects.filter(
-                    symbol=symbol.upper(),
-                    published_at__gte=cutoff
-                )
-                if not news.exists():
-                    return _fallback_result('HOLD', 0.0, 0.0, 'No recent news found')
-                scores = [n.sentiment_score for n in news if n.sentiment_score is not None]
-                if not scores:
-                    return _fallback_result('HOLD', 0.0, 0.0, 'No sentiment scores available')
-                sentiment_score = sum(scores) / len(scores)
-            except ImportError:
-                logger.warning("ProcessedNews model not available; cannot fetch news")
-                return _fallback_result('HOLD', 0.0, 0.0, 'News model unavailable')
-
-        # Map sentiment to direction and confidence
-        if sentiment_score > SENTIMENT_THRESHOLD:
-            direction = 'UP'
-            confidence = min(abs(sentiment_score) * 100, 90) + 10
-        elif sentiment_score < -SENTIMENT_THRESHOLD:
-            direction = 'DOWN'
-            confidence = min(abs(sentiment_score) * 100, 90) + 10
-        else:
-            direction = 'HOLD'
-            confidence = 50.0
-
-        return _fallback_result(direction, round(confidence, 1), round(sentiment_score, 3),
-                                'Using sentiment-based fallback')
-
-    except Exception as e:
-        logger.error(f"Sentiment fallback failed for {symbol}: {e}")
-        return _fallback_result('HOLD', 0.0, 0.0, f'Fallback error: {str(e)}', success=False)
-
-
-def _fallback_result(prediction: str, confidence: float, sentiment_score: float,
-                     message: str, success: bool = True) -> dict:
-    """Build a consistent fallback result dictionary."""
-    result = {
-        'prediction': prediction,
-        'confidence': confidence,
-        'success': success,
-        'sentiment_score': sentiment_score,
-        'fallback': True,
-        'message': message,
-    }
-    if not success:
-        result['error'] = message
-    return result
-
-
 # ============================================================================
 # 4. Predictor Class
 # ============================================================================
@@ -321,7 +235,11 @@ class LSTMPredictor:
         required_keys = ['MA7', 'MA21', 'STD21', 'RSI14', 'UpperBB', 'LowerBB', 'Close']
         for key in required_keys:
             value = tech_features.get(key)
-            if value is None or not np.isfinite(value):
+            try:
+                finite = value is not None and np.isfinite(float(value))
+            except (TypeError, ValueError):
+                finite = False
+            if not finite:
                 logger.warning(f"Invalid feature {key} for {ctx} – using fallback")
                 return _lstm_unavailable(f'Invalid feature: {key}')
 
@@ -333,11 +251,12 @@ class LSTMPredictor:
             label = sentiment_result.get('label', 'neutral')
             score = sentiment_result.get('score', 0.0)
             sentiment_score = score if label == 'positive' else -score if label == 'negative' else 0.0
-            if not np.isfinite(sentiment_score):
-                sentiment_score = 0.0
         except Exception as e:
             logger.error(f"Sentiment analysis failed for {ctx}: {e}")
-            sentiment_score = 0.0
+            return _lstm_unavailable('Sentiment analysis failed')
+        if not np.isfinite(sentiment_score):
+            logger.warning(f"Non-finite sentiment score for {ctx}")
+            return _lstm_unavailable('Invalid sentiment score')
 
         # Build feature vector (7 features)
         try:

@@ -714,11 +714,9 @@ class PasswordResetConfirmView(APIView):
                 return Response(error_response(message='Missing uid', code='MISSING_PARAMETERS', request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
             
             user = verify_password_reset_token(uid, token)
-            if not user:
+            # Inactive accounts get the same response as an invalid token, so the reply does not reveal account status.
+            if not user or not user.is_active:
                 return Response(error_response(message='Invalid or expired token', code='INVALID_TOKEN', request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
-            
-            if not user.is_active:
-                return Response(error_response(message='Account deactivated.', code='ACCOUNT_DEACTIVATED', request_id=request_id), status=status.HTTP_403_FORBIDDEN)
             
             with transaction.atomic():
                 user.set_password(serializer.validated_data['password'])
