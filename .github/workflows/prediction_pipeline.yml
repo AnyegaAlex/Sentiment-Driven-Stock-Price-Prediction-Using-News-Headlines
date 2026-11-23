@@ -8,6 +8,11 @@ on:
 
 jobs:
   process-predictions:
+    # Disabled by default. Price-derived predictions must not be generated or stored
+    # until provider terms, datasets and output storage are reviewed. Set the repository
+    # variable PREDICTION_PIPELINE_ENABLED to 'true' only after that review.
+    # Skipping the job also skips prune_predictions, so no history is deleted.
+    if: ${{ vars.PREDICTION_PIPELINE_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
