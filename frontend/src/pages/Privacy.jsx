@@ -34,23 +34,40 @@ const Privacy = () => (
           <h1 className="text-3xl font-bold text-white">Privacy Policy</h1>
           <p className="mt-1 text-sm text-gray-500">TickFlow Intelligence hosted app</p>
         </div>
-      </header>
+        
+        <div className="prose max-w-none prose-headings:text-white prose-p:text-gray-400 prose-a:text-gray-400 hover:prose-a:text-white prose-strong:text-gray-300 prose-strong:font-semibold">
+          <p className="text-gray-500">Last updated: {new Date().toLocaleDateString()}</p>
+          
+          <h2>Information We Collect</h2>
+          <p>We collect information you provide when creating or managing an account, such as your username, email address, and profile details. The app also stores your investment preferences, watchlist, and API access settings. Account creation does not require payment information.</p>
+          
+          <h2>How We Use Your Information</h2>
+          <p>We use your information to provide, maintain, and improve our services, and to communicate with you.</p>
+          
+          <h2>Cookies and Analytics</h2>
+          <p>Essential browser storage supports core service functionality and security. If you allow analytics, Google Analytics may collect information about how the site is used. Analytics remains disabled until you choose to enable it. You can change your choice at any time using the privacy preferences control in the site footer.</p>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event('tickflow:open-consent-settings'))}
+            className="my-2 inline-flex min-h-[40px] items-center rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-900"
+          >
+            Manage privacy preferences
+          </button>
 
-      <DraftNotice />
-
-      <div className="space-y-8 leading-7">
-        <section>
-          <p className="text-sm text-gray-500">Last updated: Draft for review | 24 November 2026</p>
-          <p className="mt-3">
-            <strong className="text-gray-200">Operator and data controller:</strong>{' '}
-            Tickflow Capital Limited, registration PVT-6Y1YWM6V, Nairobi, Kenya.
-            Registered street address: <strong className="text-amber-200">[TO BE CONFIRMED BEFORE PUBLICATION]</strong>.
-          </p>
-          <p className="mt-2">
-            <strong className="text-gray-200">Scope:</strong> This policy applies only to the hosted
-            TickFlow Intelligence app at{' '}
-            <a className="underline hover:text-white" href="https://intelligence.tickflowcapital.com">
-              intelligence.tickflowcapital.com
+          <h2>Data Security</h2>
+          <p>We implement appropriate technical and organizational measures to protect your personal information.</p>
+          
+          <h2>Your Rights</h2>
+          <p>You have the right to access, correct, or delete your personal information at any time.</p>
+          
+          <h2>Contact Us</h2>
+          <p>
+            If you have any questions about this Privacy Policy, please contact us at{' '}
+            <a 
+              href="mailto:privacy@tickflow.com" 
+              className="text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+            >
+              privacy@tickflow.com
             </a>
             . It does not cover tickflowcapital.com or the TIES platform, which have separate terms
             and privacy information.

@@ -1,25 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Analytics } from '@vercel/analytics/react';
 import { Link } from 'react-router-dom';
 import { initializeConsentMode, updateAnalyticsConsent, trackPageView } from '@/utils/analytics';
 
 const STORAGE_KEY = 'tickflow_consent_v1';
-
-const allowVercelAnalyticsEvent = (event) => {
-  try {
-    const preferences = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || 'null');
-    if (preferences?.analytics !== true) return null;
-
-    // Strip query strings and fragments so one-time auth tokens are never sent to analytics.
-    const url = new URL(event.url, window.location.origin);
-    url.search = '';
-    url.hash = '';
-    return { ...event, url: url.toString() };
-  } catch {
-    // Fail closed if consent storage is unavailable or malformed.
-    return null;
-  }
-};
 
 const readPreferences = () => {
   try {
@@ -80,9 +63,6 @@ const ConsentManager = () => {
 
   return (
     <>
-      {preferences?.analytics === true && (
-        <Analytics beforeSend={allowVercelAnalyticsEvent} />
-      )}
       {showBanner && (
         <aside
           className="fixed inset-x-3 bottom-3 z-[100] mx-auto max-w-4xl rounded-xl border border-gray-700 bg-gray-950 p-5 shadow-2xl sm:inset-x-6 sm:bottom-6"
@@ -92,7 +72,7 @@ const ConsentManager = () => {
             <div className="max-w-2xl">
               <h2 className="text-base font-semibold text-white">Your privacy choices</h2>
               <p className="mt-1 text-sm leading-relaxed text-gray-300">
-                TickFlow uses essential storage to keep the service working. With your permission, we use Google Analytics and Vercel Analytics to understand how the site is used. You can change this choice at any time.
+                TickFlow uses essential storage to keep the service working. With your permission, we also use Google Analytics to understand how the site is used. You can change this choice at any time.
                 {' '}<Link to="/privacy" className="underline underline-offset-2 hover:text-white">Privacy policy</Link>.
               </p>
             </div>
@@ -135,7 +115,7 @@ const ConsentManager = () => {
               <label className="flex cursor-pointer items-start justify-between gap-4">
                 <span>
                   <span className="block text-sm font-medium text-white">Analytics</span>
-                  <span className="mt-1 block text-xs text-gray-400">Allows Google Analytics and Vercel Analytics to collect page-view and usage information so we can understand and improve the service.</span>
+                  <span className="mt-1 block text-xs text-gray-400">Allows Google Analytics to collect usage information so we can understand and improve the service.</span>
                 </span>
                 <input
                   type="checkbox"
