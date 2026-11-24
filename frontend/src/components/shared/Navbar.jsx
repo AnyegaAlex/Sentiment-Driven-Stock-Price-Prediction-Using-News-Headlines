@@ -4,9 +4,9 @@ import { cn } from '@/lib/utils';
 import TfcLogo from '@/assets/Primary Icon White.svg';
 
 const NAV_LINKS = [
-  { name: 'Documentation', href: 'https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki' },
+  { name: 'Documentation', href: 'https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/wiki' },
   { name: 'API Reference', href: 'https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/' },
-  { name: 'GitHub', href: 'https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines' },
+  { name: 'GitHub', href: 'https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence' },
 ];
 
 const Navbar = () => {

@@ -316,12 +316,12 @@ CONTACT_EMAIL = os.getenv('CONTACT_EMAIL', 'info@tickflowcapital.com')
 # ---------------------------------------------------------------------------
 # CORS (Cross-Origin Resource Sharing)
 # ---------------------------------------------------------------------------
-FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://sentiment-driven-stock-price-predic.vercel.app')
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://intelligence.tickflowcapital.com')
 
 # Combine all allowed origins; deduplicate
 CORS_ALLOWED_ORIGINS = list(set([
     FRONTEND_URL,
-    "https://sentiment-driven-stock-price-predic.vercel.app",
+    "https://intelligence.tickflowcapital.com",
     "https://sentiment-driven-stock-price-pr-git-bce111-anyegaalexs-projects.vercel.app",
     "http://localhost:5173",
     "http://127.0.0.1:5173",

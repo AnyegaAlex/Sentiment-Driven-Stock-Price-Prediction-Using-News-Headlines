@@ -14,7 +14,7 @@ By participating in this project, you agree to abide by our [Code of Conduct](CO
 
 ### 1. Find an Issue
 
-- Check [existing issues](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/issues)
+- Check [existing issues](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues)
 - Look for labels: `good-first-issue`, `help-wanted`, `bug`, `enhancement`
 - Create a new issue if you find something not listed
 

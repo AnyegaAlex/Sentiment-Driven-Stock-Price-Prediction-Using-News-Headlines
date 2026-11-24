@@ -15,7 +15,7 @@ const CTASection = () => (
           Create an account
         </Link>
         <a
-          href="https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines"
+          href="https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex min-h-[48px] min-w-[180px] items-center justify-center rounded-md border border-gray-600 px-7 py-3 font-semibold text-white transition-colors hover:border-white hover:bg-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"

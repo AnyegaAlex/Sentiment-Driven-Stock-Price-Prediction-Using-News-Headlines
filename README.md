@@ -35,7 +35,7 @@
 
 | Component | URL | Status |
 |-----------|-----|--------|
-| Frontend (Vercel) | [https://sentiment-driven-stock-price-predic.vercel.app/](https://sentiment-driven-stock-price-predic.vercel.app/) | Verify before use |
+| Frontend | [https://intelligence.tickflowcapital.com/](https://intelligence.tickflowcapital.com/) | Live |
 | Backend API (Render) | [https://sentiment-driven-stock-price-prediction.onrender.com](https://sentiment-driven-stock-price-prediction.onrender.com) | Verify before use |
 | API Documentation (Swagger) | [https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/](https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/) | Verify before use |
 | LSTM Model (Gradio) | [https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics](https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics) | Verify before use |
@@ -212,7 +212,7 @@ sequenceDiagram
 
 ## Documentation
 
-Complete documentation is available in the [GitHub Wiki](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki).
+Complete documentation is available in the [GitHub Wiki](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/wiki).
 
 ### Wiki Sections
 - **Getting Started**: Introduction, Quick Start, Installation, Configuration
@@ -241,7 +241,7 @@ Complete documentation is available in the [GitHub Wiki](https://github.com/Anye
 | `/api/v1/symbols/` | GET | Supported symbols |
 | `/health/` | GET | Health check |
 
-Full API documentation is available in the [Wiki](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki).
+Full API documentation is available in the [Wiki](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/wiki).
 
 ---
 
@@ -259,7 +259,7 @@ Get the backend running in 5 minutes.
 
 ```bash
 # Clone the repository
-git clone https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines.git
+git clone https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence.git
 cd sentiment_driven_stock_price_prediction_engine
 
 # Create and activate virtual environment
@@ -328,7 +328,7 @@ docker exec <container-id> python manage.py migrate
 docker exec <container-id> python manage.py generate_apikey "Development"
 ```
 
-Detailed installation guide is available in the [Wiki](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki).
+Detailed installation guide is available in the [Wiki](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/wiki).
 
 ---
 
@@ -368,7 +368,7 @@ Detailed installation guide is available in the [Wiki](https://github.com/Anyega
 4. Set build command: `./build.sh`
 5. Set start command: `gunicorn sentiment_driven_stock_price_prediction_engine.wsgi:application`
 
-Detailed deployment guide is available in the [Wiki](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki).
+Detailed deployment guide is available in the [Wiki](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/wiki).
 
 ### Frontend (Vercel)
 
@@ -449,7 +449,7 @@ Predictions resolve 7 days after creation. A scheduled job:
 - API keys hashed, never stored in plain text
 - Passwords hashed with Django's default password hasher (PBKDF2)
 
-Full security documentation is available in the [Wiki](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki).
+Full security documentation is available in the [Wiki](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/wiki).
 
 ---
 
@@ -470,7 +470,7 @@ Contributions are welcome. Please follow these steps:
 - Update documentation
 - Reference related issues in PR description
 
-Full contributing guide is available in the [Wiki](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki).
+Full contributing guide is available in the [Wiki](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/wiki).
 
 ---
 

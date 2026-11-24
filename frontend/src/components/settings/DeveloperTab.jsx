@@ -1135,7 +1135,7 @@ const DeveloperTab = () => {
                   variant="outline"
                   onClick={() =>
                     window.open(
-                      'https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines',
+                      'https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence',
                       '_blank'
                     )
                   }

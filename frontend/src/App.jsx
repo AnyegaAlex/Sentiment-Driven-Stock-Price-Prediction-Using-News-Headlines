@@ -18,8 +18,9 @@ import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
-import ReactGA from 'react-ga4';
 import { MotionConfig } from 'framer-motion';
+import { trackPageView } from './utils/analytics';
+import ConsentManager from './components/consent/ConsentManager';
 
 // ============================================================================
 // Lazy Load Components
@@ -107,12 +108,8 @@ const AnalyticsTracker = () => {
 
   useEffect(() => {
     if (import.meta.env.PROD) {
-      ReactGA.send({
-        hitType: 'pageview',
-        // Never send query strings: verification and password-reset links contain one-time tokens.
-        page: location.pathname,
-        title: document.title,
-      });
+      // Never send query strings: verification and password-reset links contain one-time tokens.
+      trackPageView(location.pathname);
     }
   }, [location]);
 
@@ -154,6 +151,48 @@ const AppContent = () => {
   const queryClient = useQueryClient();
   const { setStockSymbol } = useDashboard();
   const previousUserIdRef = useRef(user?.id ?? null);
+
+  useEffect(() => {
+    const publicTitles = {
+      '/': 'TickFlow Intelligence | Stock Research Workspace',
+      '/privacy': 'Privacy Policy | TickFlow Intelligence',
+      '/terms': 'Terms of Service | TickFlow Intelligence',
+      '/login': 'Sign in | TickFlow Intelligence',
+      '/signup': 'Create account | TickFlow Intelligence',
+      '/forgot-password': 'Reset your password | TickFlow Intelligence',
+      '/verify-email': 'Verify your email | TickFlow Intelligence',
+      '/dashboard': 'Dashboard | TickFlow Intelligence',
+      '/news-analysis': 'News Analysis | TickFlow Intelligence',
+      '/prediction-history': 'Prediction History | TickFlow Intelligence',
+      '/profile': 'Your Profile | TickFlow Intelligence',
+      '/settings': 'Settings | TickFlow Intelligence',
+    };
+    const isIndexable = ['/', '/privacy', '/terms'].includes(location.pathname);
+
+    document.title = location.pathname.startsWith('/dashboard/')
+      ? `Dashboard | TickFlow Intelligence`
+      : (publicTitles[location.pathname] || 'TickFlow Intelligence | Workspace');
+
+    let robots = document.querySelector('meta[name="robots"]');
+    if (!robots) {
+      robots = document.createElement('meta');
+      robots.name = 'robots';
+      document.head.appendChild(robots);
+    }
+    robots.content = isIndexable ? 'index,follow' : 'noindex,nofollow';
+
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (isIndexable) {
+      if (!canonical) {
+        canonical = document.createElement('link');
+        canonical.rel = 'canonical';
+        document.head.appendChild(canonical);
+      }
+      canonical.href = `${window.location.origin}${location.pathname}`;
+    } else {
+      canonical?.remove();
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     const currentUserId = user?.id ?? null;
@@ -342,6 +381,7 @@ const App = () => {
             <OnboardingProvider>
               <DashboardProvider>
                 <AppContent />
+                <ConsentManager />
               </DashboardProvider>
             </OnboardingProvider>
           </AuthSessionProvider>

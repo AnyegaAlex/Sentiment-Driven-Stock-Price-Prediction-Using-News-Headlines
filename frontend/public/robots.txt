@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /news-analysis
+Disallow: /prediction-history
+Disallow: /profile
+Disallow: /settings
+Disallow: /advanced-analytics
+Disallow: /admin
+Disallow: /onboarding
+Disallow: /login
+Disallow: /signup
+Disallow: /verify-email
+Disallow: /reset-password
+Disallow: /forgot-password
+
+Sitemap: https://intelligence.tickflowcapital.com/sitemap.xml
