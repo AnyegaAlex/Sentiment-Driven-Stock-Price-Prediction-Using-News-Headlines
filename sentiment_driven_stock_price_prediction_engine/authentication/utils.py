@@ -17,6 +17,8 @@ import hashlib
 import logging
 from typing import Optional, Dict, Any
 
+from sentiment_driven_stock_price_prediction_engine.log_safety import describe_exception, scrub_text
+
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.cache import cache
@@ -251,7 +253,7 @@ def send_email_sync(subject: str, to_email: str, html_content: str, plain_conten
                 logger.info(f"[SendGrid] Email sent (status: {response.status_code})")
                 return True
             else:
-                last_error = f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}"
+                last_error = scrub_text(f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}")
                 logger.error(f"[SendGrid] Failed: {last_error}")
                 
                 # Don't retry on 4xx errors (except 429) as they indicate a configuration issue
@@ -261,8 +263,8 @@ def send_email_sync(subject: str, to_email: str, html_content: str, plain_conten
         except ImportError:
             logger.warning("[Email] SendGrid library not installed, falling back to SMTP.")
         except Exception as e:
-            last_error = str(e)
-            logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {e}")
+            last_error = describe_exception(e)
+            logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {last_error}")
 
         # --- Fallback: Django SMTP ---
         try:
@@ -277,8 +279,8 @@ def send_email_sync(subject: str, to_email: str, html_content: str, plain_conten
             logger.info("[SMTP] Email sent")
             return True
         except Exception as e:
-            last_error = str(e)
-            logger.error(f"[SMTP] Fallback failed: {e}")
+            last_error = describe_exception(e)
+            logger.error(f"[SMTP] Fallback failed: {last_error}")
 
         if attempt < retry_count - 1:
             time.sleep(EMAIL_RETRY_DELAY)

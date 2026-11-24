@@ -29,6 +29,8 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+from .log_safety import scrub_event_or_drop, scrub_value  # noqa: E402
+
 # ============================================================================
 # CONSTANTS
 # ============================================================================
@@ -177,7 +179,12 @@ def before_send(event: Dict, hint: Dict) -> Optional[Dict]:
             event['request']['url']
         )
     
-    return event
+    # Scrub credentials and email addresses from the whole event. On failure the
+    # event is dropped, never sent unscrubbed.
+    scrubbed = scrub_event_or_drop(event)
+    if scrubbed is None:
+        logger.warning("Sentry event dropped: scrubber failed")
+    return scrubbed
 
 
 def before_breadcrumb(crumb: Dict, hint: Dict) -> Dict:
@@ -199,7 +206,10 @@ def before_breadcrumb(crumb: Dict, hint: Dict) -> Dict:
     if crumb.get('category') == 'http' and '/static/' in str(crumb.get('data', {})):
         return None
     
-    return crumb
+    try:
+        return scrub_value(crumb)
+    except Exception:
+        return None
 
 
 # ============================================================================

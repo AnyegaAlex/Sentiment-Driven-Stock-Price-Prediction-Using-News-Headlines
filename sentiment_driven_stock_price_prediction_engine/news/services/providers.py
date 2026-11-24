@@ -1,6 +1,7 @@
 # news/services/providers.py
 import logging
 import requests
+from sentiment_driven_stock_price_prediction_engine.log_safety import describe_exception
 from typing import List, Dict, Any
 from django.conf import settings
 from django.utils import timezone
@@ -38,9 +39,9 @@ class ProviderManager:
                     return articles
             except ValueError as e:
                 # Catch specific rate limit errors to prevent retries
-                logger.warning(f"Provider {name} rate limited or returned invalid data: {e}")
+                logger.warning(f"Provider {name} rate limited or returned invalid data: {describe_exception(e)}")
             except Exception as e:
-                logger.error(f"Provider {name} failed for {symbol}: {e}")
+                logger.error(f"Provider {name} failed for {symbol}: {describe_exception(e)}")
         
         logger.error(f"All providers failed for {symbol}")
         return []

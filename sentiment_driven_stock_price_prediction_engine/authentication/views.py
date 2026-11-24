@@ -186,7 +186,7 @@ class RegisterView(generics.CreateAPIView):
                     cache.set(f"email_failed_{user.id}", True, timeout=300)
             return user
         except IntegrityError as e:
-            logger.error(f"Registration integrity error: {e}")
+            logger.error(f"Registration failed on a database constraint: {type(e).__name__}")
             raise serializers.ValidationError({'email': 'This email is already registered.'})
         except Exception as e:
             logger.error(f"Registration error: {e}", exc_info=True)
