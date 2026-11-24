@@ -55,7 +55,7 @@ const normalizeError = (err) => ({
  * Prevents bad data from reaching the backend and creating noise in logs.
  */
 const isValidSymbol = (symbol) =>
-  typeof symbol === 'string' && /^[A-Z0-9.-]{1,10}$/i.test(symbol.trim());
+  typeof symbol === 'string' && /^[A-Z0-9.\-]{1,10}$/i.test(symbol.trim());
 
 // ============================================================================
 // Unified Stock Analysis

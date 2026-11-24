@@ -21,7 +21,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import apiClient, { setAuthToken, removeAuthToken, restoreAuthToken } from '@/services/client';
 
 // ============================================================================
@@ -65,9 +65,8 @@ const normalizeError = (err) => ({
 // Auth Hook
 // ============================================================================
 
-export const useAuth = () => {
+export const useAuthState = () => {
   const navigate = useNavigate();
-  const location = useLocation();
 
   // Auth state
   const [user, setUserState] = useState(null);
@@ -78,7 +77,6 @@ export const useAuth = () => {
 
   // Refs
   const activityTimeoutRef = useRef(null);
-  const activityCleanupRef = useRef(null);
   const isMountedRef = useRef(true);
   const refreshingRef = useRef(false);
   const initAuthCalled = useRef(false);
@@ -140,10 +138,7 @@ export const useAuth = () => {
     });
     removeAuthToken();
     updateUser(null);
-    activityCleanupRef.current?.();
-    activityCleanupRef.current = null;
     if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
-    activityTimeoutRef.current = null;
     console.info('[Auth] User logged out');
   }, [updateUser]);
 
@@ -158,9 +153,6 @@ export const useAuth = () => {
   }, []);
 
   const startActivityMonitor = useCallback(() => {
-    // Starting a new monitor must not leave listeners from an older session.
-    activityCleanupRef.current?.();
-    activityCleanupRef.current = null;
     if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
 
     const checkActivity = () => {
@@ -170,37 +162,23 @@ export const useAuth = () => {
       );
       if (Date.now() - lastActivity > SESSION_TIMEOUT) {
         console.warn('[Auth] Session expired due to inactivity');
-        const from = {
-          pathname: window.location.pathname,
-          search: window.location.search,
-          hash: window.location.hash,
-        };
         handleLogout();
-        navigate('/login', {
-          replace: true,
-          state: {
-            message: 'Your session expired after a period of inactivity. Sign in again to continue.',
-            from,
-          },
-        });
+        navigate('/login', { replace: true });
         return;
       }
       activityTimeoutRef.current = setTimeout(checkActivity, 60000);
     };
 
-    activityTimeoutRef.current = setTimeout(checkActivity, 1000);
+    setTimeout(checkActivity, 1000);
 
     const events = ['mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
     const handleActivity = () => updateLastActivity();
     events.forEach((event) => document.addEventListener(event, handleActivity));
 
-    const cleanup = () => {
+    return () => {
       events.forEach((event) => document.removeEventListener(event, handleActivity));
       if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
-      activityTimeoutRef.current = null;
     };
-    activityCleanupRef.current = cleanup;
-    return cleanup;
   }, [getStorage, handleLogout, navigate, updateLastActivity]);
 
   // ============================================================================
@@ -310,41 +288,28 @@ export const useAuth = () => {
       if (storedUser) {
         try {
           parsedUser = JSON.parse(storedUser);
-        } catch {
-          parsedUser = null;
-          removeStorage(STORAGE_KEYS.USER);
-        }
+        } catch {}
       }
 
       const token = getStorage(STORAGE_KEYS.ACCESS_TOKEN);
       const validation = await validateToken(token);
 
       if (isMountedRef.current) {
-        const restoredUser = validation.user || (
-          validation.error === 'Token expired' ? null : parsedUser
-        );
-
-        if (restoredUser) {
+        if (validation.valid) {
           const isRemembered = !!localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-          updateUser(restoredUser, isRemembered);
+          if (validation.user) {
+            updateUser(validation.user, isRemembered);
+          } else if (parsedUser) {
+            updateUser(parsedUser, isRemembered);
+          }
           updateLastActivity();
           startActivityMonitor();
-        } else {
-          const sessionExpired = validation.error === 'Token expired';
+        } else if (validation.error === 'Token expired') {
           handleLogout();
-          navigate('/login', {
-            replace: true,
-            state: {
-              message: sessionExpired
-                ? 'Your session has expired. Sign in again to continue.'
-                : 'We couldn’t restore your account details. Sign in again to continue.',
-              from: {
-                pathname: location.pathname,
-                search: location.search,
-                hash: location.hash,
-              },
-            },
-          });
+          navigate('/login', { replace: true });
+        } else if (parsedUser) {
+          // Network error — assume still authenticated with cached user
+          updateUser(parsedUser, !!localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN));
         }
       }
     } catch (err) {
@@ -357,12 +322,10 @@ export const useAuth = () => {
     }
   }, [
     getStorage,
-    removeStorage,
     validateToken,
     updateUser,
     handleLogout,
     navigate,
-    location,
     updateLastActivity,
     startActivityMonitor,
   ]);
@@ -381,17 +344,15 @@ export const useAuth = () => {
         const payload = extract(response);
         const { access, refresh, user: userData } = payload;
 
-        if (!access || !refresh || !userData?.id) {
-          throw new Error('We couldn’t complete sign in because the account details were missing. Please try again.');
+        if (!access || !refresh) {
+          throw new Error('Invalid login response: missing tokens');
         }
 
-        // A new login replaces any previous session. Clear the other storage
-        // scope so an earlier remembered token cannot outlive this choice.
-        const previousStorage = rememberMe ? sessionStorage : localStorage;
-        Object.values(STORAGE_KEYS).forEach((key) => previousStorage.removeItem(key));
-        previousStorage.removeItem('authToken');
-
         const storage = rememberMe ? localStorage : sessionStorage;
+        // Drop any session held in the other storage so a stale remembered session can't win on reload.
+        const otherStorage = rememberMe ? sessionStorage : localStorage;
+        [STORAGE_KEYS.ACCESS_TOKEN, STORAGE_KEYS.REFRESH_TOKEN, STORAGE_KEYS.USER, 'authToken']
+          .forEach((key) => otherStorage.removeItem(key));
         storage.setItem(STORAGE_KEYS.ACCESS_TOKEN, access);
         storage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refresh);
         storage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData || {}));
@@ -538,10 +499,7 @@ export const useAuth = () => {
           try {
             const parsed = JSON.parse(storedUser);
             updateUser(parsed, !!localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN));
-          } catch {
-            removeStorage(STORAGE_KEYS.USER);
-            updateUser(null);
-          }
+          } catch {}
         }
       }
     };
@@ -550,26 +508,7 @@ export const useAuth = () => {
     const handleUnauthorized = (event) => {
       handleLogout();
       if (event.detail?.message) setError(event.detail.message);
-
-      const from = event.detail?.from;
-      const currentPath = from?.pathname || '';
-      const isPublicAuthPath = [
-        '/login',
-        '/signup',
-        '/verify-email',
-        '/check-email',
-        '/forgot-password',
-        '/reset-password',
-        '/resend-verification',
-      ].includes(currentPath);
-
-      navigate('/login', {
-        replace: true,
-        state: {
-          message: event.detail?.message,
-          from: currentPath && !isPublicAuthPath ? from : null,
-        },
-      });
+      navigate('/login', { replace: true });
     };
     window.addEventListener('unauthorized', handleUnauthorized);
 
@@ -586,10 +525,7 @@ export const useAuth = () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('unauthorized', handleUnauthorized);
       window.removeEventListener('online', handleOnline);
-      activityCleanupRef.current?.();
-      activityCleanupRef.current = null;
       if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
-      activityTimeoutRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -645,4 +581,4 @@ export const useAuth = () => {
   );
 };
 
-export default useAuth;
+export default useAuthState;

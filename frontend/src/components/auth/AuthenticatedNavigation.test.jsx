@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { AuthContext } from '@/context/AuthContext';
+import { AuthSessionContext as AuthContext } from '@/context/AuthSessionProvider';
 import { DashboardProvider } from '@/context/DashboardContext';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import HomeRoute from './HomeRoute';

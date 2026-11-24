@@ -17,7 +17,7 @@ vi.mock('@/services/client', () => ({
 
 import apiClient, { setAuthToken, restoreAuthToken } from '@/services/client';
 import { useAuth } from '../../hooks/useAuth';
-import { AuthProvider } from '../../context/AuthContext';
+import { AuthSessionProvider as AuthProvider } from '../../context/AuthSessionProvider';
 
 const wrapper = ({ children }) => (
   <MemoryRouter>

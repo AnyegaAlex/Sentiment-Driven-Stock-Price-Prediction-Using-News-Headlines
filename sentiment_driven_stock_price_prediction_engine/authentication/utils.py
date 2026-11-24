@@ -12,6 +12,8 @@ Production-Ready Refactor:
 import re
 import time
 import secrets
+import hmac
+import hashlib
 import logging
 from typing import Optional, Dict, Any
 
@@ -173,12 +175,17 @@ def generate_verification_code() -> str:
     return ''.join(str(secrets.randbelow(10)) for _ in range(6))
 
 
+def hash_verification_code(user_id, code: str) -> str:
+    """Keyed hash of a verification code. Only this digest is stored in the cache, never the code."""
+    return hmac.new(settings.SECRET_KEY.encode(), f"{user_id}:{code}".encode(), hashlib.sha256).hexdigest()
+
+
 def verify_email_code(user: User, code: str) -> bool:
     """Verify a 6-digit code previously sent to the user's email."""
     try:
         cache_key = f"email_verification_{user.id}"
-        stored_code = cache.get(cache_key)
-        if stored_code and stored_code == code:
+        stored_digest = cache.get(cache_key)
+        if stored_digest and hmac.compare_digest(stored_digest, hash_verification_code(user.id, code)):
             cache.delete(cache_key)
             return True
         return False
@@ -211,7 +218,7 @@ def verify_password_reset_token(uid: str, token: str) -> Optional[User]:
 
 def send_email_sync(subject: str, to_email: str, html_content: str, plain_content: Optional[str] = None, retry_count: int = EMAIL_MAX_RETRIES) -> bool:
     """
-    Send email synchronously through Django SMTP (Brevo relay).
+    Send email synchronously using SendGrid Web API with SMTP fallback.
     This blocks the request for ~200ms but guarantees the email is dispatched 
     before Render can terminate the worker process.
     """
@@ -223,7 +230,41 @@ def send_email_sync(subject: str, to_email: str, html_content: str, plain_conten
     last_error = None
 
     for attempt in range(retry_count):
-        # --- Django SMTP (Brevo relay) ---
+        # --- Primary: SendGrid Web API ---
+        try:
+            from sendgrid import SendGridAPIClient
+            from sendgrid.helpers.mail import Mail
+
+            message = Mail(
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to_emails=to_email,
+                subject=subject,
+                html_content=html_content,
+                plain_text_content=plain_text,
+            )
+
+            # 10-second timeout ensures Render doesn't hang indefinitely if SendGrid is down
+            sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=10)
+            response = sg.send(message)
+
+            if 200 <= response.status_code < 300:
+                logger.info(f"[SendGrid] Email sent to {to_email} (status: {response.status_code})")
+                return True
+            else:
+                last_error = f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}"
+                logger.error(f"[SendGrid] Failed for {to_email}: {last_error}")
+                
+                # Don't retry on 4xx errors (except 429) as they indicate a configuration issue
+                if 400 <= response.status_code < 500 and response.status_code != 429:
+                    break 
+
+        except ImportError:
+            logger.warning("[Email] SendGrid library not installed, falling back to SMTP.")
+        except Exception as e:
+            last_error = str(e)
+            logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {e}")
+
+        # --- Fallback: Django SMTP ---
         try:
             send_mail(
                 subject=subject,
@@ -262,7 +303,7 @@ def send_verification_email(user: User, request) -> bool:
         code = generate_verification_code()
         
         cache_key = f"email_verification_{user.id}"
-        cache.set(cache_key, code, timeout=600)
+        cache.set(cache_key, hash_verification_code(user.id, code), timeout=600)
         cache.set(f"verification_sent_{user.id}", True, timeout=60)
         
         frontend_url = settings.FRONTEND_URL
@@ -471,7 +512,7 @@ def check_email_service_health() -> Dict[str, Any]:
     try:
         from sendgrid import SendGridAPIClient
         
-        sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
+        sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=5)
         response = sg.client._("v3").get()
         
         if response.status_code < 500:

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { AuthContext } from '@/context/AuthContext';
+import { AuthSessionContext as AuthContext } from '@/context/AuthSessionProvider';
 import HomeRoute from './HomeRoute';
 
 const Location = () => {

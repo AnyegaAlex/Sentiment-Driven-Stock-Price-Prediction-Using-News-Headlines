@@ -256,6 +256,11 @@ export const AuthService = {
         throw new Error('Invalid registration response: no user data');
       }
 
+      console.info('[AuthService] Registration successful:', {
+        username: userData.username,
+        email: userData.email,
+      });
+
       return { success: true, user: userData };
     } catch (err) {
       const e = normalizeError(err);
@@ -332,7 +337,7 @@ export const AuthService = {
         success: false,
         error: e.message,
         code: e.code,
-        retryAfter: e.retryAfter,
+        retryAfter: e.retryAfter ?? (e.code === 429 ? 60 : null),
       };
     }
   },
@@ -355,7 +360,7 @@ export const AuthService = {
         error: e.message,
         code: e.code,
         details: e.details,
-        retryAfter: e.retryAfter,
+        retryAfter: e.retryAfter ?? (e.code === 429 ? 60 : null),
       };
     }
   },
@@ -423,7 +428,7 @@ export const AuthService = {
         error: e.message,
         details: extractFieldErrors(e.details),
         code: e.code,
-        retryAfter: e.retryAfter,
+        retryAfter: e.retryAfter ?? (e.code === 429 ? 60 : null),
       };
     }
   },

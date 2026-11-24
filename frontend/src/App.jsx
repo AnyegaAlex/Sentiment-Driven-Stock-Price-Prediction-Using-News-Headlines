@@ -35,7 +35,7 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import HomeRoute from "./components/auth/HomeRoute";
 
 // Context providers
-import { AuthProvider } from "./context/AuthContext";
+import { AuthSessionProvider } from "./context/AuthSessionProvider";
 import { useAuth } from "./hooks/useAuth";
 import { OnboardingProvider } from "./context/OnboardingContext";
 import { DashboardProvider, useDashboard } from "./context/DashboardContext";
@@ -338,13 +338,13 @@ const App = () => {
       <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={200}>
         <Router>
-          <AuthProvider>
+          <AuthSessionProvider>
             <OnboardingProvider>
               <DashboardProvider>
                 <AppContent />
               </DashboardProvider>
             </OnboardingProvider>
-          </AuthProvider>
+          </AuthSessionProvider>
         </Router>
         {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
       </TooltipProvider>

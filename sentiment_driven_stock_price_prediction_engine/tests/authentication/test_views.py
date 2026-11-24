@@ -15,6 +15,7 @@ All external dependencies (email sending, cache, throttling, JWT) are mocked.
 
 import json
 import pytest
+from authentication.utils import hash_verification_code
 from unittest.mock import patch, MagicMock, Mock
 from datetime import datetime, timedelta
 from django.urls import reverse
@@ -292,7 +293,7 @@ class TestVerifyEmailView:
         """POST verify with valid code verifies email."""
         from authentication.utils import generate_verification_code
         code = generate_verification_code()
-        cache.set(f"email_verification_{unverified_user.id}", code, timeout=600)
+        cache.set(f"email_verification_{unverified_user.id}", hash_verification_code(unverified_user.id, code), timeout=600)
         url = reverse('verify-email')
         # Public endpoint: identifies the account by {email, code}, no session needed.
         with bypass_throttling():

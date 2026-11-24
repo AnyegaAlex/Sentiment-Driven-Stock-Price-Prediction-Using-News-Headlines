@@ -1,10 +1,7 @@
 // src/hooks/useAuth.js
-/**
- * useAuth — context-aware wrapper.
- * All 18 components import this and get the SAME shared auth state.
- * The actual state machine lives in `useAuthState.js`.
- */
-import { useAuthContext } from '@/context/AuthContext';
+// Reads the shared session created by AuthSessionProvider. It holds no state of its own.
+import { useAuthSession } from '@/context/AuthSessionProvider';
 
-export const useAuth = useAuthContext;
+export const useAuth = () => useAuthSession();
+
 export default useAuth;

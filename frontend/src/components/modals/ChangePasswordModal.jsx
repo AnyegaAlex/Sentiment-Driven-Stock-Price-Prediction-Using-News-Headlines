@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api } from '@/services/api';
+import apiClient from '@/services/client';
 import {
   Dialog,
   DialogContent,
@@ -43,7 +43,7 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
     }
 
     try {
-      await api.post('/auth/profile/change-password/', {
+      await apiClient.post('/auth/profile/change-password/', {
         old_password: form.old_password,
         new_password: form.new_password,
         new_password2: form.new_password2,

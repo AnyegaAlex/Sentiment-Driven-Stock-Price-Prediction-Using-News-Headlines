@@ -16,6 +16,7 @@ Version: 1.3.0
 """
 
 import pytest
+from authentication.utils import hash_verification_code
 import json
 import base64
 from datetime import timedelta
@@ -192,7 +193,7 @@ class TestEmailVerification:
     def test_verify_email_with_code(self, api_client, unverified_user):
         """Valid 6-digit code should verify email."""
         code = generate_verification_code()
-        cache.set(f"email_verification_{unverified_user.id}", code, timeout=600)
+        cache.set(f"email_verification_{unverified_user.id}", hash_verification_code(unverified_user.id, code), timeout=600)
         api_client.force_authenticate(user=unverified_user)
         url = reverse("verify-email")
         response = api_client.post(url, {"code": code})
