@@ -1,65 +1,218 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Radar } from 'lucide-react';
 
-const Privacy = () => {
-  return (
-    <div className="min-h-screen bg-black">
-      <div className="max-w-4xl mx-auto px-4 py-12">
-        <Link 
-          to="/" 
-          className="inline-flex items-center text-gray-400 hover:text-white transition-colors mb-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Home
-        </Link>
-        
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 rounded-xl bg-gray-800">
-            <Radar className="h-8 w-8 text-gray-400" strokeWidth={1.8} />
-          </div>
-          <h1 className="text-3xl font-bold text-white">Privacy Policy</h1>
+const DraftNotice = () => (
+  <aside
+    role="note"
+    className="mb-8 rounded-xl border border-amber-700/50 bg-amber-950/30 p-4 text-sm text-amber-100"
+  >
+    <p className="font-semibold">Draft for review. Not yet effective.</p>
+    <p className="mt-1 text-amber-100/80">
+      This document is being prepared for the TickFlow Intelligence hosted app.
+      It is not legal advice and must be reviewed by a Kenyan lawyer before publication.
+      Items marked for confirmation are intentionally unresolved.
+    </p>
+  </aside>
+);
+
+const Privacy = () => (
+  <main className="min-h-screen bg-black text-gray-300">
+    <div className="mx-auto max-w-4xl px-4 py-12">
+      <Link
+        to="/"
+        className="mb-6 inline-flex items-center text-gray-400 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+      >
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        Back to Home
+      </Link>
+
+      <header className="mb-6 flex items-center gap-3">
+        <div className="rounded-xl bg-gray-800 p-2">
+          <Radar className="h-8 w-8 text-gray-400" strokeWidth={1.8} />
         </div>
-        
-        <div className="prose max-w-none prose-headings:text-white prose-p:text-gray-400 prose-a:text-gray-400 hover:prose-a:text-white prose-strong:text-gray-300 prose-strong:font-semibold">
-          <p className="text-gray-500">Last updated: {new Date().toLocaleDateString()}</p>
-          
-          <h2>Information We Collect</h2>
-          <p>We collect information you provide when creating or managing an account, such as your username, email address, and profile details. The app also stores your investment preferences, watchlist, and API access settings. Account creation does not require payment information.</p>
-          
-          <h2>How We Use Your Information</h2>
-          <p>We use your information to provide, maintain, and improve our services, and to communicate with you.</p>
-          
-          <h2>Cookies and Analytics</h2>
-          <p>Essential browser storage supports core service functionality and security. If you allow analytics, Google Analytics may collect information about how the site is used. Analytics remains disabled until you choose to enable it. You can change your choice at any time using the privacy preferences control in the site footer.</p>
+        <div>
+          <h1 className="text-3xl font-bold text-white">Privacy Policy</h1>
+          <p className="mt-1 text-sm text-gray-500">TickFlow Intelligence hosted app</p>
+        </div>
+      </header>
+
+      <DraftNotice />
+
+      <div className="space-y-8 leading-7">
+        <section>
+          <p className="text-sm text-gray-500">Last updated: Draft for review | 24 November 2026</p>
+          <p className="mt-3">
+            <strong className="text-gray-200">Operator and data controller:</strong>{' '}
+            Tickflow Capital Limited, registration PVT-6Y1YWM6V, Nairobi, Kenya.
+            Registered street address: <strong className="text-amber-200">[TO BE CONFIRMED BEFORE PUBLICATION]</strong>.
+          </p>
+          <p className="mt-2">
+            <strong className="text-gray-200">Scope:</strong> This policy applies only to the hosted
+            TickFlow Intelligence app at{' '}
+            <a className="underline hover:text-white" href="https://intelligence.tickflowcapital.com">
+              intelligence.tickflowcapital.com
+            </a>
+            . It does not cover tickflowcapital.com or the TIES platform, which have separate terms
+            and privacy information.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xl font-semibold text-white">1. What this covers</h2>
+          <p>
+            This policy explains what personal data the Service collects when you create an account,
+            sign in or use the app, why we use it, who may process it, and the rights available to
+            you under the Kenya Data Protection Act, 2019 and other applicable law.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xl font-semibold text-white">2. Data we collect</h2>
+          <div className="overflow-x-auto rounded-lg border border-gray-800">
+            <table className="w-full min-w-[620px] text-left text-sm">
+              <thead className="bg-gray-900 text-gray-200">
+                <tr><th className="p-3">Category</th><th className="p-3">Examples</th><th className="p-3">Source</th></tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                <tr><td className="p-3">Account data</td><td className="p-3">Email address, username, password (stored as a salted hash), profile details and onboarding answers</td><td className="p-3">You</td></tr>
+                <tr><td className="p-3">Verification data</td><td className="p-3">One-time email codes, stored as a keyed hash and deleted after use or after 10 minutes</td><td className="p-3">Generated by us</td></tr>
+                <tr><td className="p-3">Preferences</td><td className="p-3">Watchlist, investment preferences and API access settings</td><td className="p-3">You</td></tr>
+                <tr><td className="p-3">Security data</td><td className="p-3">Login timestamps, device and IP details used for new-device security alerts, and rate-limit counters</td><td className="p-3">Automatic</td></tr>
+                <tr><td className="p-3">Usage data</td><td className="p-3">Symbols searched, pages viewed and feature use</td><td className="p-3">Automatic</td></tr>
+                <tr><td className="p-3">Error data</td><td className="p-3">Error reports and stack traces, which may include IP address and user identifier</td><td className="p-3">Automatic, including Sentry where enabled</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3">
+            Account creation does not currently request payment information. This statement must
+            be reviewed if paid plans or payment processing are introduced.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xl font-semibold text-white">3. Why we use data and our legal bases</h2>
+          <ul className="list-disc space-y-2 pl-6">
+            <li><strong className="text-gray-200">Providing your account and the Service (contract):</strong> sign-in, email verification, password reset and watchlists.</li>
+            <li><strong className="text-gray-200">Keeping the Service secure (legitimate interests):</strong> rate limiting, new-device alerts, error monitoring and fraud prevention.</li>
+            <li><strong className="text-gray-200">Account and security emails (contract):</strong> verification, password resets and security alerts. <span className="text-amber-200">Confirm that marketing email is never sent without consent.</span></li>
+            <li><strong className="text-gray-200">Improving the Service (legitimate interests):</strong> aggregated, de-identified usage analysis.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xl font-semibold text-white">4. Who processes your data</h2>
+          <p>We use service providers to support the Service. The following provider inventory must be checked against the live production configuration and provider accounts before this policy is published:</p>
+          <ul className="mt-3 list-disc space-y-2 pl-6">
+            <li><strong className="text-gray-200">Vercel:</strong> frontend hosting.</li>
+            <li><strong className="text-gray-200">Render:</strong> application/API hosting, subject to confirmation of the live deployment and services.</li>
+            <li><strong className="text-gray-200">Neon:</strong> PostgreSQL database provider identified in the project documentation. The previous Neon project was deleted; do not treat Neon as an active processor until a replacement is provisioned and verified.</li>
+            <li><strong className="text-gray-200">SendGrid and Brevo:</strong> transactional email providers identified in the project configuration; confirm which is active and whether fallback is enabled.</li>
+            <li><strong className="text-gray-200">Sentry:</strong> error monitoring, where enabled.</li>
+            <li><strong className="text-gray-200">Google Analytics 4:</strong> usage analytics, loaded only after a user opts in to analytics in the app&apos;s consent controls.</li>
+            <li><strong className="text-gray-200">Market and news data providers:</strong> the Service may send symbols and search terms to these providers. Confirm the active provider list; personal data should not be sent to them for market-data requests.</li>
+          </ul>
+          <p className="mt-3">
+            Microsoft Clarity and Cloudflare are not listed as app processors in this draft because
+            they were identified as company-website services rather than app services. Reassess if
+            the app&apos;s implementation changes.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xl font-semibold text-white">4a. Cookies, analytics and consent</h2>
+          <p>
+            Essential browser storage supports sign-in, session management and security. The app
+            uses a consent control for optional analytics. Google Analytics 4 is not loaded until
+            you opt in to analytics. If you reject analytics or later withdraw consent, analytics
+            storage remains disabled. You can change your choice at any time using the privacy
+            preferences control in the site footer or below.
+          </p>
           <button
             type="button"
             onClick={() => window.dispatchEvent(new Event('tickflow:open-consent-settings'))}
-            className="my-2 inline-flex min-h-[40px] items-center rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-900"
+            className="my-3 inline-flex min-h-[40px] items-center rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
           >
             Manage privacy preferences
           </button>
+          <p>We do not sell personal data.</p>
+        </section>
 
-          <h2>Data Security</h2>
-          <p>We implement appropriate technical and organizational measures to protect your personal information.</p>
-          
-          <h2>Your Rights</h2>
-          <p>You have the right to access, correct, or delete your personal information at any time.</p>
-          
-          <h2>Contact Us</h2>
+        <section>
+          <h2 className="mb-3 text-xl font-semibold text-white">5. International transfers</h2>
           <p>
-            If you have any questions about this Privacy Policy, please contact us at{' '}
-            <a 
-              href="mailto:privacy@tickflow.com" 
-              className="text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-            >
-              privacy@tickflow.com
-            </a>
-            .
+            Some service providers may process data outside Kenya. Before publication, we must
+            identify the processing regions for each active provider and document the applicable
+            transfer mechanism and safeguards.
           </p>
-        </div>
+          <p className="mt-2 text-amber-200">
+            [CONFIRM provider regions and the contractual or other safeguards relied on for each
+            international transfer.]
+          </p>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xl font-semibold text-white">6. Retention</h2>
+          <ul className="list-disc space-y-2 pl-6">
+            <li>Account data: while your account is active, then deleted within <strong className="text-amber-200">[confirm whether 30 days]</strong> after account deletion, unless the law requires longer.</li>
+            <li>Verification codes: 10 minutes, or earlier after use.</li>
+            <li>Security and error logs: <strong className="text-amber-200">[confirm whether 90 days]</strong>.</li>
+            <li>Database backups: <strong className="text-amber-200">[specify and verify backup retention]</strong>.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xl font-semibold text-white">7. Your rights</h2>
+          <p>
+            Subject to applicable law, you may request access to, correction of or deletion of your
+            personal data, request a copy, object to or restrict certain processing, and withdraw
+            consent where processing is based on consent. Contact us using the address below. We
+            will respond within the period required by applicable law, after verifying your identity
+            where reasonably necessary.
+          </p>
+          <p className="mt-2">
+            You may also complain to the Office of the Data Protection Commissioner of Kenya at{' '}
+            <a className="underline hover:text-white" href="https://www.odpc.go.ke/" target="_blank" rel="noreferrer">www.odpc.go.ke</a>.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xl font-semibold text-white">8. Security</h2>
+          <p>
+            Measures described for the Service include encryption in transit (HTTPS), hashed
+            passwords and verification codes, rate limiting, secure session cookies and access
+            controls. No system is perfectly secure. If a personal data breach occurs, we will
+            notify affected individuals and the regulator as and when required by applicable law.
+          </p>
+          <p className="mt-2 text-amber-200">[Confirm the incident notification workflow and applicable notification timelines before publication.]</p>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xl font-semibold text-white">9. Children</h2>
+          <p>
+            The Service is intended for people aged 18 and over. We do not knowingly collect
+            personal data from anyone under 18. If we learn that we have collected such data, we
+            will take steps to delete it as required by applicable law.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xl font-semibold text-white">10. Changes</h2>
+          <p>
+            We will update this page when this policy changes. We intend to notify account holders
+            by email about material changes. The effective date will be shown when the final policy
+            is approved and published.
+          </p>
+        </section>
+
+        <section className="border-t border-gray-800 pt-6">
+          <h2 className="mb-3 text-xl font-semibold text-white">Privacy contact</h2>
+          <p>
+            Questions or requests about personal data: <a className="underline hover:text-white" href="mailto:privacy@tickflowcapital.com">privacy@tickflowcapital.com</a>.
+          </p>
+        </section>
       </div>
     </div>
-  );
-};
+  </main>
+);
 
 export default Privacy;
