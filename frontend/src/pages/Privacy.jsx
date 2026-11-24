@@ -109,6 +109,7 @@ const Privacy = () => (
             <li><strong className="text-gray-200">SendGrid and Brevo:</strong> transactional email providers identified in the project configuration; confirm which is active and whether fallback is enabled.</li>
             <li><strong className="text-gray-200">Sentry:</strong> error monitoring, where enabled.</li>
             <li><strong className="text-gray-200">Google Analytics 4:</strong> usage analytics, loaded only after a user opts in to analytics in the app&apos;s consent controls.</li>
+            <li><strong className="text-gray-200">Vercel Web Analytics:</strong> page-view analytics for the hosted frontend. Its script is loaded only after analytics consent is granted. Query strings and URL fragments are removed before events are sent.</li>
             <li><strong className="text-gray-200">Market and news data providers:</strong> the Service may send symbols and search terms to these providers. Confirm the active provider list; personal data should not be sent to them for market-data requests.</li>
           </ul>
           <p className="mt-3">
@@ -122,10 +123,12 @@ const Privacy = () => (
           <h2 className="mb-3 text-xl font-semibold text-white">4a. Cookies, analytics and consent</h2>
           <p>
             Essential browser storage supports sign-in, session management and security. The app
-            uses a consent control for optional analytics. Google Analytics 4 is not loaded until
-            you opt in to analytics. If you reject analytics or later withdraw consent, analytics
-            storage remains disabled. You can change your choice at any time using the privacy
-            preferences control in the site footer or below.
+            uses a consent control for optional analytics. Google Analytics 4 and the Vercel Web
+            Analytics script are not loaded until you opt in to analytics. If you reject analytics
+            or later withdraw consent, optional analytics collection is disabled. Vercel Analytics
+            events also have query strings and URL fragments removed before transmission.
+            You can change your choice at any time using the privacy preferences control in the
+            site footer or below.
           </p>
           <button
             type="button"
