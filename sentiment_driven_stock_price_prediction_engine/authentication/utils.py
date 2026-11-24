@@ -230,41 +230,43 @@ def send_email_sync(subject: str, to_email: str, html_content: str, plain_conten
 
     plain_text = plain_content or strip_html_tags(html_content)
     last_error = None
+    sendgrid_rejected = False
 
     for attempt in range(retry_count):
-        # --- Primary: SendGrid Web API ---
-        try:
-            from sendgrid import SendGridAPIClient
-            from sendgrid.helpers.mail import Mail
+        if not sendgrid_rejected:
+            # --- Primary: SendGrid Web API ---
+            try:
+                from sendgrid import SendGridAPIClient
+                from sendgrid.helpers.mail import Mail
 
-            message = Mail(
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to_emails=to_email,
-                subject=subject,
-                html_content=html_content,
-                plain_text_content=plain_text,
-            )
+                message = Mail(
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to_emails=to_email,
+                    subject=subject,
+                    html_content=html_content,
+                    plain_text_content=plain_text,
+                )
 
-            # 10-second timeout ensures Render doesn't hang indefinitely if SendGrid is down
-            sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=10)
-            response = sg.send(message)
+                # 10-second timeout ensures Render doesn't hang indefinitely if SendGrid is down
+                sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=10)
+                response = sg.send(message)
 
-            if 200 <= response.status_code < 300:
-                logger.info(f"[SendGrid] Email sent (status: {response.status_code})")
-                return True
-            else:
-                last_error = scrub_text(f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}")
-                logger.error(f"[SendGrid] Failed: {last_error}")
+                if 200 <= response.status_code < 300:
+                    logger.info(f"[SendGrid] Email sent (status: {response.status_code})")
+                    return True
+                else:
+                    last_error = scrub_text(f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}")
+                    logger.error(f"[SendGrid] Failed: {last_error}")
                 
-                # Don't retry on 4xx errors (except 429) as they indicate a configuration issue
-                if 400 <= response.status_code < 500 and response.status_code != 429:
-                    break 
+                    # Don't retry on 4xx errors (except 429) as they indicate a configuration issue
+                    if 400 <= response.status_code < 500 and response.status_code != 429:
+                        sendgrid_rejected = True  # skip SendGrid on later attempts; keep SMTP fallback
 
-        except ImportError:
-            logger.warning("[Email] SendGrid library not installed, falling back to SMTP.")
-        except Exception as e:
-            last_error = describe_exception(e)
-            logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {last_error}")
+            except ImportError:
+                logger.warning("[Email] SendGrid library not installed, falling back to SMTP.")
+            except Exception as e:
+                last_error = describe_exception(e)
+                logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {last_error}")
 
         # --- Fallback: Django SMTP ---
         try:

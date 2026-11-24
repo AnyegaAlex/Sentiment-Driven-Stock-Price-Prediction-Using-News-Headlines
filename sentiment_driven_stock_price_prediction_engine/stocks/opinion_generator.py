@@ -658,7 +658,7 @@ class TechnicalAnalyzer:
         except DataUnavailableError:
             raise
         except Exception as e:
-            logger.error(f"Technical analysis failed for {symbol}: {str(e)}")
+            logger.error(f"Technical analysis failed for {symbol}: {describe_exception(e)}")
             raise DataUnavailableError(symbol, "analysis failed") from e
 
     def _calculate_rsi(self, closes, window: int = 14) -> float:
@@ -784,7 +784,7 @@ class InstitutionalAnalysisEngine:
             return result
 
         except Exception as e:
-            logger.error(f"Analysis failed for {self.symbol}: {str(e)}")
+            logger.error(f"Analysis failed for {self.symbol}: {describe_exception(e)}")
             return self._error_response(str(e))
         finally:
             gc.collect()
@@ -927,7 +927,7 @@ def generate_stock_opinion(symbol: str, risk_type: str = "medium", news_text: st
         return result
 
     except ValueError as e:
-        logger.error(f"Validation error for {symbol}: {str(e)}")
+        logger.error(f"Validation error for {symbol}: {describe_exception(e)}")
         return {
             "error": str(e),
             "symbol": symbol,
@@ -935,7 +935,7 @@ def generate_stock_opinion(symbol: str, risk_type: str = "medium", news_text: st
             "status": "failed"
         }
     except Exception as e:
-        logger.error(f"Unexpected error generating opinion for {symbol}: {str(e)}")
+        logger.error(f"Unexpected error generating opinion for {symbol}: {describe_exception(e)}")
         return {
             "error": "Internal analysis error",
             "symbol": symbol,
@@ -1159,5 +1159,5 @@ def build_technical_payload(symbol: str, timeframe: str = "1d"):
             "sma_200_series": _series(closes.rolling(200).mean(), window),
         }
     except Exception as exc:
-        logger.error(f"Technical payload failed for {symbol}: {exc}")
+        logger.error(f"Technical payload failed for {symbol}: {describe_exception(exc)}")
         return None
