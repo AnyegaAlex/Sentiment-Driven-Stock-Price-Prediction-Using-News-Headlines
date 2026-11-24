@@ -145,7 +145,7 @@ describe('AuthService', () => {
       expect(result.success).toBe(true);
       expect(result.user.email_verified).toBe(true);
       expect(result.redirect).toBe('/onboarding');
-      expect(localStorage.getItem('accessToken')).toBe('acc');
+      expect(sessionStorage.getItem('accessToken')).toBe('acc');
     });
 
     it('falls back to onboarded-based redirect if redirect missing', async () => {

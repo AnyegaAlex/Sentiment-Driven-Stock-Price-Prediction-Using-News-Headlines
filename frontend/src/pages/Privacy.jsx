@@ -29,6 +29,16 @@ const Privacy = () => {
           <h2>How We Use Your Information</h2>
           <p>We use your information to provide, maintain, and improve our services, and to communicate with you.</p>
           
+          <h2>Cookies and Analytics</h2>
+          <p>Essential browser storage supports core service functionality and security. If you allow analytics, Google Analytics may collect information about how the site is used. Analytics remains disabled until you choose to enable it. You can change your choice at any time using the privacy preferences control in the site footer.</p>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event('tickflow:open-consent-settings'))}
+            className="my-2 inline-flex min-h-[40px] items-center rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-900"
+          >
+            Manage privacy preferences
+          </button>
+
           <h2>Data Security</h2>
           <p>We implement appropriate technical and organizational measures to protect your personal information.</p>
           

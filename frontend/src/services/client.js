@@ -164,6 +164,14 @@ export const setAuthToken = (token, remember = false) => {
   }
 };
 
+export const setApiKey = (apiKey) => {
+  if (apiKey) {
+    apiClient.defaults.headers.common['X-API-Key'] = apiKey;
+  } else {
+    delete apiClient.defaults.headers.common['X-API-Key'];
+  }
+};
+
 export const removeAuthToken = () => {
   delete apiClient.defaults.headers.common['Authorization'];
   localStorage.removeItem('authToken');

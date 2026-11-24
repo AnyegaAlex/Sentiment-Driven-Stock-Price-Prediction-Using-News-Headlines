@@ -30,7 +30,7 @@ This is the first open-source and auditable project from Tickflow Capital, desig
 
 | Component | URL | Status |
 |-----------|-----|--------|
-| Frontend (Vercel) | https://sentiment-driven-stock-price-predic.vercel.app/ | Live |
+| Frontend (Vercel) | https://intelligence.tickflowcapital.com/ | Live |
 | Backend API (Render) | https://sentiment-driven-stock-price-prediction.onrender.com | Live |
 | API Documentation (Swagger) | https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/ | Live |
 | LSTM Model (Gradio) | https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics | Live |
@@ -40,7 +40,7 @@ This is the first open-source and auditable project from Tickflow Capital, desig
 ## Repository
 
 The complete source code is available on GitHub:
-https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines
+https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence
 
 ---
 

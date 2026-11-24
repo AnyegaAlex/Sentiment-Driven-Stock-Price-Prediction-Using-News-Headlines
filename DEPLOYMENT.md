@@ -61,7 +61,7 @@ SECRET_KEY	Generate with python -c "import secrets; print(secrets.token_urlsafe(
 DEBUG	False
 DATABASE_URL	Internal Connection String from step 2
 ALLOWED_HOSTS	sentiment-driven-stock-price-prediction.onrender.com
-FRONTEND_URL	https://sentiment-driven-stock-price-predic.vercel.app
+FRONTEND_URL	https://intelligence.tickflowcapital.com
 ALPHA_VANTAGE_KEY	Your Alpha Vantage API key
 ENABLE_LSTM	False
 5. Deploy
@@ -110,7 +110,7 @@ Wait for deployment (1-3 minutes)
 
 Verify frontend loads:
 
-Open https://sentiment-driven-stock-price-predic.vercel.app/
+Open https://intelligence.tickflowcapital.com/
 
 5. Handle 404 on Refresh
 Create vercel.json in the frontend root:
@@ -172,7 +172,7 @@ Local Development
 Backend
 bash
 # Clone repository
-git clone https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines.git
+git clone https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence.git
 cd sentiment_driven_stock_price_prediction_engine
 
 # Setup virtual environment
