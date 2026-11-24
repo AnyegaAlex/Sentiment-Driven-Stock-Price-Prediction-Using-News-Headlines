@@ -6,7 +6,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 const RESOURCE_LINKS = [
   {
     label: 'Getting started',
-    url: 'https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/blob/main/README.md',
+    url: 'https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/blob/master/README.md',
   },
   {
     label: 'API reference',
@@ -87,7 +87,7 @@ const Footer = () => (
             Privacy preferences
           </button>
           <a
-            href="https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/blob/main/LICENSE"
+            href="https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/blob/master/LICENSE"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex min-h-[36px] items-center rounded text-sm text-gray-400 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
