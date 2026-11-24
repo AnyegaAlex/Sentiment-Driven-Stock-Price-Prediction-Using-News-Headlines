@@ -22,10 +22,10 @@
  * @component
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import PropTypes from 'prop-types';
-import { format, formatDistanceToNow, differenceInDays } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import {
   Card,
   CardContent,
@@ -36,8 +36,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -47,43 +46,16 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip as RechartsTooltip,
-  Line,
-  LineChart,
-  Legend,
-} from 'recharts';
 import {
   Loader2,
   RefreshCw,
   Download,
-  Filter,
-  ChevronDown,
   TrendingUp,
   TrendingDown,
   Minus,
@@ -91,13 +63,11 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
-  Info,
-  ExternalLink,
   Eye,
   FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/hooks/useAuth';
+import { getCardErrorMessage } from '@/utils/errorHandler';
 import apiClient from '@/services/client';
 import { trackEvent } from '@/utils/analytics';
 import { useToast } from '@/hooks/use-toast';
@@ -113,13 +83,7 @@ import PredictionModal from '@/components/PredictionModal';
 
 const RESOLUTION_DAYS = 7;
 const PAGE_SIZE = 25;
-const AVAILABLE_SYMBOLS = ['AAPL', 'TSLA', 'GOOGL', 'MSFT', 'AMZN', 'NVDA', 'IBM', 'JPM', 'PLTR', 'LULU'];
-
-const STATUS_COLORS = {
-  pending: 'bg-gray-700 text-gray-300',
-  correct: 'bg-green-400/20 text-green-400',
-  incorrect: 'bg-red-400/20 text-red-400',
-};
+const METRIC_LABELS = { f1: 'F1 score', accuracy: 'Accuracy', precision: 'Precision' };
 
 const DIRECTION_ICONS = {
   up: <TrendingUp className="h-4 w-4 text-green-400" />,
@@ -170,9 +134,14 @@ PredictionStatusBadge.propTypes = {
  * ConfidenceIndicator – Shows confidence with color coding
  */
 const ConfidenceIndicator = ({ confidence }) => {
-  const getColor = (val) => {
-    if (val >= 70) return 'bg-green-400';
-    if (val >= 50) return 'bg-gray-400';
+  if (!Number.isFinite(confidence)) {
+    return <span className="text-xs text-gray-500">Unavailable</span>;
+  }
+
+  const boundedConfidence = Math.max(0, Math.min(100, confidence));
+  const getColor = (value) => {
+    if (value >= 70) return 'bg-green-400';
+    if (value >= 50) return 'bg-gray-400';
     return 'bg-red-400';
   };
 
@@ -183,15 +152,15 @@ const ConfidenceIndicator = ({ confidence }) => {
           <div className="flex items-center gap-2">
             <div className="h-2 w-16 rounded-full bg-gray-800 overflow-hidden">
               <div
-                className={cn('h-full rounded-full transition-all', getColor(confidence))}
-                style={{ width: `${Math.min(100, confidence)}%` }}
+                className={cn('h-full rounded-full transition-all', getColor(boundedConfidence))}
+                style={{ width: `${boundedConfidence}%` }}
               />
             </div>
-            <span className="text-xs font-medium text-gray-300">{Math.round(confidence)}%</span>
+            <span className="text-xs font-medium text-gray-300">{Math.round(boundedConfidence)}%</span>
           </div>
         </TooltipTrigger>
         <TooltipContent className="bg-gray-900 border border-gray-800 text-white">
-          <p>Confidence: {Math.round(confidence)}%</p>
+          <p>Model confidence: {Math.round(boundedConfidence)}%</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -199,7 +168,7 @@ const ConfidenceIndicator = ({ confidence }) => {
 };
 
 ConfidenceIndicator.propTypes = {
-  confidence: PropTypes.number.isRequired,
+  confidence: PropTypes.number,
 };
 
 /**
@@ -235,7 +204,12 @@ PriceChangeIndicator.propTypes = {
  * ResolutionCountdown – Shows days until resolution
  */
 const ResolutionCountdown = ({ createdAt }) => {
-  const resolutionDate = new Date(createdAt);
+  const createdDate = createdAt ? new Date(createdAt) : null;
+  if (!createdDate || Number.isNaN(createdDate.getTime())) {
+    return <span className="text-sm text-gray-500">Date unavailable</span>;
+  }
+
+  const resolutionDate = new Date(createdDate);
   resolutionDate.setDate(resolutionDate.getDate() + RESOLUTION_DAYS);
   
   const now = new Date();
@@ -263,7 +237,7 @@ const ResolutionCountdown = ({ createdAt }) => {
 };
 
 ResolutionCountdown.propTypes = {
-  createdAt: PropTypes.string.isRequired,
+  createdAt: PropTypes.string,
 };
 
 // ============================================================================
@@ -271,7 +245,6 @@ ResolutionCountdown.propTypes = {
 // ============================================================================
 
 const PredictionHistory = () => {
-  const { user } = useAuth();
   const { toast } = useToast();
   const [symbol, setSymbol] = useState('');
   const [dateRange, setDateRange] = useState({ from: null, to: null });
@@ -282,6 +255,11 @@ const PredictionHistory = () => {
   const [page, setPage] = useState(0);
   const [chartMetric, setChartMetric] = useState('f1');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // A new filter set always starts at the first page.
+  useEffect(() => {
+    setPage(0);
+  }, [symbol, dateRange, outcome, source]);
 
   // ---- Queries ----
   const predictionsQuery = useQuery({
@@ -326,10 +304,9 @@ const PredictionHistory = () => {
     queryKey: ['symbols'],
     queryFn: async () => {
       const response = await apiClient.get('/symbols/');
-      return response || AVAILABLE_SYMBOLS;
+      return response || [];
     },
     staleTime: 60 * 60 * 1000,
-    placeholderData: AVAILABLE_SYMBOLS,
   });
 
   // ---- Handlers ----
@@ -344,23 +321,37 @@ const PredictionHistory = () => {
     setSelectedPrediction(null);
   }, []);
 
+  const handleClearFilters = useCallback(() => {
+    setSymbol('');
+    setDateRange({ from: null, to: null });
+    setOutcome('all');
+    setSource('all');
+    setPage(0);
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     trackEvent('prediction_history_refresh');
     try {
-      await Promise.all([
+      const results = await Promise.all([
         predictionsQuery.refetch(),
         performanceQuery.refetch(),
         driftQuery.refetch(),
       ]);
+      const failedResult = results.find((result) => result.isError);
+
+      if (failedResult) {
+        throw failedResult.error || new Error('One or more sections could not be refreshed.');
+      }
+
       toast({
-        title: "Refreshed",
-        description: "All data has been updated.",
+        title: "Updated",
+        description: "Your prediction history and performance data are up to date.",
       });
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to refresh data. Please try again.",
+        title: "Some data could not be refreshed",
+        description: getCardErrorMessage(error),
         variant: "destructive",
       });
     } finally {
@@ -382,26 +373,42 @@ const PredictionHistory = () => {
       params.append('offset', 0);
       
       const response = await apiClient.get(`/predictions/?${params.toString()}`);
-      const predictions = response.data?.results || [];
+      // The API client already unwraps Axios response.data.
+      const predictions = Array.isArray(response?.results) ? response.results : [];
       
       if (predictions.length === 0) {
-        toast({ title: "No Data", description: "No predictions to export.", variant: "destructive" });
+        toast({ title: "Nothing to export", description: "No predictions match the current filters." });
         return;
       }
       
       const headers = ['Date', 'Symbol', 'Prediction', 'Actual', 'Status', 'Confidence (%)', 'Price at Prediction', 'Price at Resolution', 'Price Change (%)', 'Source', 'Created At'];
-      const rows = predictions.map(p => [
-        p.date || '', p.stock_symbol || '', p.predicted_movement || '', p.actual_direction || 'Pending',
-        (p.is_correct !== null && p.is_correct !== undefined) ? (p.is_correct ? 'Correct' : 'Incorrect') : 'Pending',
-        p.confidence_percent || (p.confidence * 100) || 0,
-        p.price_at_prediction ? Number(p.price_at_prediction).toFixed(2) : '',
-        p.price_at_resolution ? Number(p.price_at_resolution).toFixed(2) : '',
-        p.price_change_percent || '',
-        p.source || 'lstm',
-        p.created_at ? format(new Date(p.created_at), 'yyyy-MM-dd HH:mm:ss') : '',
+      const rows = predictions.map((p) => [
+        p.date ?? '',
+        p.stock_symbol ?? '',
+        p.predicted_movement ?? '',
+        p.actual_direction ?? '',
+        p.is_correct !== null && p.is_correct !== undefined
+          ? (p.is_correct ? 'Correct' : 'Incorrect')
+          : 'Pending',
+        p.confidence_percent ?? (Number.isFinite(p.confidence) ? p.confidence * 100 : ''),
+        p.price_at_prediction !== null && p.price_at_prediction !== undefined
+          ? Number(p.price_at_prediction).toFixed(2)
+          : '',
+        p.price_at_resolution !== null && p.price_at_resolution !== undefined
+          ? Number(p.price_at_resolution).toFixed(2)
+          : '',
+        p.price_change_percent ?? '',
+        p.source ?? '',
+        p.created_at && !Number.isNaN(new Date(p.created_at).getTime())
+          ? format(new Date(p.created_at), 'yyyy-MM-dd HH:mm:ss')
+          : '',
       ]);
       
-      const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+      const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+      const csvContent = [
+        headers.map(escapeCsv).join(','),
+        ...rows.map((row) => row.map(escapeCsv).join(',')),
+      ].join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
@@ -413,7 +420,11 @@ const PredictionHistory = () => {
       
       toast({ title: "Export Successful", description: `Exported ${predictions.length} predictions.` });
     } catch (error) {
-      toast({ title: "Export Failed", description: error.message || "Failed to export.", variant: "destructive" });
+      toast({
+        title: "Export couldn’t be completed",
+        description: getCardErrorMessage(error),
+        variant: "destructive",
+      });
     }
   }, [symbol, dateRange, outcome, source, toast]);
 
@@ -422,10 +433,16 @@ const PredictionHistory = () => {
   const total = predictionsQuery.data?.total || 0;
   const perfData = performanceQuery.data;
   const driftData = driftQuery.data;
-  const availableSymbols = symbolsQuery.data || AVAILABLE_SYMBOLS;
+  const availableSymbols = symbolsQuery.data || [];
 
   const isLoading = predictionsQuery.isLoading || performanceQuery.isLoading;
-  const isError = predictionsQuery.isError || performanceQuery.isError;
+  const isPredictionLoading = predictionsQuery.isLoading;
+  const isPerformanceLoading = performanceQuery.isLoading;
+  const isPredictionError = predictionsQuery.isError;
+  const isPerformanceError = performanceQuery.isError;
+  const hasActiveFilters = Boolean(
+    symbol || dateRange?.from || dateRange?.to || outcome !== 'all' || source !== 'all'
+  );
 
   // ---- Render ----
   return (
@@ -470,11 +487,21 @@ const PredictionHistory = () => {
       )}
 
       {/* Summary Cards */}
-      {isLoading ? (
+      {isPerformanceLoading ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-xl bg-gray-800" />
           ))}
+        </div>
+      ) : isPerformanceError ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-gray-800 bg-gray-900 p-4 sm:flex-row sm:items-center sm:justify-between" role="alert">
+          <div>
+            <p className="font-medium text-white">Performance summary unavailable</p>
+            <p className="mt-1 text-sm text-gray-400">{getCardErrorMessage(performanceQuery.error)}</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => performanceQuery.refetch()}>
+            Try again
+          </Button>
         </div>
       ) : (
         <PredictionSummaryCards data={perfData} />
@@ -500,7 +527,7 @@ const PredictionHistory = () => {
             <div>
               <CardTitle className="text-white">Performance Trends</CardTitle>
               <CardDescription className="text-gray-400">
-                {chartMetric === 'f1' ? 'F1 Score' : 'Accuracy'} over the last 30 days
+                {METRIC_LABELS[chartMetric]} by week, last 30 days (resolved predictions only)
               </CardDescription>
             </div>
             <Tabs value={chartMetric} onValueChange={setChartMetric} className="w-auto">
@@ -513,11 +540,20 @@ const PredictionHistory = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <PerformanceChart
-            data={perfData}
-            metric={chartMetric}
-            isLoading={isLoading}
-          />
+          {isPerformanceError ? (
+            <div className="flex flex-col gap-3 py-8 text-sm text-gray-400" role="alert">
+              <p>Performance trends could not be loaded. Your prediction list is still available below.</p>
+              <Button variant="outline" size="sm" className="w-fit" onClick={() => performanceQuery.refetch()}>
+                Try again
+              </Button>
+            </div>
+          ) : (
+            <PerformanceChart
+              data={perfData}
+              metric={chartMetric}
+              isLoading={isPerformanceLoading}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -540,28 +576,39 @@ const PredictionHistory = () => {
           </div>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isPredictionLoading ? (
             <div className="flex justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              <Loader2 className="h-8 w-8 animate-spin text-gray-400" aria-label="Loading predictions" />
             </div>
-          ) : isError ? (
-            <div className="flex items-center justify-center gap-2 py-12 text-red-400">
-              <AlertTriangle className="h-5 w-5" />
-              <span>Error loading predictions. Please try again.</span>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleRefresh}
+          ) : isPredictionError ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-12 text-center" role="alert">
+              <AlertTriangle className="h-5 w-5 text-gray-400" aria-hidden="true" />
+              <p className="max-w-lg text-sm text-gray-400">{getCardErrorMessage(predictionsQuery.error)}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => predictionsQuery.refetch()}
                 className="border-white text-white hover:bg-white hover:text-black min-h-[44px]"
               >
-                Retry
+                Try again
               </Button>
             </div>
           ) : predictions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-              <FileText className="mb-4 h-12 w-12 text-gray-500" />
-              <p className="text-lg font-medium">No predictions found</p>
-              <p className="text-sm">Try adjusting your filters or generate a new prediction</p>
+            <div className="flex flex-col items-center justify-center py-12 text-center text-gray-400">
+              <FileText className="mb-4 h-12 w-12 text-gray-500" aria-hidden="true" />
+              <p className="text-lg font-medium">
+                {hasActiveFilters ? 'No predictions match these filters' : 'No predictions have been recorded yet'}
+              </p>
+              <p className="mt-1 max-w-md text-sm">
+                {hasActiveFilters
+                  ? 'Try a different symbol, date range or outcome.'
+                  : 'New predictions will appear here once they have been generated.'}
+              </p>
+              {hasActiveFilters && (
+                <Button variant="outline" size="sm" className="mt-4" onClick={handleClearFilters}>
+                  Clear filters
+                </Button>
+              )}
             </div>
           ) : (
             <>
@@ -584,19 +631,29 @@ const PredictionHistory = () => {
                   <TableBody>
                     {predictions.map((pred) => {
                       const isResolved = pred.is_correct !== null && pred.is_correct !== undefined;
-                      const priceChange = pred.price_change_percent || null;
+                      const priceChange = pred.price_change_percent ?? null;
                       const isPending = !isResolved;
                       
                       return (
                         <TableRow
                           key={pred.id}
-                          className="cursor-pointer hover:bg-gray-800/50 border-b border-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-                          onClick={() => handleRowClick(pred)}
+                          className="cursor-pointer border-b border-gray-800 hover:bg-gray-800/50 active:bg-gray-800/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                          aria-label={`Open prediction details for ${pred.stock_symbol}`}
+                          onClick={(e) => {
+                            if (e.target.closest('button, a, [role="button"]')) return;
+                            handleRowClick(pred);
+                          }}
                           tabIndex={0}
-                          onKeyDown={(e) => e.key === 'Enter' && handleRowClick(pred)}
+                          onKeyDown={(e) => {
+                            if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+                            e.preventDefault();
+                            handleRowClick(pred);
+                          }}
                         >
                           <TableCell className="text-sm text-gray-300">
-                            {format(new Date(pred.date), 'MMM d, yyyy')}
+                            {pred.date && !Number.isNaN(new Date(pred.date).getTime())
+                              ? format(new Date(pred.date), 'MMM d, yyyy')
+                              : 'Date unavailable'}
                           </TableCell>
                           <TableCell className="font-mono font-medium text-white">
                             {pred.stock_symbol}
@@ -604,7 +661,7 @@ const PredictionHistory = () => {
                           <TableCell>
                             <div className="flex items-center gap-1">
                               {DIRECTION_ICONS[pred.predicted_movement] || DIRECTION_ICONS.neutral}
-                              <span className="capitalize text-gray-300">{pred.predicted_movement}</span>
+                              <span className="capitalize text-gray-300">{pred.predicted_movement || 'Unavailable'}</span>
                             </div>
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
@@ -634,11 +691,19 @@ const PredictionHistory = () => {
                             )}
                           </TableCell>
                           <TableCell>
-                            <ConfidenceIndicator confidence={pred.confidence * 100 || 0} />
+                            <ConfidenceIndicator
+                              confidence={
+                                Number.isFinite(pred.confidence)
+                                  ? Number.isFinite(pred.confidence_percent)
+                                    ? pred.confidence_percent
+                                    : pred.confidence * 100
+                                  : null
+                              }
+                            />
                           </TableCell>
                           <TableCell className="hidden sm:table-cell">
                             {isPending ? (
-                              <ResolutionCountdown createdAt={pred.created_at} />
+                              <ResolutionCountdown createdAt={pred.created_at || pred.date} />
                             ) : (
                               <span className="text-sm text-green-400">✓ Resolved</span>
                             )}
@@ -666,8 +731,8 @@ const PredictionHistory = () => {
 
               {/* Pagination */}
               <div className="flex items-center justify-between border-t border-gray-800 px-4 py-4">
-                <div className="text-sm text-gray-400">
-                  Showing {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+                <div className="text-sm text-gray-400" aria-live="polite">
+                  Showing {total === 0 ? 0 : page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
                 </div>
                 <div className="flex gap-2">
                   <Button

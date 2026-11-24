@@ -183,15 +183,12 @@ class TestFormatInvestmentAnalysis:
         assert result['error'] == 'Something went wrong'
         assert result['symbol'] == 'AAPL'
 
-    def test_format_investment_analysis_missing_fields(self):
-        """Missing optional fields are filled with defaults."""
+    def test_format_investment_analysis_missing_fields_is_not_defaulted(self):
+        """Missing recommendation/confidence are never replaced with defaults (no HOLD, no 0%)."""
         analysis = {'symbol': 'GOOGL'}
         result = format_investment_analysis(analysis)
-        assert result['success'] is True
-        assert result['symbol'] == 'GOOGL'
-        assert result['analysis']['recommendation'] == 'HOLD'
-        assert result['analysis']['confidence'] == 0
-        assert 'investment_thesis' in result['analysis']
+        assert result['success'] is False
+        assert 'HOLD' not in str(result)
 
     def test_format_investment_analysis_exception(self):
         """If formatting fails, return error dict."""
@@ -220,20 +217,14 @@ class TestTechnicalAnalyzer:
             assert result.current_price == 100
             mock_cache.assert_called_once_with('AAPL')
 
-    def test_analyze_with_insufficient_data_fallback(self):
-        """If data is empty or < MIN_DATA_POINTS, use fallback metrics."""
+    def test_analyze_with_insufficient_data_raises_not_fallback(self):
+        """Empty or short price history raises DataUnavailableError; no fallback metrics are produced."""
+        from stocks.opinion_generator import DataUnavailableError
         with patch('stocks.opinion_generator.TechnicalAnalyzer._get_data') as mock_get_data:
             mock_get_data.return_value = pd.DataFrame()  # empty
             analyzer = TechnicalAnalyzer()
-            with patch.object(analyzer, '_get_fallback_metrics') as mock_fallback:
-                mock_fallback.return_value = TechnicalMetrics(
-                    sma_50=100, sma_200=95, rsi=50, current_price=100,
-                    volatility=0.2, confidence=30,
-                    market_regime=MarketRegimeResult(MarketRegime.NEUTRAL, 50)
-                )
-                result = analyzer.analyze('AAPL')
-                assert result.confidence == 30
-                mock_fallback.assert_called_with('AAPL')
+            with pytest.raises(DataUnavailableError):
+                analyzer.analyze('AAPL')
 
     def test_analyze_calculates_metrics_from_data(self, mock_yfinance_data):
         """When data is sufficient, compute technical metrics."""
@@ -344,16 +335,9 @@ class TestTechnicalAnalyzer:
         conf = analyzer._calculate_confidence(data, sma_50, sma_200, current_price, rsi, volatility)
         assert 0 <= conf <= 100
 
-    def test__get_fallback_metrics(self):
-        """Fallback metrics use Config.FALLBACK_PRICES or default."""
-        analyzer = TechnicalAnalyzer()
-        metrics = analyzer._get_fallback_metrics('AAPL')
-        assert metrics.current_price == Config.FALLBACK_PRICES.get('AAPL')
-        assert metrics.confidence == 30.0
-        assert metrics.market_regime.regime == MarketRegime.NEUTRAL
-        # Unknown symbol uses default
-        metrics2 = analyzer._get_fallback_metrics('UNKNOWN')
-        assert metrics2.current_price == Config.DEFAULT_FALLBACK_PRICE
+    def test_no_fallback_metrics_helper_exists(self):
+        """Synthetic fallback metrics were removed: no helper may produce prices or confidence."""
+        assert not hasattr(TechnicalAnalyzer, '_get_fallback_metrics')
 
 
 # ============================================================================
@@ -440,17 +424,12 @@ class TestInstitutionalAnalysisEngine:
             mock_metrics.current_price = 0.0
             mock_analyze.return_value = mock_metrics
 
-            with patch.object(TechnicalAnalyzer, '_get_fallback_metrics') as mock_fallback:
-                fallback = TechnicalMetrics(
-                    sma_50=100, sma_200=95, rsi=50, current_price=100.0,
-                    volatility=0.2, confidence=30,
-                    market_regime=MarketRegimeResult(MarketRegime.NEUTRAL, 50)
-                )
-                mock_fallback.return_value = fallback
-                engine = InstitutionalAnalysisEngine('AAPL', 'medium')
-                result = engine.full_analysis()
-                assert result['price'] == 100.0
-                mock_fallback.assert_called_once_with('AAPL')
+            # No fallback price may be substituted for a zero/absent live price.
+            assert not hasattr(TechnicalAnalyzer, '_get_fallback_metrics')
+            engine = InstitutionalAnalysisEngine('AAPL', 'medium')
+            result = engine.full_analysis()
+            assert result.get('price') != 100.0
+            assert result.get('price') in (0.0, None)
 
     def test_full_analysis_exception_returns_error(self):
         with patch('stocks.opinion_generator.TechnicalAnalyzer.analyze') as mock_analyze:
@@ -504,7 +483,7 @@ class TestInstitutionalAnalysisEngine:
             engine = InstitutionalAnalysisEngine('AAPL', 'medium')
             result = engine._get_lstm_prediction('')
             assert result['direction'] == 'UNAVAILABLE'
-            assert result['confidence'] == 0.0
+            assert result['confidence'] is None
             assert 'error' in result
 
     def test__get_lstm_prediction_exception(self):

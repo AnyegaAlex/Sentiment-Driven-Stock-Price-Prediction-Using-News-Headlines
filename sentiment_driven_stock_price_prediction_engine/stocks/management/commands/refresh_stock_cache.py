@@ -15,7 +15,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.core.cache import cache
 from django.db import connection
 
-from stocks.views import get_fallback_analysis, get_fallback_technical
+from stocks.opinion_generator import build_technical_payload
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class Command(BaseCommand):
             cached_count = 0
             for symbol in symbols:
                 cache_key = f"stock_analysis_{symbol}_medium_medium-term"
-                cache_key_tech = f"technical_{symbol}_1d"
+                cache_key_tech = f"tech_{symbol}_1d"
 
                 if not force and cache.get(cache_key):
                     if not quiet:
@@ -63,12 +63,10 @@ class Command(BaseCommand):
                     continue
 
                 try:
-                    # Use fallback to avoid external API calls during caching
-                    data = get_fallback_analysis(symbol, risk_type='medium', hold_time='medium-term')
-                    cache.set(cache_key, data, timeout=600)  # 10 minutes
-
-                    # Also warm technical indicators
-                    tech = get_fallback_technical(symbol)
+                    # Warm technical indicators from live market data only (no synthetic values)
+                    tech = build_technical_payload(symbol)
+                    if tech is None:
+                        raise RuntimeError("no live market data")
                     cache.set(cache_key_tech, tech, timeout=300)
 
                     cached_count += 1

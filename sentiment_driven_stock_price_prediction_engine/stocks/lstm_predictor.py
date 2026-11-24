@@ -123,90 +123,22 @@ def compute_lstm_features(symbol: str) -> dict:
 # 3. Sentiment Fallback
 # ============================================================================
 
-def get_sentiment_fallback(symbol: str, news_text: str = "", request_id: str = "") -> dict:
+def _lstm_unavailable(reason: str) -> dict:
     """
-    Generate a directional prediction based on recent news sentiment.
-
-    This is used when the LSTM model cannot produce a prediction (e.g.,
-    insufficient price history, model not loaded, feature errors).
-
-    Args:
-        symbol (str): Stock ticker.
-        news_text (str): Optional news headline provided in the request.
-        request_id (str): Optional request ID for logging context.
-
-    Returns:
-        dict: {
-            'prediction': 'UP' / 'DOWN' / 'HOLD',
-            'confidence': float (0-100),
-            'success': bool,
-            'sentiment_score': float,
-            'fallback': True,
-            'message': str,
-            'error': str (only if success=False)
-        }
+    LSTM output is unavailable for this request. Never substitute a sentiment
+    estimate here: that output must not be recorded or shown as an LSTM prediction.
     """
-    try:
-        sentiment_score = 0.0
-
-        if news_text:
-            # Use provided news text
-            result = analyze_sentiment(news_text)
-            label = result.get('label', 'neutral')
-            score = result.get('score', 0.0)
-            sentiment_score = score if label == 'positive' else -score if label == 'negative' else 0.0
-        else:
-            # Query recent news from the database (last 7 days)
-            try:
-                from news.models import ProcessedNews
-                cutoff = timezone.now() - timedelta(days=7)
-                news = ProcessedNews.objects.filter(
-                    symbol=symbol.upper(),
-                    published_at__gte=cutoff
-                )
-                if not news.exists():
-                    return _fallback_result('HOLD', 0.0, 0.0, 'No recent news found')
-                scores = [n.sentiment_score for n in news if n.sentiment_score is not None]
-                if not scores:
-                    return _fallback_result('HOLD', 0.0, 0.0, 'No sentiment scores available')
-                sentiment_score = sum(scores) / len(scores)
-            except ImportError:
-                logger.warning("ProcessedNews model not available; cannot fetch news")
-                return _fallback_result('HOLD', 0.0, 0.0, 'News model unavailable')
-
-        # Map sentiment to direction and confidence
-        if sentiment_score > SENTIMENT_THRESHOLD:
-            direction = 'UP'
-            confidence = min(abs(sentiment_score) * 100, 90) + 10
-        elif sentiment_score < -SENTIMENT_THRESHOLD:
-            direction = 'DOWN'
-            confidence = min(abs(sentiment_score) * 100, 90) + 10
-        else:
-            direction = 'HOLD'
-            confidence = 50.0
-
-        return _fallback_result(direction, round(confidence, 1), round(sentiment_score, 3),
-                                'Using sentiment-based fallback')
-
-    except Exception as e:
-        logger.error(f"Sentiment fallback failed for {symbol}: {e}")
-        return _fallback_result('HOLD', 0.0, 0.0, f'Fallback error: {str(e)}', success=False)
-
-
-def _fallback_result(prediction: str, confidence: float, sentiment_score: float,
-                     message: str, success: bool = True) -> dict:
-    """Build a consistent fallback result dictionary."""
-    result = {
-        'prediction': prediction,
-        'confidence': confidence,
-        'success': success,
-        'sentiment_score': sentiment_score,
-        'fallback': True,
-        'message': message,
+    return {
+        'prediction': None,
+        'confidence': None,
+        'success': False,
+        'sentiment_score': None,
+        'close_price': None,
+        'fallback': False,
+        'unavailable': True,
+        'message': reason,
+        'error': reason,
     }
-    if not success:
-        result['error'] = message
-    return result
 
 
 # ============================================================================
@@ -289,9 +221,7 @@ class LSTMPredictor:
         # --------------------------------------------------------------------
         if self.model is None:
             logger.warning(f"Model not loaded – using fallback for {ctx}")
-            result = get_sentiment_fallback(symbol, news_text, request_id)
-            result['error'] = 'Model not loaded'
-            return result
+            return _lstm_unavailable('Model not loaded')
 
         # --------------------------------------------------------------------
         # 2. Compute technical features (cached)
@@ -299,19 +229,19 @@ class LSTMPredictor:
         tech_features = compute_lstm_features(symbol)
         if tech_features is None:
             logger.warning(f"Failed to compute features for {ctx} – using fallback")
-            result = get_sentiment_fallback(symbol, news_text, request_id)
-            result['error'] = 'Insufficient price data'
-            return result
+            return _lstm_unavailable('Insufficient price data')
 
         # Validate required keys and types
         required_keys = ['MA7', 'MA21', 'STD21', 'RSI14', 'UpperBB', 'LowerBB', 'Close']
         for key in required_keys:
             value = tech_features.get(key)
-            if value is None or not np.isfinite(value):
+            try:
+                finite = value is not None and np.isfinite(float(value))
+            except (TypeError, ValueError):
+                finite = False
+            if not finite:
                 logger.warning(f"Invalid feature {key} for {ctx} – using fallback")
-                result = get_sentiment_fallback(symbol, news_text, request_id)
-                result['error'] = f'Invalid feature: {key}'
-                return result
+                return _lstm_unavailable(f'Invalid feature: {key}')
 
         # --------------------------------------------------------------------
         # 3. Compute sentiment score from FinBERT
@@ -321,11 +251,12 @@ class LSTMPredictor:
             label = sentiment_result.get('label', 'neutral')
             score = sentiment_result.get('score', 0.0)
             sentiment_score = score if label == 'positive' else -score if label == 'negative' else 0.0
-            if not np.isfinite(sentiment_score):
-                sentiment_score = 0.0
         except Exception as e:
             logger.error(f"Sentiment analysis failed for {ctx}: {e}")
-            sentiment_score = 0.0
+            return _lstm_unavailable('Sentiment analysis failed')
+        if not np.isfinite(sentiment_score):
+            logger.warning(f"Non-finite sentiment score for {ctx}")
+            return _lstm_unavailable('Invalid sentiment score')
 
         # Build feature vector (7 features)
         try:
@@ -340,16 +271,12 @@ class LSTMPredictor:
             ], dtype=np.float32)
         except (TypeError, ValueError) as e:
             logger.warning(f"Feature conversion error for {ctx}: {e}")
-            result = get_sentiment_fallback(symbol, news_text, request_id)
-            result['error'] = f'Feature conversion error: {e}'
-            return result
+            return _lstm_unavailable(f'Feature conversion error: {e}')
 
         # Check for NaN/Inf
         if not np.isfinite(features).all():
             logger.warning(f"Invalid features (NaN/Inf) for {ctx}")
-            result = get_sentiment_fallback(symbol, news_text, request_id)
-            result['error'] = 'Invalid features (NaN or Inf)'
-            return result
+            return _lstm_unavailable('Invalid features (NaN or Inf)')
 
         # --------------------------------------------------------------------
         # 4. Run LSTM model
@@ -361,9 +288,7 @@ class LSTMPredictor:
                 prob = torch.sigmoid(output).item()
         except Exception as e:
             logger.error(f"Model inference error for {ctx}: {e}")
-            result = get_sentiment_fallback(symbol, news_text, request_id)
-            result['error'] = f'Inference error: {str(e)}'
-            return result
+            return _lstm_unavailable(f'Inference error: {str(e)}')
 
         prediction = 'UP' if prob >= 0.5 else 'DOWN'
         confidence = round((prob if prob >= 0.5 else 1 - prob) * 100, 1)

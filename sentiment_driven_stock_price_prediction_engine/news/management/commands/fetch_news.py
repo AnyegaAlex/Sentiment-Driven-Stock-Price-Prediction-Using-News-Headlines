@@ -1,4 +1,5 @@
 # news/management/commands/fetch_news.py
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from news.services import ProviderManager, IngestionService
 from news.models import StockSymbol
@@ -13,6 +14,9 @@ class Command(BaseCommand):
         parser.add_argument('--symbol', type=str, help='Specific symbol to fetch (e.g. AAPL)')
 
     def handle(self, *args, **options):
+        if not getattr(settings, 'NEWS_INGESTION_ENABLED', False):
+            self.stdout.write(self.style.WARNING('News ingestion is disabled (NEWS_INGESTION_ENABLED is not set). No provider calls made.'))
+            return
         symbol_arg = options.get('symbol')
         
         if symbol_arg:

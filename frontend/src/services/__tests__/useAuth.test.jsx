@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import React from 'react';
+
 
 // Mock client BEFORE import
 vi.mock('@/services/client', () => ({
@@ -16,9 +16,14 @@ vi.mock('@/services/client', () => ({
 }));
 
 import apiClient, { setAuthToken, restoreAuthToken } from '@/services/client';
-import { useAuth } from '../useAuth';
+import { useAuth } from '../../hooks/useAuth';
+import { AuthSessionProvider as AuthProvider } from '../../context/AuthSessionProvider';
 
-const wrapper = ({ children }) => <MemoryRouter>{children}</MemoryRouter>;
+const wrapper = ({ children }) => (
+  <MemoryRouter>
+    <AuthProvider>{children}</AuthProvider>
+  </MemoryRouter>
+);
 
 describe('useAuth hook', () => {
   beforeEach(() => {
@@ -33,7 +38,12 @@ describe('useAuth hook', () => {
   // ==========================================================================
 
   describe('login', () => {
-    it('stores tokens and returns { success, user } on successful login', async () => {
+    it('stores tokens for this session and clears an older remembered session', async () => {
+      localStorage.setItem('accessToken', 'old-access-token');
+      localStorage.setItem('refreshToken', 'old-refresh-token');
+      localStorage.setItem('authToken', 'old-auth-token');
+      localStorage.setItem('user', JSON.stringify({ id: 99 }));
+
       apiClient.post.mockResolvedValueOnce({
         success: true,
         data: {
@@ -58,6 +68,10 @@ describe('useAuth hook', () => {
       expect(loginResult.success).toBe(true);
       expect(loginResult.user.username).toBe('test');
       expect(sessionStorage.getItem('accessToken')).toBe('access-token');
+      expect(localStorage.getItem('accessToken')).toBeNull();
+      expect(localStorage.getItem('refreshToken')).toBeNull();
+      expect(localStorage.getItem('authToken')).toBeNull();
+      expect(localStorage.getItem('user')).toBeNull();
       expect(setAuthToken).toHaveBeenCalled();
     });
 

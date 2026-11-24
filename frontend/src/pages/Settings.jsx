@@ -1,25 +1,25 @@
 // pages/Settings.jsx
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/services/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Alert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
-  User, Bell, Monitor, Shield, Trash2, Code,
+  User, Bell, Shield, Trash2, Code, Target,
   AlertCircle, CheckCircle 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getActionErrorMessage } from '@/utils/errorHandler';
 import GeneralTab from '@/components/settings/GeneralTab';
 import NotificationsTab from '@/components/settings/NotificationsTab';
-import DisplayTab from '@/components/settings/DisplayTab';
 import SecurityTab from '@/components/settings/SecurityTab';
 import AccountTab from '@/components/settings/AccountTab';
 import DeveloperTab from '@/components/settings/DeveloperTab';
+import InvestmentProfileTab from '@/components/settings/InvestmentProfileTab';
 
 
 // ============================================================
@@ -48,10 +48,41 @@ const EXPERIENCE_MAP = {
 };
 
 
+const LANGUAGE_CODES = {
+  english: 'en', spanish: 'es', french: 'fr', german: 'de', portuguese: 'pt',
+  italian: 'it', japanese: 'ja', korean: 'ko', chinese: 'zh',
+};
+
+const toLanguageCode = (value) => {
+  if (!value) return undefined;
+  const v = String(value).trim().toLowerCase();
+  if (/^[a-z]{2}$/.test(v)) return v;
+  return LANGUAGE_CODES[v];
+};
+
+// Only send fields the user actually set, in the shape the backend validates.
+const buildPreferencePayload = (data = {}) => {
+  const payload = {};
+  if (data.investment_goal) payload.investment_goal = GOAL_MAP[data.investment_goal] || data.investment_goal;
+  if (data.risk_tolerance) payload.risk_tolerance = RISK_MAP[data.risk_tolerance] || data.risk_tolerance;
+  if (data.experience_level) payload.experience_level = EXPERIENCE_MAP[data.experience_level] || data.experience_level;
+  if (data.theme) payload.theme = data.theme;
+  ['email_notifications', 'price_alerts', 'news_alerts', 'weekly_digest'].forEach((key) => {
+    if (typeof data[key] === 'boolean') payload[key] = data[key];
+  });
+  const language = toLanguageCode(data.language);
+  if (language) payload.language = language;
+  if (data.timezone) payload.timezone = data.timezone;
+  return payload;
+};
+
+
 const Settings = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('general');
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const validTabs = ['general', 'investment', 'notifications', 'security', 'developer', 'account'];
+  const [activeTab, setActiveTab] = useState(validTabs.includes(requestedTab) ? requestedTab : 'general');
   const [saveStatus, setSaveStatus] = useState(null);
   const queryClient = useQueryClient();
 
@@ -60,44 +91,20 @@ const Settings = () => {
     queryKey: ['preferences'],
     queryFn: async () => {
       const response = await apiClient.get('/auth/preferences/');
-      return response.data || {};
+      return response?.data ?? response ?? {};
     },
     staleTime: 5 * 60 * 1000,
     enabled: !!user,
   });
 
-  // ---- Profile Update ----
-  const profileMutation = useMutation({
-    mutationFn: async (data) => {
-      const response = await apiClient.patch('/auth/profile/', data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['user']);
-      queryClient.invalidateQueries(['profile']);
-    },
-  });
-
   // ---- Preferences Update ----
   const preferencesMutation = useMutation({
     mutationFn: async (data) => {
-      const mappedData = {
-        investment_goal: GOAL_MAP[data.investment_goal] || data.investment_goal || 'growth',
-        risk_tolerance: RISK_MAP[data.risk_tolerance] || data.risk_tolerance || 'moderate',
-        experience_level: EXPERIENCE_MAP[data.experience_level] || data.experience_level || 'beginner',
-        theme: data.theme || 'system',
-        email_notifications: data.email_notifications,
-        price_alerts: data.price_alerts,
-        news_alerts: data.news_alerts,
-        language: data.language || 'en',
-        timezone: data.timezone || 'UTC',
-      };
-      
-      const response = await apiClient.patch('/auth/preferences/', mappedData);
-      return response.data;
+      const response = await apiClient.patch('/auth/preferences/', buildPreferencePayload(data));
+      return response?.data ?? response;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['preferences']);
+      queryClient.invalidateQueries({ queryKey: ['preferences'] });
     },
   });
 
@@ -106,23 +113,9 @@ const Settings = () => {
     setSaveStatus({ type: 'saving', message: 'Saving...' });
 
     try {
-      await profileMutation.mutateAsync({
-        first_name: formData.first_name || '',
-        last_name: formData.last_name || '',
-        nickname: formData.nickname || '',
-        bio: formData.bio || '',
-      });
-      
       await preferencesMutation.mutateAsync({
-        language: formData.language || 'en',
-        timezone: formData.timezone || 'UTC',
-        theme: formData.theme || 'system',
-        investment_goal: formData.investment_goal || 'growth',
-        risk_tolerance: formData.risk_tolerance || 'moderate',
-        experience_level: formData.experience_level || 'beginner',
-        email_notifications: formData.email_notifications !== undefined ? formData.email_notifications : true,
-        price_alerts: formData.price_alerts !== undefined ? formData.price_alerts : true,
-        news_alerts: formData.news_alerts !== undefined ? formData.news_alerts : true,
+        language: formData.language,
+        timezone: formData.timezone,
       });
 
       setSaveStatus({ type: 'success', message: 'Settings saved successfully!' });
@@ -130,36 +123,24 @@ const Settings = () => {
       console.error('[Settings] Save error:', error);
       setSaveStatus({
         type: 'error',
-        message: error.response?.data?.error || error.response?.data?.message || 'Failed to save settings. Please try again.',
+        message: getActionErrorMessage(error, 'We couldn’t save your settings. Please try again.'),
       });
     } finally {
       setTimeout(() => setSaveStatus(null), 3000);
     }
   };
 
-  const handlePreferencesSave = async (formData, tab) => {
+  const handlePreferencesSave = async (formData) => {
     setSaveStatus({ type: 'saving', message: 'Saving...' });
 
     try {
-      const mappedData = {
-        investment_goal: GOAL_MAP[formData.investment_goal] || formData.investment_goal || 'growth',
-        risk_tolerance: RISK_MAP[formData.risk_tolerance] || formData.risk_tolerance || 'moderate',
-        experience_level: EXPERIENCE_MAP[formData.experience_level] || formData.experience_level || 'beginner',
-        theme: formData.theme || 'system',
-        email_notifications: formData.email_notifications !== undefined ? formData.email_notifications : true,
-        price_alerts: formData.price_alerts !== undefined ? formData.price_alerts : true,
-        news_alerts: formData.news_alerts !== undefined ? formData.news_alerts : true,
-        language: formData.language || 'en',
-        timezone: formData.timezone || 'UTC',
-      };
-      
-      await preferencesMutation.mutateAsync(mappedData);
+      await preferencesMutation.mutateAsync(formData);
       setSaveStatus({ type: 'success', message: 'Preferences saved successfully!' });
     } catch (error) {
       console.error('[Settings] Preferences save error:', error);
       setSaveStatus({
         type: 'error',
-        message: error.response?.data?.error || error.response?.data?.message || 'Failed to save preferences. Please try again.',
+        message: getActionErrorMessage(error, 'We couldn’t save your preferences. Please try again.'),
       });
     } finally {
       setTimeout(() => setSaveStatus(null), 3000);
@@ -188,7 +169,7 @@ const Settings = () => {
               Failed to Load Settings
             </h3>
             <p className="text-gray-400 mt-2">
-              {error.message || 'Unable to load your preferences. Please try again.'}
+              {getActionErrorMessage(error, 'We couldn’t load your settings. Please try again.')}
             </p>
             <Button 
               onClick={() => refetch()} 
@@ -205,8 +186,8 @@ const Settings = () => {
 
   const tabs = [
     { id: 'general', label: 'General', icon: User },
+    { id: 'investment', label: 'Investment Profile', icon: Target },
     { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'display', label: 'Display', icon: Monitor },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'developer', label: 'Developer', icon: Code },
     { id: 'account', label: 'Account', icon: Trash2 },
@@ -216,15 +197,18 @@ const Settings = () => {
     <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6 bg-black text-white">
       {/* Page Header */}
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-white">Settings</h1>
+        <h1 className="text-2xl font-semibold text-white">Settings</h1>
         <p className="text-sm text-gray-400">
-          Manage your account preferences and settings
+          Manage your account, notifications, security and developer access.
         </p>
       </div>
 
       {/* Save Status */}
       {saveStatus && (
-        <div className={cn(
+        <div
+          role={saveStatus.type === 'error' ? 'alert' : 'status'}
+          aria-live={saveStatus.type === 'error' ? 'assertive' : 'polite'}
+          className={cn(
           'flex items-center gap-2 p-4 rounded-lg border animate-slide-down',
           saveStatus.type === 'success' 
             ? 'border-green-400 bg-green-400/10 text-green-400'
@@ -269,18 +253,19 @@ const Settings = () => {
           />
         </TabsContent>
 
-        <TabsContent value="notifications" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
-          <NotificationsTab 
-            preferences={preferences} 
-            onSave={(data) => handlePreferencesSave(data, 'notifications')}
+        <TabsContent value="investment" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
+          <InvestmentProfileTab
+            preferences={preferences}
+            onSave={handlePreferencesSave}
             isSaving={saveStatus?.type === 'saving'}
+            saveStatus={saveStatus}
           />
         </TabsContent>
 
-        <TabsContent value="display" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
-          <DisplayTab 
+        <TabsContent value="notifications" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
+          <NotificationsTab 
             preferences={preferences} 
-            onSave={(data) => handlePreferencesSave(data, 'display')}
+            onSave={handlePreferencesSave}
             isSaving={saveStatus?.type === 'saving'}
           />
         </TabsContent>

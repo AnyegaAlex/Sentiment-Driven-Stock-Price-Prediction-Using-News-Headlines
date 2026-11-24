@@ -394,11 +394,11 @@ class RequestLoggingMiddleware:
             if user and getattr(user, 'is_authenticated', False):
                 # Use update_or_create to avoid race conditions
                 from django.db.models import F
-                SymbolUsage.objects.update_or_create(
-                    user=user,
-                    symbol=symbol,
-                    defaults={'count': F('count') + 1}
+                usage, created = SymbolUsage.objects.get_or_create(
+                    user=user, symbol=symbol, defaults={'count': 1}
                 )
+                if not created:
+                    SymbolUsage.objects.filter(pk=usage.pk).update(count=F('count') + 1)
             else:
                 # Anonymous usage – cache only
                 cache_key = f"symbol_usage_anon_{symbol}"

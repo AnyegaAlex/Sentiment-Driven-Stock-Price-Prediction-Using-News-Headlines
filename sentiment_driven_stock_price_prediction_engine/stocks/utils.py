@@ -154,21 +154,27 @@ def resolve_prediction(prediction: Prediction, resolution_days: int = 7) -> bool
     try:
         resolution_date = prediction.date + timedelta(days=resolution_days)
 
-        # 1. Resolve Prediction Price
-        pred_price = get_cached_price(prediction.stock_symbol, prediction.date)
-        if pred_price is None:
-            pred_price = fetch_yfinance_price(prediction.stock_symbol, prediction.date)
-            if pred_price is not None:
-                set_cached_price(prediction.stock_symbol, prediction.date, pred_price)
-                
-        if pred_price is None:
-            if prediction.price_at_prediction:
-                pred_price = float(prediction.price_at_prediction)
-            else:
+        # 1. Resolve entry price. A stored price_at_prediction is the recorded input
+        #    to the prediction and is never replaced by a refetch. Only rows with no
+        #    stored price (legacy) are fetched, and the fetched value is stored.
+        if prediction.price_at_prediction is not None:
+            pred_price = float(prediction.price_at_prediction)
+            entry_price_source = "stored"
+        else:
+            pred_price = get_cached_price(prediction.stock_symbol, prediction.date)
+            if pred_price is None:
+                pred_price = fetch_yfinance_price(prediction.stock_symbol, prediction.date)
+                if pred_price is not None:
+                    set_cached_price(prediction.stock_symbol, prediction.date, pred_price)
+            if pred_price is None:
                 logger.warning(f"No price data for {prediction.stock_symbol} on {prediction.date}")
                 return False
-                
-        prediction.price_at_prediction = Decimal(str(pred_price))
+            prediction.price_at_prediction = Decimal(str(pred_price))
+            entry_price_source = "fetched"
+        logger.debug(
+            f"Entry price for prediction {prediction.pk} ({prediction.stock_symbol}): "
+            f"{pred_price} (source={entry_price_source})"
+        )
 
         # 2. Resolve Resolution Price
         res_price = get_cached_price(prediction.stock_symbol, resolution_date)
@@ -318,7 +324,8 @@ def detect_drift(recent_period_days: int = 30, baseline_period_days: int = 90) -
 
     drift_detected = False
     severity = 'none'
-    if baseline_f1 > 0 and recent_f1 > 0:
+    # A recent F1 of 0 is the worst case; it must still be compared against the baseline.
+    if baseline_f1 > 0:
         drop = baseline_f1 - recent_f1
         drop_pct = (drop / baseline_f1) * 100
         if drop_pct > 10 or drop > 0.1:

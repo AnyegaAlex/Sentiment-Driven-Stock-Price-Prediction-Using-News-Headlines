@@ -17,7 +17,7 @@ from django.db import connection
 from django.utils import timezone
 
 from authentication.models import User
-from authentication.utils import send_email_async
+from authentication.utils import send_email_sync
 from stocks.models import Prediction
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ class Command(BaseCommand):
                         self.stdout.write(f'Would send to {user.email}')
                 else:
                     try:
-                        send_email_async(
+                        send_email_sync(
                             subject=subject,
                             to_email=user.email,
                             html_content=html_content

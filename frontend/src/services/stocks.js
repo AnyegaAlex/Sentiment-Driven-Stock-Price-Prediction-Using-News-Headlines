@@ -195,9 +195,9 @@ export const fetchSentiment = async (symbol, timeRange = '7d') => {
     return {
       success: false,
       symbol: String(symbol || '').toUpperCase(),
-      sentiment: { score: 0, label: 'Neutral' },
-      newsCount: 0,
-      sourceStats: { tier1_count: 0, reliability_sum: 0, tier1_sources: [] },
+      sentiment: null,
+      newsCount: null,
+      sourceStats: null,
       history: [],
       error: 'A valid stock symbol is required.',
       code: 400,
@@ -216,13 +216,10 @@ export const fetchSentiment = async (symbol, timeRange = '7d') => {
     return {
       success: true,
       symbol: normalizedSymbol,
-      sentiment: payload.sentiment || { score: 0, label: 'Neutral' },
-      newsCount: payload.news_count || 0,
-      sourceStats: payload.source_stats || {
-        tier1_count: 0,
-        reliability_sum: 0,
-        tier1_sources: [],
-      },
+      sentiment: payload.sentiment ?? null,
+      newsCount: payload.news_count ?? null,
+      sourceStats: payload.source_stats ?? null,
+      distribution: payload.distribution ?? null,
       history: Array.isArray(payload.history) ? payload.history : [],
     };
   } catch (err) {
@@ -231,9 +228,10 @@ export const fetchSentiment = async (symbol, timeRange = '7d') => {
     return {
       success: false,
       symbol: normalizedSymbol,
-      sentiment: { score: 0, label: 'Neutral' },
-      newsCount: 0,
-      sourceStats: { tier1_count: 0, reliability_sum: 0, tier1_sources: [] },
+      sentiment: null,
+      newsCount: null,
+      sourceStats: null,
+      distribution: null,
       history: [],
       error: e.message,
       code: e.code,
@@ -261,9 +259,9 @@ export const fetchLSTMPrediction = async (symbol) => {
     return {
       success: false,
       symbol: String(symbol || '').toUpperCase(),
-      prediction: 'HOLD',
-      confidence: 50,
-      sentimentScore: 0,
+      prediction: null,
+      confidence: null,
+      sentimentScore: null,
       timestamp: null,
       error: 'A valid stock symbol is required.',
       code: 400,
@@ -282,10 +280,10 @@ export const fetchLSTMPrediction = async (symbol) => {
     return {
       success: true,
       symbol: normalizedSymbol,
-      prediction: payload.prediction || 'HOLD',
-      confidence: payload.confidence ?? 50,
-      sentimentScore: payload.sentiment_score ?? 0,
-      timestamp: payload.timestamp || null,
+      prediction: payload.prediction ?? null,
+      confidence: payload.confidence ?? null,
+      sentimentScore: payload.sentiment_score ?? null,
+      timestamp: payload.timestamp ?? null,
     };
   } catch (err) {
     const e = normalizeError(err);
@@ -293,9 +291,9 @@ export const fetchLSTMPrediction = async (symbol) => {
     return {
       success: false,
       symbol: normalizedSymbol,
-      prediction: 'HOLD',
-      confidence: 50,
-      sentimentScore: 0,
+      prediction: null,
+      confidence: null,
+      sentimentScore: null,
       timestamp: null,
       error: e.message,
       code: e.code,
@@ -406,24 +404,24 @@ export const fetchPerformanceSummary = async ({ symbol = '', days = 30 } = {}) =
 
     return {
       success: true,
-      totalPredictions: payload.total_predictions ?? 0,
-      resolvedPredictions: payload.resolved_predictions ?? 0,
-      correctPredictions: payload.correct_predictions ?? 0,
-      overall: payload.overall || {},
-      recentAccuracy: payload.recent_accuracy ?? 0,
-      bySymbol: payload.by_symbol || {},
+      totalPredictions: payload.total_predictions ?? null,
+      resolvedPredictions: payload.resolved_predictions ?? null,
+      correctPredictions: payload.correct_predictions ?? null,
+      overall: payload.overall ?? null,
+      recentAccuracy: payload.recent_accuracy ?? null,
+      bySymbol: payload.by_symbol ?? null,
     };
   } catch (err) {
     const e = normalizeError(err);
     console.error('[stocks] Performance summary failed:', e);
     return {
       success: false,
-      totalPredictions: 0,
-      resolvedPredictions: 0,
-      correctPredictions: 0,
-      overall: {},
-      recentAccuracy: 0,
-      bySymbol: {},
+      totalPredictions: null,
+      resolvedPredictions: null,
+      correctPredictions: null,
+      overall: null,
+      recentAccuracy: null,
+      bySymbol: null,
       error: e.message,
       code: e.code,
     };
@@ -453,26 +451,26 @@ export const fetchDrift = async ({ recentDays = 30, baselineDays = 90 } = {}) =>
 
     return {
       success: true,
-      driftDetected: Boolean(payload.drift_detected),
-      severity: payload.severity || 'none',
-      recentF1: payload.recent_f1 ?? 0,
-      baselineF1: payload.baseline_f1 ?? 0,
-      dropPercent: payload.drop_percent ?? 0,
-      recentMetrics: payload.recent_metrics || {},
-      baselineMetrics: payload.baseline_metrics || {},
+      driftDetected: typeof payload.drift_detected === 'boolean' ? payload.drift_detected : null,
+      severity: payload.severity ?? null,
+      recentF1: payload.recent_f1 ?? null,
+      baselineF1: payload.baseline_f1 ?? null,
+      dropPercent: payload.drop_percent ?? null,
+      recentMetrics: payload.recent_metrics ?? null,
+      baselineMetrics: payload.baseline_metrics ?? null,
     };
   } catch (err) {
     const e = normalizeError(err);
     console.error('[stocks] Drift detection failed:', e);
     return {
       success: false,
-      driftDetected: false,
-      severity: 'none',
-      recentF1: 0,
-      baselineF1: 0,
-      dropPercent: 0,
-      recentMetrics: {},
-      baselineMetrics: {},
+      driftDetected: null,
+      severity: null,
+      recentF1: null,
+      baselineF1: null,
+      dropPercent: null,
+      recentMetrics: null,
+      baselineMetrics: null,
       error: e.message,
       code: e.code,
     };
@@ -537,9 +535,9 @@ export const fetchStockData = async (symbol) => {
     return {
       success: false,
       symbol: String(symbol || '').toUpperCase(),
-      historical: [],
-      news: [],
-      prediction: { direction: 'HOLD', confidence: 0 },
+      historical: null,
+      news: null,
+      prediction: null,
       raw: { analysis: null, technicals: null, news: null },
     };
   }
@@ -555,16 +553,17 @@ export const fetchStockData = async (symbol) => {
     fetchNews(normalizedSymbol),
   ]);
 
-  const prediction = analysis.data?.lstm_prediction || {
-    direction: 'HOLD',
-    confidence: 0,
-  };
+  const prediction = analysis.data?.lstm_prediction ?? null;
 
   return {
     success: analysis.success && technicals.success,
     symbol: normalizedSymbol,
-    historical: technicals.technical?.price_history || [],
-    news: news.news || [],
+    historical: technicals.success
+      ? technicals.technical?.price_history ?? []
+      : null,
+    news: news.success ? news.news : null,
+    newsSuccess: news.success,
+    newsError: news.success ? null : news.error,
     prediction,
     raw: {
       analysis: analysis.data,

@@ -153,8 +153,11 @@ class RegisterSerializer(serializers.ModelSerializer):
         return value
 
     def validate_email(self, value: str) -> str:
-        """Normalize email to lowercase."""
-        return value.lower()
+        """Normalize email to lowercase and reject addresses already registered."""
+        normalized = value.lower()
+        if User.objects.filter(email__iexact=normalized).exists():
+            raise serializers.ValidationError("This email address is already registered.")
+        return normalized
 
     def create(self, validated_data: Dict) -> User:
         """Create user with hashed password."""
@@ -261,8 +264,8 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         help_text="Password reset token"
     )
     uid = serializers.CharField(
-        required=True,
-        help_text="Base64-encoded user ID"
+        required=False,
+        help_text="Base64-encoded user ID (body or ?uid= query parameter)"
     )
     password = serializers.CharField(
         write_only=True,
@@ -602,6 +605,7 @@ class UserPreferencesSerializer(serializers.ModelSerializer):
             'email_notifications',
             'price_alerts',
             'news_alerts',
+            'weekly_digest',
             'theme',
             'language',
             'timezone',

@@ -12,6 +12,8 @@ Production-Ready Refactor:
 import re
 import time
 import secrets
+import hmac
+import hashlib
 import logging
 from typing import Optional, Dict, Any
 
@@ -173,12 +175,17 @@ def generate_verification_code() -> str:
     return ''.join(str(secrets.randbelow(10)) for _ in range(6))
 
 
+def hash_verification_code(user_id, code: str) -> str:
+    """Keyed hash of a verification code. Only this digest is stored in the cache, never the code."""
+    return hmac.new(settings.SECRET_KEY.encode(), f"{user_id}:{code}".encode(), hashlib.sha256).hexdigest()
+
+
 def verify_email_code(user: User, code: str) -> bool:
     """Verify a 6-digit code previously sent to the user's email."""
     try:
         cache_key = f"email_verification_{user.id}"
-        stored_code = cache.get(cache_key)
-        if stored_code and stored_code == code:
+        stored_digest = cache.get(cache_key)
+        if stored_digest and hmac.compare_digest(stored_digest, hash_verification_code(user.id, code)):
             cache.delete(cache_key)
             return True
         return False
@@ -296,7 +303,7 @@ def send_verification_email(user: User, request) -> bool:
         code = generate_verification_code()
         
         cache_key = f"email_verification_{user.id}"
-        cache.set(cache_key, code, timeout=600)
+        cache.set(cache_key, hash_verification_code(user.id, code), timeout=600)
         cache.set(f"verification_sent_{user.id}", True, timeout=60)
         
         frontend_url = settings.FRONTEND_URL

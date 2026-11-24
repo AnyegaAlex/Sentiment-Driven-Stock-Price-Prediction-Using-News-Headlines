@@ -83,6 +83,16 @@ describe('stocks service', () => {
       expect(result.newsCount).toBe(10);
       expect(result.history).toHaveLength(1);
     });
+
+    it('keeps missing sentiment unavailable instead of defaulting to Neutral', async () => {
+      apiClient.get.mockResolvedValue({ success: true, data: { news_count: 0 } });
+
+      const result = await fetchSentiment('AAPL');
+
+      expect(result.success).toBe(true);
+      expect(result.sentiment).toBeNull();
+      expect(result.newsCount).toBe(0);
+    });
   });
 
   describe('fetchLSTMPrediction', () => {
@@ -104,14 +114,15 @@ describe('stocks service', () => {
       expect(result.confidence).toBe(85);
     });
 
-    it('returns HOLD fallback on error', async () => {
+    it('returns unavailable fields on error without inventing a HOLD prediction', async () => {
       apiClient.get.mockRejectedValue({ success: false, code: 500 });
 
       const result = await fetchLSTMPrediction('AAPL');
 
       expect(result.success).toBe(false);
-      expect(result.prediction).toBe('HOLD');
-      expect(result.confidence).toBe(50);
+      expect(result.prediction).toBeNull();
+      expect(result.confidence).toBeNull();
+      expect(result.sentimentScore).toBeNull();
     });
   });
 

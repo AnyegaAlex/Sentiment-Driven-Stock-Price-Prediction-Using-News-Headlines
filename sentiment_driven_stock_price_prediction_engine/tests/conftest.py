@@ -32,6 +32,19 @@ def clear_cache():
     yield
 
 
+@pytest.fixture(autouse=True)
+def plain_static_storage(settings):
+    """
+    Tests do not run collectstatic, so the production manifest storage has no entries
+    to resolve (admin pages fail with 'Missing staticfiles manifest entry'). Use plain
+    static storage for tests only; production settings are unchanged.
+    """
+    settings.STORAGES = {
+        **settings.STORAGES,
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+
+
 @pytest.fixture
 def api_client():
     """Return an unauthenticated DRF API client."""
@@ -46,17 +59,15 @@ def auth_client(api_client, user):
 
 
 @pytest.fixture
-def admin_client(api_client, admin_user):
-    """Return an admin API client using JWT."""
-    url = reverse("token_obtain_pair")
-    response = api_client.post(url, {
-        "username": admin_user.username,
-        "password": "testpass123"
-    })
-    assert response.status_code == 200
-    token = response.data["access"]
-    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
-    return api_client
+def admin_client(admin_user):
+    """
+    Staff client for Django admin pages. Uses a session login (the admin site's own
+    auth). The /auth/token/ login route is no longer used by the fixtures.
+    """
+    from django.test import Client
+    client = Client()
+    client.force_login(admin_user)
+    return client
 
 
 # ----- User fixtures -----

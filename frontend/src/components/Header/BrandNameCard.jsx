@@ -6,14 +6,13 @@ import { useDashboard } from '@/context/DashboardContext';
 import { cn } from '@/lib/utils';
 
 // Use the white version for dark theme
-import TfcLogo from '@/assets/Primary Icon White.svg';
+import TfcLogo from '@/assets/TickFlowIntelligenceIcon.svg';
 
 const propTypes = {
-  logo: PropTypes.elementType,
+  logo: PropTypes.string,
   className: PropTypes.string,
   to: PropTypes.string,
   onClearSymbol: PropTypes.func,
-  strokeWidth: PropTypes.number,
 };
 
 const BrandNameCard = ({
@@ -21,7 +20,6 @@ const BrandNameCard = ({
   className = '',
   to = '/dashboard',
   onClearSymbol,
-  strokeWidth = 1.8,
 }) => {
   const { setStockSymbol } = useDashboard();
 
@@ -38,24 +36,24 @@ const BrandNameCard = ({
       to={to}
       onClick={handleClick}
       className={cn(
-        'group flex items-center gap-2.5 no-underline',
+        'group flex min-w-0 max-w-full items-center gap-2.5 no-underline',
         'focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-black rounded-md',
         'transition-opacity hover:opacity-80',
         className
       )}
-      aria-label="Tickflow Intelligence – Hybrid LSTM + FinBERT Stock Prediction Platform"
+      aria-label="TickFlow Intelligence dashboard"
     >
       <img
         src={LogoIcon}
-        alt="TFC"
+        alt="TFI"
         className="h-9 w-9 flex-shrink-0 opacity-80 group-hover:opacity-100 transition-opacity duration-200"
       />
       <div className="flex flex-col leading-tight min-w-0">
-        <span className="text-lg font-semibold text-white tracking-tight truncate">
-          Tickflow Intelligence
+        <span className="truncate text-base font-semibold tracking-tight text-white sm:text-lg">
+          TickFlow Intelligence
         </span>
-        <span className="text-xs font-medium text-gray-400 tracking-wide truncate">
-          Hybrid LSTM + FinBERT Stock Intelligence
+        <span className="hidden truncate text-xs font-medium tracking-wide text-gray-400 sm:block">
+          Stock research workspace
         </span>
       </div>
     </Link>

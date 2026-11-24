@@ -8,16 +8,14 @@
  * - Preserve original URL for redirect after login
  * - Email verification check
  * - Role/tier-based access control
- * - Demo mode bypass
  * - Customizable fallback paths
- * - Skip refresh for onboarded users (prevents redirect loops)
  * 
  * @version 3.0.0
  * @author Tickflow Capital
  */
 
-import React from 'react';
-import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import PropTypes from 'prop-types';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 
@@ -27,23 +25,13 @@ const ProtectedRoute = ({
   requireVerified = true,
   fallbackPath = '/login',
   unauthorizedPath = '/unauthorized',
-  allowDemo = true,
 }) => {
   const location = useLocation();
-  const [searchParams] = useSearchParams();
-  const { user, isAuthenticated, isLoading, hasPermission } = useAuth();
-  // ✅ REMOVED: refreshUser, hasRefreshed, useEffect
-
-  const isDemo = searchParams.get('demo') === 'true';
+  const { user, isAuthenticated, isLoading } = useAuth();
 
   // ---- Loading state ----
   if (isLoading) {
     return <LoadingSpinner fullScreen label="Verifying your session..." />;
-  }
-
-  // ---- Demo mode ----
-  if (allowDemo && isDemo) {
-    return children;
   }
 
   // ---- Not authenticated ----
@@ -57,12 +45,8 @@ const ProtectedRoute = ({
     );
   }
 
-  // ---- ✅ If user is onboarded, skip verification ----
-  if (user.onboarded) {
-    return children;
-  }
-
-  // ---- Email verification check (only for non-onboarded users) ----
+  // ---- Email verification check ----
+  // Onboarding completion must never bypass an explicit verification requirement.
   if (requireVerified && !user.email_verified) {
     return (
       <Navigate 
@@ -119,7 +103,14 @@ export const RouteProtection = {
   Enterprise: () => <ProtectedRoute requiredTiers={['enterprise']} />,
   Verified: () => <ProtectedRoute requireVerified={true} />,
   Public: ({ children }) => children,
-  Demo: () => <ProtectedRoute allowDemo={true} />,
+};
+
+ProtectedRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+  requiredTiers: PropTypes.arrayOf(PropTypes.oneOf(['free', 'pro', 'enterprise'])),
+  requireVerified: PropTypes.bool,
+  fallbackPath: PropTypes.string,
+  unauthorizedPath: PropTypes.string,
 };
 
 export default ProtectedRoute;

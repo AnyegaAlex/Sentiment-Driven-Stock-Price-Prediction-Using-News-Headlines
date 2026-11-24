@@ -212,7 +212,7 @@ class TestFullUserJourney:
             found = any(item["id"] == prediction.id for item in data["results"])
             assert found is True
 
-    @patch("authentication.utils.send_email_async", return_value=True)
+    @patch("authentication.utils.send_email_sync", return_value=True)
     @patch("authentication.views.send_verification_email", return_value=True)
     def test_password_reset_flow(self, mock_send_verification, mock_send_email, api_client, registered_user):
         """

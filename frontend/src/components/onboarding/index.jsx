@@ -18,7 +18,7 @@
  * @version 2.1.0
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useOnboarding } from '../../context/OnboardingContext';
 import { useAuth } from '../../hooks/useAuth';
@@ -26,9 +26,8 @@ import apiClient from '@/services/client';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import TfcLogo from '@/assets/Primary Icon White.svg'; // Import your TFC logo
+import TfcLogo from '@/assets/Primary Icon White.svg'; // Import the TickFlow Intelligence icon
 
 import Step1_Profile from './Step1_Profile';
 import Step2_Preferences from './Step2_Preferences';
@@ -347,11 +346,11 @@ const Onboarding = () => {
           <div className="flex flex-col items-center mb-4">
             <img
               src={TfcLogo}
-              alt="TFC"
+              alt="TFI"
               className="h-14 w-14 mb-3 opacity-80"
             />
             <h1 className="text-3xl font-bold text-white">
-              Tickflow Intelligence
+              TickFlow Intelligence
             </h1>
             <p className="text-sm text-gray-500 mt-1">
               Hybrid LSTM + FinBERT Stock Intelligence

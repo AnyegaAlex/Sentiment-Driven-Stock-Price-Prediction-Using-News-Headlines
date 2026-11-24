@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 // src/pages/__tests__/VerifyEmail.test.jsx
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -10,6 +11,10 @@ vi.mock('@/services/client', () => ({
     get: vi.fn(),
     post: vi.fn(),
   },
+  setAuthToken: vi.fn((token, remember = false) => {
+    const storage = remember ? localStorage : sessionStorage;
+    storage.setItem(remember ? 'accessToken' : 'authToken', token);
+  }),
 }));
 
 // Mock useAuth
@@ -46,8 +51,8 @@ vi.mock('@/components/ui/label', () => ({
 }));
 
 vi.mock('@/components/ui/alert', () => ({
-  Alert: ({ children }) => <div role="alert">{children}</div>,
-  AlertDescription: ({ children }) => <p>{children}</p>,
+  Alert: ({ children, ...props }) => <div {...props}>{children}</div>,
+  AlertDescription: ({ children, ...props }) => <p {...props}>{children}</p>,
 }));
 
 vi.mock('@/components/shared/LoadingSpinner', () => ({
@@ -59,7 +64,7 @@ vi.mock('@/assets/Primary Icon White.svg', () => ({
 }));
 
 import apiClient from '@/services/client';
-import VerifyEmail from '../VerifyEmail';
+import VerifyEmail from '../../pages/VerifyEmail';
 
 // Helper to render with a URL
 const renderWithUrl = (url) =>
@@ -112,7 +117,7 @@ describe('VerifyEmail page', () => {
       expect(screen.getByText(/email verified/i)).toBeInTheDocument();
     });
 
-    expect(localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken')).toBe(
+    expect(localStorage.getItem('accessToken') || sessionStorage.getItem('authToken')).toBe(
       'access-token'
     );
     expect(localStorage.getItem('refreshToken') || sessionStorage.getItem('refreshToken')).toBe(
@@ -150,7 +155,7 @@ describe('VerifyEmail page', () => {
     await waitFor(() => {
       expect(screen.getByText(/verification failed/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/invalid or expired/i)).toBeInTheDocument();
+    expect(screen.getByText(/invalid or has expired/i)).toBeInTheDocument();
   });
 
   it('handles "already verified" idempotently', async () => {
@@ -177,6 +182,16 @@ describe('VerifyEmail page', () => {
 
     expect(screen.getByText(/enter verification code/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/verification code/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/verification code/i)).toHaveAttribute('placeholder', '6-digit code');
+  });
+
+  it('styles first-visit guidance as neutral status, not an error', () => {
+    renderWithUrl('/verify-email');
+
+    const guidance = screen.getByText(/enter the email address and 6-digit code from your verification email/i);
+    expect(guidance).toHaveAttribute('role', 'status');
+    expect(guidance.parentElement).toHaveClass('border-gray-700', 'bg-gray-800/60');
+    expect(guidance.parentElement).not.toHaveClass('border-red-400');
   });
 
   it('verifies via code entry and persists tokens', async () => {
@@ -193,17 +208,23 @@ describe('VerifyEmail page', () => {
 
     renderWithUrl('/verify-email');
 
+    await user.type(screen.getByLabelText(/email address/i), 'test@example.com');
     const input = screen.getByLabelText(/verification code/i);
     await user.type(input, '123456');
 
     const verifyBtn = screen.getByRole('button', { name: /verify email/i });
+    expect(verifyBtn).not.toBeDisabled();
     await user.click(verifyBtn);
-
-    await waitFor(() => {
-      expect(screen.getByText(/email verified/i)).toBeInTheDocument();
+    expect(apiClient.post).toHaveBeenCalledWith('/auth/verify-email/', {
+      email: 'test@example.com',
+      code: '123456',
     });
 
-    expect(localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken')).toBe(
+    await waitFor(() => {
+      expect(screen.getByText(/email address has been verified/i)).toBeInTheDocument();
+    });
+
+    expect(localStorage.getItem('accessToken') || sessionStorage.getItem('authToken')).toBe(
       'code-access'
     );
   });
@@ -219,6 +240,7 @@ describe('VerifyEmail page', () => {
 
     renderWithUrl('/verify-email');
 
+    await user.type(screen.getByLabelText(/email address/i), 'test@example.com');
     const input = screen.getByLabelText(/verification code/i);
     await user.type(input, '999999');
 
@@ -226,7 +248,7 @@ describe('VerifyEmail page', () => {
     await user.click(verifyBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/invalid verification code/i)).toBeInTheDocument();
+      expect(screen.getByText(/that code is invalid or has expired/i)).toBeInTheDocument();
     });
   });
 
@@ -265,8 +287,9 @@ describe('VerifyEmail page', () => {
     apiClient.get.mockRejectedValueOnce({ success: false, error: 'Invalid', code: 400 });
     apiClient.post.mockRejectedValueOnce({
       success: false,
-      error: 'Please wait 60 seconds',
+      error: 'Rate limited',
       code: 429,
+      retryAfter: 60,
     });
 
     renderWithUrl('/verify-email?token=bad&uid=1&email=user%40test.com');
@@ -279,7 +302,7 @@ describe('VerifyEmail page', () => {
     await user.click(resendBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/please wait 60 seconds/i)).toBeInTheDocument();
+      expect(screen.getByText(/please wait 60 seconds before trying again/i)).toBeInTheDocument();
     });
   });
 });

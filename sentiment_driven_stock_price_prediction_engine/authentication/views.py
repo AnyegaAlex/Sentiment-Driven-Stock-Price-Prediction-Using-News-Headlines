@@ -16,6 +16,7 @@ Refactored for Production:
 - Comprehensive audit logging.
 """
 
+import hashlib
 import logging
 import time
 import uuid
@@ -76,8 +77,68 @@ LOGIN_ATTEMPT_WINDOW = getattr(settings, 'LOGIN_ATTEMPT_WINDOW', 300)  # 5 minut
 
 
 # ============================================================================
+# HELPERS
+# ============================================================================
+
+# Audit N2: cache TTL for the "last-seen device" that gates security-alert emails.
+# 30 days — a returning user on their usual device gets no alert spam.
+NEW_DEVICE_CACHE_TTL = 30 * 24 * 60 * 60
+
+# Audit (Wave-1 brute-force): 15-min window and 5-attempt cap for the 6-digit
+# verification code. Code itself has 600s TTL in utils.py (stricter than this
+# window for the first 5 min — the counter survives a code refresh to prevent
+# an attacker resetting attempts by triggering a resend).
+VERIFICATION_ATTEMPT_WINDOW = 900
+VERIFICATION_ATTEMPT_LIMIT = 5
+
+
+def _should_alert_new_device(user, ip, user_agent):
+    """
+    Return True if (ip, user_agent) is new for this user.
+
+    Also updates the last-seen pair in cache (30-day TTL) regardless of the
+    return value, so repeat logins from the same device stay quiet.
+
+    Audit N2 fix: `LoginView` and `ChangePasswordView` used to call
+    `send_security_alert_email` on every successful auth, blocking the sync
+    worker for ~4 minutes on the SMTP timeout when SendGrid is unreachable.
+    Now the email only fires when the device/IP actually changes — the common
+    path never blocks.
+
+    Note: this intentionally uses OR semantics — an IP change alone OR a
+    user-agent change alone counts as "new device". This is stricter than
+    "both must change" and is the security-best-practice interpretation.
+    """
+    cache_key = f"last_device_{user.id}"
+    previous = cache.get(cache_key)
+    is_new = (
+        previous is None
+        or previous.get('ip') != ip
+        or previous.get('user_agent') != user_agent
+    )
+    cache.set(
+        cache_key,
+        {'ip': ip, 'user_agent': user_agent},
+        timeout=NEW_DEVICE_CACHE_TTL,
+    )
+    return is_new
+
+
+# ============================================================================
 # AUTHENTICATION VIEWS
 # ============================================================================
+
+def _first_validation_message(detail) -> str:
+    """Return the first human-readable message from a DRF ValidationError detail."""
+    if isinstance(detail, dict):
+        for messages in detail.values():
+            if isinstance(messages, (list, tuple)) and messages:
+                return str(messages[0])
+            return str(messages)
+    if isinstance(detail, (list, tuple)) and detail:
+        return str(detail[0])
+    return str(detail)
+
 
 class RegisterView(generics.CreateAPIView):
     """
@@ -199,18 +260,11 @@ class LoginView(APIView):
             # Reset attempts on successful login
             cache.delete(rate_key)
             
-            # Check if user is active
-            if not user.is_active:
-                logger.warning(f"Login attempt for inactive user: {user.email}")
-                return Response(
-                    error_response(
-                        message='Your account has been deactivated. Please contact support.',
-                        code='ACCOUNT_DEACTIVATED',
-                        request_id=request_id,
-                        status_code=403
-                    ),
-                    status=status.HTTP_403_FORBIDDEN
-                )
+            # Inactive accounts are rejected by authenticate() itself (ModelBackend
+            # returns None), so they receive the same generic 401 as a wrong password.
+            # This is deliberate: an explicit 403 after a correct password would
+            # disclose account status, which the enumeration-safe resend endpoint
+            # also avoids. Do not restore a separate 403 branch here.
             
             # Check email verification
             if not user.email_verified:
@@ -244,11 +298,26 @@ class LoginView(APIView):
                 }
             )
             
-            # SECURITY ALERT (Synchronous, fail-safe)
+            # SECURITY ALERT — new device only (Audit N2).
+            # Previously fired on every successful login, blocking the sync
+            # worker for ~4 min when SendGrid is unreachable. Now only on a
+            # changed IP/user-agent. Fail-safe: never blocks the login path.
             try:
-                send_security_alert_email(user, 'login', request_context['ip'], request_context['user_agent'])
+                if _should_alert_new_device(
+                    user,
+                    request_context['ip'],
+                    request_context['user_agent'],
+                ):
+                    send_security_alert_email(
+                        user, 'login',
+                        request_context['ip'],
+                        request_context['user_agent'],
+                    )
             except Exception as e:
-                logger.warning(f"Failed to send security alert for {user.email}: {e}")
+                logger.warning(
+                    f"Failed to send security alert for {user.email}: {e}",
+                    exc_info=True,
+                )
             
             duration = (time.time() - start_time) * 1000
             logger.info(f"User logged in: {user.email} (ID: {user.id}) in {duration:.2f}ms")
@@ -294,6 +363,13 @@ class VerifyEmailView(APIView):
     """
     Email verification endpoint.
     Supports token link (GET) and 6-digit code (POST).
+
+    GET  — Link-based verification. Short-circuits for already-verified users
+           to prevent replay of the passwordless-login tokens the link issues.
+    POST — Code-based verification. Now public, taking {email, code}. Also
+           returns JWT tokens on success (full passwordless login), fixing
+           the three-way deadlock that previously blocked unverified users
+           from ever reaching this endpoint.
     """
     permission_classes = [permissions.AllowAny]
     throttle_classes = [AnonRateThrottle]
@@ -319,9 +395,24 @@ class VerifyEmailView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
+            # Audit (Wave-1 replay fix): short-circuit for already-verified users.
+            # Without this guard the GET re-mints JWTs and re-sends the welcome
+            # email on every click, making the emailed link a replayable
+            # passwordless login. No tokens, no email, no audit row on replay.
+            if user.email_verified:
+                logger.info(f"Verification link replayed for already-verified user {user.email}")
+                return Response(
+                    success_response(data={
+                        'already_verified': True,
+                        'user': UserProfileSerializer(user).data,
+                    }),
+                    status=status.HTTP_200_OK
+                )
+            
             # Activate user
             user.email_verified = True
-            user.save()
+            # Audit (P3): explicit update_fields to avoid clobbering concurrent writes.
+            user.save(update_fields=["email_verified"])
             
             # Clear cache
             cache.delete(f"email_verification_{user.id}")
@@ -375,42 +466,107 @@ class VerifyEmailView(APIView):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
         
         try:
-            if not request.user.is_authenticated:
-                return Response(
-                    error_response(message='Authentication required', code='AUTH_REQUIRED', request_id=request_id, status_code=401),
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-            
+            email = (request.data.get('email') or '').strip().lower()
             code = request.data.get('code')
-            if not code:
+            
+            # Enumeration-safe: same INVALID_CODE for missing email, missing code,
+            # user-not-found, and wrong code. Don't leak which one failed.
+            if not email or not code:
                 return Response(
-                    error_response(message='Verification code required', code='MISSING_CODE', request_id=request_id),
+                    error_response(message='Invalid verification code', code='INVALID_CODE', request_id=request_id),
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            user = request.user
-            if verify_email_code(user, code):
-                user.email_verified = True
-                user.save()
-                cache.delete(f"email_verification_{user.id}")
-                cache.delete(f"verification_sent_{user.id}")
-                
-                AuditLog.objects.create(
-                    user=user,
-                    action='EMAIL_VERIFIED',
-                    details={'method': 'code'}
-                )
-                
-                logger.info(f"Email verified via code for {user.email}")
-                
+            user = User.objects.filter(email__iexact=email, is_active=True).first()
+            if not user:
                 return Response(
-                    success_response(data=UserProfileSerializer(user).data, message='Email verified successfully'),
+                    error_response(message='Invalid verification code', code='INVALID_CODE', request_id=request_id),
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Short-circuit for already-verified users — no fresh tokens from a
+            # public endpoint for a user who can already log in normally.
+            if user.email_verified:
+                return Response(
+                    success_response(data={
+                        'already_verified': True,
+                        'user': UserProfileSerializer(user).data,
+                    }),
                     status=status.HTTP_200_OK
                 )
             
+            # Attempt counter (Audit: brute-force fix). 5 attempts in 15 min.
+            attempts_key = f"email_code_attempts_{user.id}"
+            if cache.add(attempts_key, 1, timeout=VERIFICATION_ATTEMPT_WINDOW):
+                attempts = 1
+            else:
+                try:
+                    attempts = cache.incr(attempts_key)
+                except ValueError:
+                    # Key expired between add and incr — treat as one attempt
+                    cache.set(attempts_key, 1, timeout=VERIFICATION_ATTEMPT_WINDOW)
+                    attempts = 1
+            
+            if attempts > VERIFICATION_ATTEMPT_LIMIT:
+                # Lockout: destroy the current code so it can't be tried again
+                # and force a fresh email request (which does NOT reset the
+                # attempt counter — see VERIFICATION_ATTEMPT_WINDOW comment).
+                cache.delete(f"email_verification_{user.id}")
+                logger.warning(f"Verification code attempt limit hit for user {user.id}")
+                return Response(
+                    error_response(
+                        message='Too many verification attempts. Please request a new code.',
+                        code='TOO_MANY_ATTEMPTS',
+                        request_id=request_id,
+                        status_code=429
+                    ),
+                    status=status.HTTP_429_TOO_MANY_REQUESTS
+                )
+            
+            if not verify_email_code(user, code):
+                return Response(
+                    error_response(message='Invalid verification code', code='INVALID_CODE', request_id=request_id),
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Success — clean up and activate
+            cache.delete(attempts_key)
+            user.email_verified = True
+            # Audit (P3): explicit update_fields.
+            user.save(update_fields=["email_verified"])
+            cache.delete(f"email_verification_{user.id}")
+            cache.delete(f"verification_sent_{user.id}")
+            
+            request_context = get_request_context(request)
+            # Audit (P3): match the link path's log detail (ip + request_id).
+            AuditLog.objects.create(
+                user=user,
+                action='EMAIL_VERIFIED',
+                details={
+                    'method': 'code',
+                    'ip': request_context['ip'],
+                    'request_id': request_id,
+                }
+            )
+            
+            # Issue tokens — makes POST a full passwordless login, which is
+            # the intended deadlock fix (previously: no tokens, and the route
+            # was unreachable by unverified users in the first place).
+            refresh = RefreshToken.for_user(user)
+            
+            logger.info(f"Email verified via code for {user.email}")
+            
             return Response(
-                error_response(message='Invalid verification code', code='INVALID_CODE', request_id=request_id),
-                status=status.HTTP_400_BAD_REQUEST
+                success_response(
+                    data={
+                        'message': 'Email verified successfully',
+                        'redirect': '/onboarding',
+                        'user': UserProfileSerializer(user).data,
+                        'access': str(refresh.access_token),
+                        'refresh': str(refresh),
+                    }
+                ),
+                status=status.HTTP_200_OK
             )
             
         except Exception as e:
@@ -423,33 +579,47 @@ class VerifyEmailView(APIView):
 
 class ResendVerificationView(APIView):
     """
-    Resend the verification email to the authenticated user.
+    Resend the verification email.
+
+    Audit: previously required IsAuthenticated, which deadlocked unverified
+    users (they cannot obtain a JWT without first verifying). Now public,
+    keyed on the email in the body, and always returns 202 Accepted.
+
+    Enumeration-safe contract: the response body and status code are identical
+    for all input — whether the account exists, is unverified, is verified,
+    is inactive, is deletion-pending, or whether the caller is rate-limited.
     """
-    permission_classes = [permissions.IsAuthenticated]
-    throttle_classes = [UserRateThrottle]
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [AnonRateThrottle]
     serializer_class = serializers.Serializer
 
     def post(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
         
+        # Constant response — enumeration-safe.
+        generic_response = Response(
+            success_response(
+                message='If that account exists, a verification email has been sent',
+            ),
+            status=status.HTTP_202_ACCEPTED,
+        )
+        
         try:
-            user = request.user
+            email = (request.data.get('email') or '').strip().lower()
+            if not email:
+                return generic_response
             
-            if user.email_verified:
-                return Response(
-                    error_response(message='Email already verified', code='ALREADY_VERIFIED', request_id=request_id),
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            # Hash the email so anonymous abuse of a single email address is
+            # rate-limited even without a matching user in the DB.
+            email_hash = hashlib.sha256(email.encode()).hexdigest()[:16]
             
-            # Atomic cooldown check
-            cooldown_key = f"resend_cooldown_{user.id}"
+            # Atomic cooldown per email (not per user — keyed on hash).
+            cooldown_key = f"resend_cooldown_{email_hash}"
             if not cache.add(cooldown_key, 1, timeout=60):
-                return Response(
-                    error_response(message='Please wait 60 seconds before requesting another verification email.', code='RATE_LIMITED', request_id=request_id, status_code=429),
-                    status=status.HTTP_429_TOO_MANY_REQUESTS
-                )
+                return generic_response  # Silent skip; 202 anyway
             
-            daily_key = f"resend_daily_{user.id}"
+            # Daily counter per email.
+            daily_key = f"resend_daily_{email_hash}"
             if cache.add(daily_key, 1, timeout=86400):
                 daily_count = 1
             else:
@@ -459,23 +629,37 @@ class ResendVerificationView(APIView):
                     daily_count = 6
             
             if daily_count > 5:
-                return Response(
-                    error_response(message='Daily verification resend limit reached.', code='DAILY_LIMIT_EXCEEDED', request_id=request_id, status_code=429),
-                    status=status.HTTP_429_TOO_MANY_REQUESTS
-                )
+                return generic_response  # Silent skip; 202 anyway
+            
+            # Look up the user, but never reveal whether they exist.
+            user = User.objects.filter(email__iexact=email).first()
+            if not user:
+                return generic_response
+            
+            # Skip send for inactive, deletion-pending, or already-verified.
+            # Still 202 — no state leak.
+            if not user.is_active or user.deletion_requested_at or user.email_verified:
+                return generic_response
             
             email_sent = send_verification_email(user, request)
             
             if email_sent:
                 cache.set(f"verification_sent_{user.id}", True, timeout=60)
-                AuditLog.objects.create(user=user, action='VERIFICATION_RESENT', details={'ip': request.META.get('REMOTE_ADDR'), 'request_id': request_id})
-                return Response(success_response(data={'remaining_today': 5 - daily_count}, message='Verification email sent'), status=status.HTTP_200_OK)
-            else:
-                return Response(error_response(message='Failed to send verification email.', code='EMAIL_FAILED', request_id=request_id), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                AuditLog.objects.create(
+                    user=user,
+                    action='VERIFICATION_RESENT',
+                    details={
+                        'ip': request.META.get('REMOTE_ADDR'),
+                        'request_id': request_id,
+                    }
+                )
+            
+            return generic_response
                 
         except Exception as e:
+            # Log internally but never surface — 202 always.
             logger.error(f"Resend verification error: {e}", exc_info=True)
-            return Response(error_response(message='An error occurred.', code='SERVER_ERROR', request_id=request_id), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return generic_response
 
 
 class PasswordResetRequestView(APIView):
@@ -522,18 +706,17 @@ class PasswordResetConfirmView(APIView):
             serializer = PasswordResetConfirmSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             
-            uid = request.GET.get('uid')
+            # uid may come from the JSON body (frontend) or the ?uid= query parameter.
+            uid = serializer.validated_data.get('uid') or request.GET.get('uid')
             token = serializer.validated_data['token']
             
             if not uid:
                 return Response(error_response(message='Missing uid', code='MISSING_PARAMETERS', request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
             
             user = verify_password_reset_token(uid, token)
-            if not user:
+            # Inactive accounts get the same response as an invalid token, so the reply does not reveal account status.
+            if not user or not user.is_active:
                 return Response(error_response(message='Invalid or expired token', code='INVALID_TOKEN', request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
-            
-            if not user.is_active:
-                return Response(error_response(message='Account deactivated.', code='ACCOUNT_DEACTIVATED', request_id=request_id), status=status.HTTP_403_FORBIDDEN)
             
             with transaction.atomic():
                 user.set_password(serializer.validated_data['password'])
@@ -544,6 +727,8 @@ class PasswordResetConfirmView(APIView):
             
             return Response(success_response(message='Password reset successfully'), status=status.HTTP_200_OK)
             
+        except serializers.ValidationError as e:
+            return Response(error_response(message='Validation failed', code='VALIDATION_ERROR', details=e.detail, request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Password reset confirm error: {e}", exc_info=True)
             return Response(error_response(message='An error occurred.', code='SERVER_ERROR', request_id=request_id), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -573,6 +758,9 @@ class ProfileView(generics.RetrieveUpdateAPIView):
             )
             logger.info(f"Profile updated for {request.user.email}")
             return response
+        except serializers.ValidationError:
+            # Field validation errors are client errors (400), not server failures.
+            raise
         except Exception as e:
             logger.error(f"Profile update error: {e}", exc_info=True)
             return Response(error_response(message='Failed to update profile.', code='UPDATE_FAILED', request_id=request_id), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -637,17 +825,35 @@ class ChangePasswordView(APIView):
             
             request_context = get_request_context(request)
             
-            # SECURITY ALERT (Synchronous, fail-safe)
+            # SECURITY ALERT — new device only (Audit N2).
+            # Previously fired on every password change. Now only when the
+            # (ip, user_agent) pair is new — same helper as the login path
+            # so a user who just logged in from their usual device doesn't
+            # get an "unusual activity" alert for changing their own password.
             try:
-                send_security_alert_email(user, 'password_change', request_context['ip'], request_context['user_agent'])
+                if _should_alert_new_device(
+                    user,
+                    request_context['ip'],
+                    request_context['user_agent'],
+                ):
+                    send_security_alert_email(
+                        user, 'password_change',
+                        request_context['ip'],
+                        request_context['user_agent'],
+                    )
             except Exception as e:
-                logger.warning(f"Failed to send security alert for {user.email}: {e}")
+                logger.warning(
+                    f"Failed to send security alert for {user.email}: {e}",
+                    exc_info=True,
+                )
             
             AuditLog.objects.create(user=user, action='PASSWORD_CHANGED', details={'ip': request_context['ip'], 'request_id': request_id})
             logger.info(f"Password changed for {user.email}")
             
             return Response(success_response(message='Password changed successfully'), status=status.HTTP_200_OK)
             
+        except serializers.ValidationError as e:
+            return Response(error_response(message='Validation failed', code='VALIDATION_ERROR', details=e.detail, request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Password change error: {e}", exc_info=True)
             return Response(error_response(message='Failed to change password.', code='SERVER_ERROR', request_id=request_id), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -689,6 +895,9 @@ class ChangeEmailView(APIView):
             
             return Response(success_response(data={'expires_in': 600}, message=f'Verification code sent to {new_email}'), status=status.HTTP_200_OK)
             
+        except serializers.ValidationError as e:
+            first = _first_validation_message(e.detail)
+            return Response(error_response(message=first, code='VALIDATION_ERROR', details=e.detail, request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Email change request error: {e}", exc_info=True)
             return Response(error_response(message='Failed to request email change.', code='SERVER_ERROR', request_id=request_id), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -782,6 +991,9 @@ class ChangeUsernameView(APIView):
             
             return Response(success_response(data={'remaining_this_year': USERNAME_CHANGE_LIMIT - user.username_change_count_year}, message='Username updated successfully'), status=status.HTTP_200_OK)
             
+        except serializers.ValidationError as e:
+            first = _first_validation_message(e.detail)
+            return Response(error_response(message=first, code='VALIDATION_ERROR', details=e.detail, request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Username change error: {e}", exc_info=True)
             return Response(error_response(message='Failed to change username.', code='SERVER_ERROR', request_id=request_id), status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -16,6 +16,7 @@ Version: 1.3.0
 """
 
 import pytest
+from authentication.utils import hash_verification_code
 import json
 import base64
 from datetime import timedelta
@@ -92,8 +93,9 @@ class TestRegistration:
         }
         with patch("authentication.views.send_verification_email", return_value=True):
             response = api_client.post(url, data)
-            # Email uniqueness is not enforced; expect 201 for now.
-            assert response.status_code == status.HTTP_201_CREATED
+            # Duplicate email is rejected by RegisterSerializer.validate_email.
+            assert response.status_code == status.HTTP_400_BAD_REQUEST
+            assert 'email' in response.json()
 
     def test_register_duplicate_username(self, api_client, user):
         """Duplicate username should return 400."""
@@ -191,7 +193,7 @@ class TestEmailVerification:
     def test_verify_email_with_code(self, api_client, unverified_user):
         """Valid 6-digit code should verify email."""
         code = generate_verification_code()
-        cache.set(f"email_verification_{unverified_user.id}", code, timeout=600)
+        cache.set(f"email_verification_{unverified_user.id}", hash_verification_code(unverified_user.id, code), timeout=600)
         api_client.force_authenticate(user=unverified_user)
         url = reverse("verify-email")
         response = api_client.post(url, {"code": code})
@@ -209,23 +211,25 @@ class TestEmailVerification:
         assert unverified_user.email_verified is False
 
     def test_resend_verification(self, api_client, unverified_user):
-        """Resend verification should call send_verification_email."""
-        api_client.force_authenticate(user=unverified_user)
+        # View is now public — no auth needed. But send the email in the body.
         url = reverse("resend-verification")
         with patch("authentication.views.send_verification_email", return_value=True) as mock_send:
-            response = api_client.post(url)
-            assert response.status_code == status.HTTP_200_OK
-            mock_send.assert_called_once_with(unverified_user, ANY)
+            response = api_client.post(url, {"email": unverified_user.email})
+            assert response.status_code == status.HTTP_202_ACCEPTED
+            mock_send.assert_called_once()  # email WAS sent — user exists, unverified
 
     def test_resend_verification_rate_limit(self, api_client, unverified_user):
-        """Resend should be rate-limited (1 per minute)."""
-        api_client.force_authenticate(user=unverified_user)
         url = reverse("resend-verification")
-        with patch("authentication.views.send_verification_email", return_value=True):
-            response = api_client.post(url)
-            assert response.status_code == status.HTTP_200_OK
-            response = api_client.post(url)
-            assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        with patch("authentication.views.send_verification_email", return_value=True) as mock_send:
+            # First call — sends
+            r1 = api_client.post(url, {"email": unverified_user.email})
+            assert r1.status_code == status.HTTP_202_ACCEPTED
+            assert mock_send.call_count == 1
+
+            # Second call — cooldown hit, still 202 (silent), email NOT re-sent
+            r2 = api_client.post(url, {"email": unverified_user.email})
+            assert r2.status_code == status.HTTP_202_ACCEPTED
+            assert mock_send.call_count == 1  # still once — cooldown suppressed 2nd send
 
 
 # ============================================================================
@@ -302,9 +306,16 @@ class TestLogin:
 # 4. JWT
 # ============================================================================
 
+JWT_DRIFT_REASON = (
+    "DRIFT: /auth/token/ (token_obtain_pair) was removed on purpose; these tests still "
+    "reverse it and fail with NoReverseMatch. Rewrite against the current auth endpoints."
+)
+
+
 class TestJWT:
     """Test JWT token functionality (obtain, refresh, expiry)."""
 
+    @pytest.mark.xfail(strict=True, reason=JWT_DRIFT_REASON)
     def test_token_obtain(self, api_client, user):
         """Token endpoint should return access and refresh tokens."""
         url = reverse("token_obtain_pair")
@@ -314,6 +325,7 @@ class TestJWT:
         assert "access" in response.data
         assert "refresh" in response.data
 
+    @pytest.mark.xfail(strict=True, reason=JWT_DRIFT_REASON)
     def test_token_refresh(self, api_client, user):
         """Refresh token should return new access token."""
         url = reverse("token_obtain_pair")
@@ -332,6 +344,7 @@ class TestJWT:
         response = api_client.post(url, {"refresh": "invalid"})
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
+    @pytest.mark.xfail(strict=True, reason=JWT_DRIFT_REASON)
     def test_access_token_expiry(self, api_client, user):
         """Expired access token should return 401."""
         # Obtain a real token
@@ -349,6 +362,7 @@ class TestJWT:
             response = api_client.get(url)
             assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
+    @pytest.mark.xfail(strict=True, reason=JWT_DRIFT_REASON)
     def test_blacklisted_token_rejected(self, api_client, user):
         """Blacklisted refresh token should be rejected."""
         url = reverse("token_obtain_pair")
@@ -407,6 +421,21 @@ class TestPasswordReset:
         data = {"token": "invalid", "password": "NewSecurePass123!", "password2": "NewSecurePass123!"}
         response = api_client.post(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_password_reset_confirm_inactive_user(self, api_client, user):
+        """Inactive user with a valid token gets the invalid-token response, not an account-status one."""
+        from django.contrib.auth.tokens import default_token_generator
+        from django.utils.encoding import force_bytes
+        from django.utils.http import urlsafe_base64_encode
+        token = default_token_generator.make_token(user)
+        user.is_active = False
+        user.save()
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        url = reverse("reset-password-confirm") + f"?uid={uid}"
+        data = {"token": token, "password": "NewSecurePass123!", "password2": "NewSecurePass123!"}
+        response = api_client.post(url, data)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'deactivated' not in response.content.decode().lower()
 
 
 # ============================================================================

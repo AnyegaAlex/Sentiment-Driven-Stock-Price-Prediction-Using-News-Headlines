@@ -138,17 +138,23 @@ class TestOpinionGeneratorCaching:
 class TestViewsCaching:
     def test_get_technical_indicators_caches(self):
         symbol = "AAPL"
-        # Clear cache
         cache.delete(f"tech_{symbol}_1d")
-        with patch("stocks.views.calculate_technical_indicators") as mock_calc:
-            mock_calc.return_value = {"current_price": 100}
+        payload = {"current_price": 100}
+        with patch("stocks.views.build_technical_payload", return_value=payload) as build:
             result = get_technical_indicators(symbol)
-            assert result == {"current_price": 100}
-            # Second call should hit cache, not call calculate
-            mock_calc.reset_mock()
+            assert result == payload
+            build.reset_mock()
+            # Second call is served from cache; the live computation is not repeated.
             result2 = get_technical_indicators(symbol)
-            assert result2 == {"current_price": 100}
-            mock_calc.assert_not_called()
+            assert result2 == payload
+            build.assert_not_called()
+
+    def test_get_technical_indicators_does_not_cache_missing_data(self):
+        symbol = "AAPL"
+        cache.delete(f"tech_{symbol}_1d")
+        with patch("stocks.views.build_technical_payload", return_value=None):
+            assert get_technical_indicators(symbol) is None
+        assert cache.get(f"tech_{symbol}_1d") is None
 
     def test_get_news_caching(self):
         symbol = "AAPL"
@@ -178,6 +184,7 @@ class TestViewsCaching:
             # Actually, the view `SentimentAnalysisView` caches the response, not the function.
             # We'll test the view caching via a different test.
 
+    @override_settings(NEWS_PUBLIC_ACCESS=True)
     def test_sentiment_analysis_view_caching(self, api_client):
         from django.urls import reverse
         symbol = "AAPL"
@@ -199,29 +206,34 @@ class TestViewsCaching:
             assert response2.status_code == 200
             mock_summary.assert_not_called()
 
+    @override_settings(PRICE_DATA_PUBLIC_ACCESS=True, NEWS_PUBLIC_ACCESS=True)
     def test_stock_analysis_caching(self, api_client):
         from django.urls import reverse
         symbol = "AAPL"
         url = reverse("stock-analysis")
-        # Patch the actual function location
-        with patch("stocks.opinion_generator.generate_stock_opinion") as mock_opinion, \
-            patch("stocks.views.get_technical_indicators") as mock_tech, \
+        with patch("stocks.views.get_technical_indicators") as mock_tech, \
             patch("stocks.views.get_sentiment_summary") as mock_sent:
-            mock_opinion.return_value = {"company": "Apple", "analysis": {"recommendation": "BUY", "confidence": 80}}
             mock_tech.return_value = {"current_price": 100, "sma_50": 99}
             mock_sent.return_value = {"overall": "Bullish", "score": 0.5, "recent_articles": 1, "source_stats": {}, "history": []}
-            # First request
             response = api_client.get(url, {"symbol": symbol})
             assert response.status_code == 200
-            # Second request should hit cache
-            mock_opinion.reset_mock()
+            # Second request is served from cache (both gates open, complete response)
             mock_tech.reset_mock()
             mock_sent.reset_mock()
             response2 = api_client.get(url, {"symbol": symbol})
             assert response2.status_code == 200
-            mock_opinion.assert_not_called()
             mock_tech.assert_not_called()
             mock_sent.assert_not_called()
+
+    def test_stock_analysis_closed_gates_are_never_cached(self, api_client):
+        from django.urls import reverse
+        url = reverse("stock-analysis")
+        with patch("stocks.views.get_technical_indicators") as mock_tech, \
+            patch("stocks.views.get_sentiment_summary", return_value={"overall": "Neutral", "score": 0.0, "recent_articles": 0, "source_stats": {}, "history": []}):
+            api_client.get(url, {"symbol": "AAPL"})
+            api_client.get(url, {"symbol": "AAPL"})
+        mock_tech.assert_not_called()
+        assert cache.get("stock_analysis_AAPL_medium_medium-term") is None
 
 
 class TestLSTMCaching:
@@ -243,17 +255,27 @@ class TestLSTMCaching:
             mock_yf.assert_not_called()
             assert result1 == result2
 
+    @override_settings(PRICE_DATA_PUBLIC_ACCESS=True)
     def test_lstm_prediction_view_caching(self, api_client):
         from django.urls import reverse
+        from django.utils import timezone
+        from stocks.models import Prediction
         url = reverse("lstm-predict")
         symbol = "AAPL"
-        with patch("stocks.views.get_lstm_predictor") as mock_predictor:
-            mock_predictor.return_value.predict.return_value = {
-                "prediction": "UP", "confidence": 80, "success": True
-            }
-            response1 = api_client.get(url, {"symbol": symbol})
-            assert response1.status_code == 200
-            mock_predictor.reset_mock()
-            response2 = api_client.get(url, {"symbol": symbol})
-            assert response2.status_code == 200
-            mock_predictor.assert_not_called()
+        Prediction.objects.create(date=timezone.now().date(), stock_symbol=symbol, headline="h",
+                                  sentiment_score=0.1, predicted_movement="up", confidence=0.8, source="lstm")
+        response1 = api_client.get(url, {"symbol": symbol})
+        assert response1.status_code == 200
+        # The stored row is removed; the cached response is still served.
+        Prediction.objects.filter(stock_symbol=symbol).delete()
+        response2 = api_client.get(url, {"symbol": symbol})
+        assert response2.status_code == 200
+        assert response2.json()["data"]["prediction"] == "UP"
+
+    def test_lstm_prediction_view_closed_gate_is_not_served_from_cache(self, api_client):
+        from django.urls import reverse
+        url = reverse("lstm-predict")
+        cache.set("lstm_AAPL", {"symbol": "AAPL", "prediction": "UP", "success": True}, timeout=300)
+        response = api_client.get(url, {"symbol": "AAPL"})
+        assert response.status_code == 503
+        assert "UP" not in response.content.decode()

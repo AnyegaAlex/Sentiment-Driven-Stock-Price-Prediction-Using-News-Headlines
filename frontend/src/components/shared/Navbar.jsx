@@ -1,14 +1,7 @@
-// components/Navbar.jsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import PropTypes from 'prop-types';
-import TfcLogo from '@/assets/Primary Icon White.svg'; // Import your TFC logo
-
-const propTypes = {
-  /** Layout variant: 'public' for landing, 'app' for dashboard */
-  variant: PropTypes.oneOf(['public', 'app']),
-};
+import TfcLogo from '@/assets/Primary Icon White.svg';
 
 const NAV_LINKS = [
   { name: 'Documentation', href: 'https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki' },
@@ -16,245 +9,140 @@ const NAV_LINKS = [
   { name: 'GitHub', href: 'https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines' },
 ];
 
-const Navbar = ({ variant = 'public' }) => {
+const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const menuRef = useRef(null);
+  const navRef = useRef(null);
+  const menuButtonRef = useRef(null);
 
-  // Scroll effect
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Close on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
+      if (navRef.current && !navRef.current.contains(event.target)) {
         setIsOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('pointerdown', handleClickOutside);
+    return () => document.removeEventListener('pointerdown', handleClickOutside);
   }, []);
 
-  // Close on ESC
   useEffect(() => {
     const handleEscape = (event) => {
       if (event.key === 'Escape' && isOpen) {
         setIsOpen(false);
+        menuButtonRef.current?.focus();
       }
     };
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen]);
 
-  const isExternalLink = (href) => href.startsWith('http');
-
   return (
     <nav
+      ref={navRef}
       className={cn(
-        'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
-        scrolled
-          ? 'bg-black border-b border-gray-800'
-          : 'bg-transparent border-transparent'
+        'fixed left-0 right-0 top-0 z-50 bg-black transition-colors duration-300',
+        scrolled ? 'border-b border-gray-800' : 'border-b border-transparent'
       )}
-      aria-label="Main navigation"
-      ref={menuRef}
+      aria-label="Public navigation"
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo – TFC icon + Tickflow Intelligence */}
-          <Link 
-            to="/" 
-            className="flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded-md min-h-[44px] px-2"
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex h-16 items-center justify-between">
+          <Link
+            to="/"
+            className="flex min-h-[44px] items-center gap-2.5 rounded-md px-2 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+            aria-label="TickFlow Intelligence home"
           >
-            <img
-              src={TfcLogo}
-              alt="TFC"
-              className="h-8 w-8 flex-shrink-0 opacity-80 hover:opacity-100 transition-opacity duration-200"
-            />
-            <div className="flex items-center gap-2">
-              <span className="text-xl font-bold text-white tracking-tight">
-                Tickflow Intelligence
-              </span>
-              <span className="text-xs text-gray-500 bg-gray-900 px-2 py-0.5 rounded border border-gray-800">
-                v2.4
-              </span>
-            </div>
+            <img src={TfcLogo} alt="" className="h-8 w-8 flex-shrink-0" />
+            <span className="text-lg font-semibold tracking-tight text-white sm:text-xl">
+              TickFlow Intelligence
+            </span>
           </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-6">
-            {NAV_LINKS.map((link) => {
-              const isExternal = isExternalLink(link.href);
-              if (isExternal) {
-                return (
-                  <a
-                    key={link.name}
-                    href={link.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-gray-400 hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] inline-flex items-center px-2"
-                  >
-                    {link.name}
-                  </a>
-                );
-              }
-              return (
-                <NavLink
-                  key={link.name}
-                  to={link.href}
-                  className={({ isActive }) =>
-                    cn(
-                      'text-sm transition min-h-[44px] inline-flex items-center px-2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
-                      isActive
-                        ? 'text-white font-medium'
-                        : 'text-gray-400 hover:text-white'
-                    )
-                  }
-                  aria-current={({ isActive }) => (isActive ? 'page' : undefined)}
-                >
-                  {link.name}
-                </NavLink>
-              );
-            })}
-
-            {variant === 'public' ? (
-              <>
-                <a
-                  href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
-                  className="text-sm text-gray-400 hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] inline-flex items-center px-2"
-                >
-                  Sign In
-                </a>
-                <a
-                  href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
-                  className="inline-block bg-white text-black px-4 py-2 rounded-md font-medium text-sm hover:bg-gray-200 transition min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-                >
-                  Get API Key
-                </a>
-              </>
-            ) : (
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-400">
-                  {/* user?.username – handled by auth context if needed */}
-                </span>
-                <button
-                  className="text-sm text-gray-400 hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] inline-flex items-center px-2"
-                  // onClick={handleLogout}
-                >
-                  Logout
-                </button>
-              </div>
-            )}
+          <div className="hidden items-center gap-5 md:flex">
+            {NAV_LINKS.map((link) => (
+              <a
+                key={link.name}
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-[44px] items-center rounded px-2 text-sm text-gray-400 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+              >
+                {link.name}
+              </a>
+            ))}
+            <Link
+              to="/login"
+              className="inline-flex min-h-[44px] items-center rounded px-2 text-sm text-gray-400 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+            >
+              Sign in
+            </Link>
+            <Link
+              to="/signup"
+              className="inline-flex min-h-[44px] items-center rounded-md bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+            >
+              Create account
+            </Link>
           </div>
 
-          {/* Mobile Menu Button */}
           <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="md:hidden p-2 rounded-md text-gray-400 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black min-h-[44px] min-w-[44px] flex items-center justify-center"
-            aria-label={isOpen ? 'Close menu' : 'Open menu'}
+            ref={menuButtonRef}
+            type="button"
+            onClick={() => setIsOpen((open) => !open)}
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-gray-300 hover:bg-gray-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 md:hidden"
+            aria-label={isOpen ? 'Close navigation' : 'Open navigation'}
             aria-expanded={isOpen}
-            aria-controls="mobile-menu"
+            aria-controls="public-mobile-navigation"
           >
-            <span className="sr-only">{isOpen ? 'Close' : 'Open'} menu</span>
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              {isOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              )}
+            <span className="sr-only">{isOpen ? 'Close' : 'Open'} navigation</span>
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              {isOpen
+                ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
             </svg>
           </button>
         </div>
       </div>
 
-      {/* Mobile Menu */}
-      {isOpen && (
-        <div
-          id="mobile-menu"
-          className="md:hidden bg-black border-b border-gray-800 px-4 py-4 space-y-3"
-          role="menu"
-          aria-label="Mobile navigation"
-        >
-          {NAV_LINKS.map((link) => {
-            const isExternal = isExternalLink(link.href);
-            if (isExternal) {
-              return (
-                <a
-                  key={link.name}
-                  href={link.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block text-sm text-gray-400 hover:text-white min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded px-2"
-                  onClick={() => setIsOpen(false)}
-                  role="menuitem"
-                >
-                  {link.name}
-                </a>
-              );
-            }
-            return (
-              <NavLink
-                key={link.name}
-                to={link.href}
-                className={({ isActive }) =>
-                  cn(
-                    'block text-sm transition min-h-[44px] flex items-center rounded px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
-                    isActive
-                      ? 'text-white font-medium'
-                      : 'text-gray-400 hover:text-white'
-                  )
-                }
-                onClick={() => setIsOpen(false)}
-                role="menuitem"
-                aria-current={({ isActive }) => (isActive ? 'page' : undefined)}
-              >
-                {link.name}
-              </NavLink>
-            );
-          })}
-
-          {variant === 'public' ? (
-            <>
-              <a
-                href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
-                className="block text-sm text-gray-400 hover:text-white min-h-[44px] flex items-center rounded px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-                onClick={() => setIsOpen(false)}
-                role="menuitem"
-              >
-                Sign In
-              </a>
-              <a
-                href="https://sentiment-driven-stock-price-predic.vercel.app/signup"
-                className="block text-sm font-medium text-white bg-gray-800 px-4 py-2 rounded-md text-center min-h-[44px] flex items-center justify-center hover:bg-gray-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-                onClick={() => setIsOpen(false)}
-                role="menuitem"
-              >
-                Get API Key
-              </a>
-            </>
-          ) : (
-            <button
-              className="block text-sm text-gray-400 hover:text-white w-full text-left min-h-[44px] flex items-center rounded px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-              role="menuitem"
+      <div
+        id="public-mobile-navigation"
+        hidden={!isOpen}
+        className="space-y-1 border-b border-gray-800 bg-black px-4 py-4 md:hidden"
+      >
+          {NAV_LINKS.map((link) => (
+            <a
+              key={link.name}
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-h-[44px] items-center rounded px-3 text-sm text-gray-300 hover:bg-gray-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+              onClick={() => setIsOpen(false)}
             >
-              Logout
-            </button>
-          )}
+              {link.name}
+            </a>
+          ))}
+          <Link
+            to="/login"
+            className="flex min-h-[44px] items-center rounded px-3 text-sm text-gray-300 hover:bg-gray-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+            onClick={() => setIsOpen(false)}
+          >
+            Sign in
+          </Link>
+          <Link
+            to="/signup"
+            className="flex min-h-[44px] items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+            onClick={() => setIsOpen(false)}
+          >
+            Create account
+          </Link>
         </div>
-      )}
     </nav>
   );
 };
-
-Navbar.propTypes = propTypes;
 
 export default React.memo(Navbar);

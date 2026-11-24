@@ -1,403 +1,308 @@
-// src/pages/Login.jsx
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useErrorHandler } from '@/utils/errorHandler';
+import { getActionErrorMessage } from '@/utils/errorHandler';
 import TfcLogo from '@/assets/Primary Icon White.svg';
 
-/**
- * Production-Ready Login Page
- *
- * Features:
- * - Clean, accessible UI with dark mode only
- * - Proper auth hook integration
- * - Comprehensive error handling
- * - Loading states
- * - Remember me functionality
- * - Demo mode
- * - Security/trust signals
- * - Redirect for authenticated users
- */
+const BLOCKED_RETURN_PATHS = [
+  '/login',
+  '/signup',
+  '/verify-email',
+  '/check-email',
+  '/forgot-password',
+  '/reset-password',
+  '/resend-verification',
+];
+
+const getPostLoginDestination = (user, from) => {
+  if (!user?.email_verified) return '/verify-email';
+  if (!user?.onboarded) return '/onboarding';
+
+  if (from && typeof from === 'object') {
+    const pathname = from.pathname || '';
+    const isAuthPath = BLOCKED_RETURN_PATHS.some(
+      (path) => pathname === path || pathname.startsWith(path + '/')
+    );
+    const isSafePath = pathname.startsWith('/') && !pathname.startsWith('//') && !isAuthPath;
+
+    if (isSafePath && pathname !== '/') {
+      return pathname + (from.search || '') + (from.hash || '');
+    }
+  }
+
+  return '/dashboard';
+};
+
 const Login = () => {
   const navigate = useNavigate();
-  const { login, isAuthenticated, isLoading: authLoading } = useAuth();
-  const { error: authError, handleError, clearError } = useErrorHandler();
+  const location = useLocation();
+  const { login, user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { handleError, clearError } = useErrorHandler();
 
-  // Form state
   const [formData, setFormData] = useState({
     username: '',
     password: '',
     rememberMe: false,
   });
-
-  // UI state
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [successMessage, setSuccessMessage] = useState(null);
-  const [isDemo, setIsDemo] = useState(false);
-  const [loginSuccess, setLoginSuccess] = useState(false);
+  const [error, setError] = useState(() => location.state?.message || '');
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState('');
 
-  // DEBUG: Log when form data changes
-  useEffect(() => {
-    console.log('[Login] Form data updated:', {
-      username: formData.username,
-      usernameLength: formData.username.length,
-      passwordLength: formData.password.length,
-      rememberMe: formData.rememberMe,
-    });
-  }, [formData]);
+  const demoUsername = import.meta.env.VITE_DEMO_USERNAME;
+  const demoPassword = import.meta.env.VITE_DEMO_PASSWORD;
+  const demoEnabled = Boolean(demoUsername && demoPassword);
 
-  // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated) {
-      const user = JSON.parse(
-        localStorage.getItem('user') || sessionStorage.getItem('user') || '{}'
-      );
-      console.log('[Login] Already authenticated, redirecting. User:', user);
-      if (user.onboarded) {
-        navigate('/dashboard', { replace: true });
-      } else {
-        navigate('/onboarding', { replace: true });
-      }
+    if (isAuthenticated && user) {
+      navigate(getPostLoginDestination(user, location.state?.from), { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, user, location.state?.from, navigate]);
 
-  // Handle input changes
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
+  const handleChange = (event) => {
+    const { name, value, type, checked } = event.target;
+    setFormData((current) => ({
+      ...current,
       [name]: type === 'checkbox' ? checked : value,
     }));
-    if (error) setError(null);
-    if (authError) clearError();
+    if (error) setError('');
+    clearError();
+    setNeedsVerification(false);
   };
 
-  // Handle login submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!formData.username || !formData.password) {
-      setError('Please enter both username and password.');
+  const performLogin = async (credentials) => {
+    if (!credentials.username.trim() || !credentials.password) {
+      setError('Enter your username or email address and password to continue.');
       return;
     }
 
     setLoading(true);
-    setError(null);
-    setSuccessMessage(null);
-    setLoginSuccess(false);
+    setError('');
+    setNeedsVerification(false);
 
     try {
       const result = await login(
-        formData.username.trim(),
-        formData.password,
-        formData.rememberMe
+        credentials.username.trim(),
+        credentials.password,
+        Boolean(credentials.rememberMe)
       );
 
       if (!result.success) {
-        throw new Error(result.error);
+        throw Object.assign(new Error(result.error || 'We couldn’t sign you in.'), {
+          code: result.code,
+          details: result.details,
+          retryAfter: result.retryAfter,
+        });
       }
 
-      setLoginSuccess(true);
+      navigate(
+        getPostLoginDestination(result.user, location.state?.from),
+        { replace: true }
+      );
+    } catch (requestError) {
+      handleError(requestError, { area: 'login' });
 
-      // result.user is now the refreshed user
-      if (result.user?.onboarded) {
-          navigate('/dashboard', { replace: true });
-      } else {
-          navigate('/onboarding', { replace: true });
+      const status = Number(requestError?.code);
+      let message = getActionErrorMessage(
+        requestError,
+        'We couldn’t sign you in right now. Please try again.'
+      );
+
+      if (status === 403 && /verif/i.test(requestError.message || '')) {
+        message = 'Your email address still needs to be verified. Check your inbox or request a new verification email.';
+        setNeedsVerification(true);
+        setVerificationEmail(
+          credentials.username.includes('@')
+            ? credentials.username.trim()
+            : requestError.details?.email || ''
+        );
+      } else if (status === 401) {
+        message = 'The username/email or password is incorrect. Check your details and try again.';
+      } else if (status === 429) {
+        const retryAfter = Number(requestError.retryAfter);
+        message = retryAfter > 0
+          ? 'Too many sign-in attempts. Try again in ' + retryAfter + ' seconds.'
+          : 'Too many sign-in attempts. Wait a moment, then try again.';
       }
-    } catch (err) {
-      console.error('[Login] ❌ Login error caught:', err);
 
-      let errorMessage = err.message || 'Login failed. Please try again.';
-
-      if (err.code === 403 && errorMessage.includes('verify your email')) {
-        errorMessage =
-          'Please verify your email before logging in. Check your inbox for the verification link.';
-        setSuccessMessage('Verification email sent. Please check your inbox.');
-      } else if (err.code === 429) {
-        const retryAfter = err.retryAfter || 60;
-        errorMessage = `Too many login attempts. Please try again in ${retryAfter} seconds.`;
-      } else if (err.code === 401) {
-        errorMessage = 'Invalid username or password. Please try again.';
-      } else if (err.code === 'NETWORK_ERROR') {
-        errorMessage = 'Network error. Please check your internet connection.';
-      }
-
-      setError(errorMessage);
-      handleError(err, { context: 'login' });
-      setLoading(false);
+      setError(message);
     } finally {
-      if (!loginSuccess) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
-  // Handle demo login
-  const handleDemoLogin = () => {
-    setIsDemo(true);
-    setFormData({
-      username: import.meta.env.VITE_DEMO_USERNAME || 'demo@tickflow.com',
-      password: import.meta.env.VITE_DEMO_PASSWORD || 'demo123',
-      rememberMe: false,
-    });
-    setTimeout(() => {
-      const form = document.getElementById('login-form');
-      if (form) form.requestSubmit();
-    }, 300);
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    performLogin(formData);
   };
 
-  // Loading state
-  if (authLoading) {
+  const handleDemoLogin = () => {
+    performLogin({
+      username: demoUsername,
+      password: demoPassword,
+      rememberMe: false,
+    });
+  };
+
+  if (authLoading || (isAuthenticated && user)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 bg-black">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" aria-hidden="true" />
+        <p className="text-sm text-gray-400">Checking your account…</p>
       </div>
     );
   }
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center bg-black px-4 py-12"
-      role="main"
-      aria-labelledby="login-title"
-    >
-      <div className="w-full max-w-md bg-black transition-all duration-300">
-        {/* ============================================================
-            HEADER – Logo + Brand + Subtitle + Welcome
-            ============================================================ */}
-        <div className="space-y-3 text-center pt-8 pb-4">
-          <div className="flex flex-col items-center">
-            <img
-              src={TfcLogo}
-              alt="TFC"
-              className="h-14 w-14 mb-2 opacity-80"
-            />
-            <span className="text-lg font-semibold text-white tracking-tight">
-              Tickflow Intelligence
-            </span>
-            <span className="text-[10px] text-gray-500 mt-0.5 tracking-wide">
-              Hybrid LSTM + FinBERT Stock Intelligence
-            </span>
+    <section className="mx-auto flex min-h-[70vh] w-full max-w-md flex-col justify-center bg-black px-4 py-12" aria-labelledby="login-title">
+      <div className="space-y-3 pb-6 text-center">
+        <img src={TfcLogo} alt="" className="mx-auto mb-2 h-14 w-14 opacity-80" />
+        <p className="text-lg font-semibold tracking-tight text-white">TickFlow Intelligence</p>
+        <p className="text-xs tracking-wide text-gray-500">Stock research workspace</p>
+        <h1 id="login-title" className="pt-3 text-2xl font-bold tracking-tight text-white">
+          Welcome back
+        </h1>
+        <p className="mx-auto max-w-sm text-sm text-gray-400">
+          Sign in to return to your research workspace.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-gray-800 bg-gray-900 p-6">
+        {error && (
+          <div role="alert" className="mb-5 flex items-start gap-2 rounded-md border border-red-400/40 bg-red-400/10 p-3 text-sm text-red-300">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+            <div>
+              <p>{error}</p>
+              {needsVerification && (
+                <Link
+                  to="/resend-verification"
+                  state={{ email: verificationEmail }}
+                  className="mt-2 inline-flex min-h-[36px] items-center font-medium text-white underline underline-offset-4 hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+                >
+                  Resend verification email
+                </Link>
+              )}
+            </div>
           </div>
-          <h1
-            id="login-title"
-            className="text-2xl font-bold text-white tracking-tight mt-3"
+        )}
+
+        <form className="space-y-5" onSubmit={handleSubmit} noValidate>
+          <div>
+            <label htmlFor="username" className="mb-1 block text-sm font-medium text-gray-300">
+              Username or email
+            </label>
+            <input
+              id="username"
+              name="username"
+              type="text"
+              autoComplete="username"
+              required
+              maxLength={254}
+              className="min-h-[46px] w-full rounded-lg border border-gray-800 bg-gray-950 px-4 py-2.5 text-white placeholder:text-gray-500 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:cursor-not-allowed disabled:opacity-60"
+              placeholder="Enter your username or email"
+              value={formData.username}
+              onChange={handleChange}
+              disabled={loading}
+              aria-invalid={Boolean(error)}
+            />
+          </div>
+
+          <div>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+                Password
+              </label>
+              <Link
+                to="/forgot-password"
+                className="inline-flex min-h-[36px] shrink-0 items-center whitespace-nowrap text-sm text-gray-400 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+              >
+                Forgot password?
+              </Link>
+            </div>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              className="min-h-[46px] w-full rounded-lg border border-gray-800 bg-gray-950 px-4 py-2.5 text-white placeholder:text-gray-500 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:cursor-not-allowed disabled:opacity-60"
+              placeholder="Enter your password"
+              value={formData.password}
+              onChange={handleChange}
+              disabled={loading}
+            />
+          </div>
+
+          <label htmlFor="rememberMe" className="flex min-h-[40px] items-center gap-2 text-sm text-gray-400">
+            <input
+              id="rememberMe"
+              name="rememberMe"
+              type="checkbox"
+              className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-white focus:ring-gray-500"
+              checked={formData.rememberMe}
+              onChange={handleChange}
+              disabled={loading}
+            />
+            Keep me signed in on this device
+          </label>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex min-h-[46px] w-full items-center justify-center rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
           >
-            Welcome Back
-          </h1>
-          <p className="text-gray-400 text-sm max-w-sm mx-auto">
-            Sign in to access your LSTM + FinBERT predictions and market insights.
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                Signing in…
+              </>
+            ) : 'Sign in'}
+          </button>
+        </form>
+
+        {demoEnabled && (
+          <>
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-800" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-gray-900 px-3 text-gray-500">Or</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleDemoLogin}
+              disabled={loading}
+              className="group flex min-h-[44px] w-full items-center justify-center rounded-lg border border-gray-700 px-4 py-2.5 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500"
+            >
+              Try the demo account
+              <ChevronRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+            </button>
+          </>
+        )}
+
+        <div className="mt-6 border-t border-gray-800 pt-5 text-center">
+          <p className="text-sm text-gray-400">
+            Don’t have an account?{' '}
+            <Link to="/signup" className="font-medium text-white hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500">
+              Create one
+            </Link>
+          </p>
+          <p className="mt-4 text-xs text-gray-500">
+            By signing in, you agree to our{' '}
+            <Link to="/terms" className="underline underline-offset-2 hover:text-white">Terms of Service</Link>
+            {' '}and{' '}
+            <Link to="/privacy" className="underline underline-offset-2 hover:text-white">Privacy Policy</Link>.
+          </p>
+          <p className="mt-2 text-xs text-gray-500">
+            Use a unique password and sign out when using a shared device.
           </p>
         </div>
-
-        {/* ============================================================
-            FORM CONTAINER
-            ============================================================ */}
-        <div className="px-6 pb-8">
-          {/* Success Message */}
-          {successMessage && (
-            <div className="mb-4 rounded-md border border-green-400 bg-green-400/10 p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg
-                    className="h-5 w-5 text-green-400"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-green-400">
-                    {successMessage}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Error Message */}
-          {error && (
-            <div className="mb-4 rounded-md border border-red-400 bg-red-400/10 p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg
-                    className="h-5 w-5 text-red-400"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-red-400">{error}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Login Form */}
-          <form
-            id="login-form"
-            className="space-y-6"
-            onSubmit={handleSubmit}
-            noValidate
-          >
-            <div className="space-y-4">
-              <div>
-                <label
-                  htmlFor="username"
-                  className="block text-sm font-medium text-gray-300 mb-1"
-                >
-                  Username or Email
-                </label>
-                <input
-                  id="username"
-                  name="username"
-                  type="text"
-                  autoComplete="username"
-                  required
-                  className="w-full min-h-[44px] px-4 py-2.5 border border-gray-800 rounded-lg placeholder-gray-500 text-white bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Enter your username or email"
-                  value={formData.username}
-                  onChange={handleChange}
-                  disabled={loading || isDemo}
-                  aria-label="Username or email"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label
-                    htmlFor="password"
-                    className="block text-sm font-medium text-gray-300"
-                  >
-                    Password
-                  </label>
-                  <Link
-                    to="/forgot-password"
-                    className="text-sm text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  className="w-full min-h-[44px] px-4 py-2.5 border border-gray-800 rounded-lg placeholder-gray-500 text-white bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Enter your password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  disabled={loading || isDemo}
-                  aria-label="Password"
-                />
-              </div>
-            </div>
-
-            {/* Remember Me */}
-            <div className="flex items-center">
-              <input
-                id="rememberMe"
-                name="rememberMe"
-                type="checkbox"
-                className="h-4 w-4 text-white focus:ring-gray-500 border-gray-800 rounded cursor-pointer bg-gray-900"
-                checked={formData.rememberMe}
-                onChange={handleChange}
-                disabled={loading}
-              />
-              <label
-                htmlFor="rememberMe"
-                className="ml-2 block text-sm text-gray-400 cursor-pointer"
-              >
-                Remember me
-              </label>
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading || isDemo}
-              className="w-full min-h-[44px] flex items-center justify-center py-2.5 px-4 border border-transparent rounded-lg text-sm font-medium text-black bg-white hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 focus:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                'Sign in'
-              )}
-            </button>
-          </form>
-
-          {/* Divider */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-800" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="px-3 bg-black text-gray-500">
-                Or continue with
-              </span>
-            </div>
-          </div>
-
-          {/* Demo Button */}
-          <button
-            onClick={handleDemoLogin}
-            disabled={loading || isDemo}
-            className="flex items-center justify-center w-full min-h-[44px] py-2.5 text-sm font-medium text-gray-400 border border-gray-800 rounded-lg hover:bg-gray-800 hover:text-white transition-colors group disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-          >
-            <span>Try Demo Dashboard</span>
-            <ChevronRight className="h-4 w-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
-          </button>
-
-          {/* Footer Links */}
-          <div className="mt-6 space-y-2 text-center">
-            <div className="flex items-center justify-center gap-1 text-sm text-gray-400">
-              <span>Don't have an account?</span>
-              <Link
-                to="/signup"
-                className="text-white hover:text-gray-300 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-              >
-                Create one now
-              </Link>
-            </div>
-          </div>
-
-          {/* Trust Badge */}
-          <div className="mt-6 pt-4 border-t border-gray-800">
-            <p className="text-[10px] text-center text-gray-500">
-              By signing in, you agree to our{' '}
-              <Link to="/terms" className="hover:text-white transition-colors">
-                Terms of Service
-              </Link>{' '}
-              and{' '}
-              <Link to="/privacy" className="hover:text-white transition-colors">
-                Privacy Policy
-              </Link>
-            </p>
-            <p className="text-[10px] text-center text-gray-500 mt-1">
-              Secured with industry‑standard encryption
-            </p>
-          </div>
-        </div>
       </div>
-    </div>
+    </section>
   );
 };
 
