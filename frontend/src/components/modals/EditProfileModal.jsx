@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { api } from '@/services/api';
+import { useState } from 'react';
+import AuthService from '@/services/authService';
 import {
   Dialog,
   DialogContent,
@@ -13,11 +12,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert } from '@/components/ui/alert';
-import { cn } from '@/lib/utils';
 import { AlertCircle, CheckCircle } from 'lucide-react';
+import { getActionErrorMessage } from '@/utils/errorHandler';
 
 const EditProfileModal = ({ isOpen, onClose, onSuccess, user }) => {
-  const { updateProfile } = useAuth();
   const [form, setForm] = useState({
     display_name: user?.display_name || '',
     username: user?.username || '',
@@ -33,14 +31,29 @@ const EditProfileModal = ({ isOpen, onClose, onSuccess, user }) => {
     setSuccess(false);
 
     try {
-      await updateProfile(form);
+      const result = await AuthService.updateProfile({ username: form.username, nickname: form.display_name });
+      if (!result?.success) {
+        setError(getActionErrorMessage(
+          {
+            code: result?.code,
+            message: result?.error,
+            details: result?.details,
+            retryAfter: result?.retryAfter,
+          },
+          'We couldn’t update your profile. Please try again.'
+        ));
+        return;
+      }
       setSuccess(true);
       setTimeout(() => {
         onSuccess();
         onClose();
       }, 1500);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update profile. Please try again.');
+      setError(getActionErrorMessage(
+        err,
+        'We couldn’t update your profile. Please try again.'
+      ));
     } finally {
       setLoading(false);
     }

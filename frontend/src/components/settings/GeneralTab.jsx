@@ -1,19 +1,15 @@
-import { cn } from "@/lib/utils";
+/**
+ * General settings – language and time zone only.
+ * Name is collected during onboarding, so it is not edited here.
+ */
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Save, CheckCircle, AlertCircle, RotateCcw } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
 
-// Constants
-const DEFAULT_VALUES = {
-  language: 'en',
-  timezone: 'UTC',
-  theme: 'system',
-};
+const DEFAULT_VALUES = { language: 'en', timezone: 'UTC' };
 
 const LANGUAGE_OPTIONS = [
   { value: 'en', label: 'English' },
@@ -34,6 +30,7 @@ const TIMEZONE_OPTIONS = [
   { value: 'Europe/London', label: 'London (GMT)' },
   { value: 'Europe/Berlin', label: 'Berlin (CET)' },
   { value: 'Europe/Paris', label: 'Paris (CET)' },
+  { value: 'Africa/Nairobi', label: 'Nairobi (EAT)' },
   { value: 'Asia/Dubai', label: 'Dubai (GST)' },
   { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
   { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
@@ -41,290 +38,105 @@ const TIMEZONE_OPTIONS = [
   { value: 'Pacific/Auckland', label: 'Auckland (NZST)' },
 ];
 
-const THEME_OPTIONS = [
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'system', label: 'System' },
-];
+const fromPrefs = (preferences) => ({
+  language: preferences?.language || DEFAULT_VALUES.language,
+  timezone: preferences?.timezone || DEFAULT_VALUES.timezone,
+});
 
 const GeneralTab = ({ preferences, onSave, isSaving, saveStatus: parentSaveStatus }) => {
-  const { user } = useAuth();
-
-  // Form state
-  const [form, setForm] = useState({
-    first_name: user?.first_name || '',
-    last_name: user?.last_name || '',
-    language: preferences?.language || DEFAULT_VALUES.language,
-    timezone: preferences?.timezone || DEFAULT_VALUES.timezone,
-    theme: preferences?.theme || DEFAULT_VALUES.theme,
-  });
-
+  const [form, setForm] = useState(fromPrefs(preferences));
   const [hasChanges, setHasChanges] = useState(false);
-  const [errors, setErrors] = useState({});
 
-  // Sync with user changes
-  useEffect(() => {
-    if (user) {
-      setForm(prev => ({
-        ...prev,
-        first_name: user.first_name || '',
-        last_name: user.last_name || '',
-      }));
-    }
-  }, [user]);
-
-  // Sync with preferences changes
   useEffect(() => {
     if (preferences) {
-      setForm(prev => ({
-        ...prev,
-        language: preferences.language || DEFAULT_VALUES.language,
-        timezone: preferences.timezone || DEFAULT_VALUES.timezone,
-        theme: preferences.theme || DEFAULT_VALUES.theme,
-      }));
+      setForm(fromPrefs(preferences));
+      setHasChanges(false);
     }
   }, [preferences]);
 
-  // Detect changes
   useEffect(() => {
-    if (!user && !preferences) return;
+    const saved = fromPrefs(preferences);
+    setHasChanges(form.language !== saved.language || form.timezone !== saved.timezone);
+  }, [form, preferences]);
 
-    const hasChanged = 
-      form.first_name !== (user?.first_name || '') ||
-      form.last_name !== (user?.last_name || '') ||
-      form.language !== (preferences?.language || DEFAULT_VALUES.language) ||
-      form.timezone !== (preferences?.timezone || DEFAULT_VALUES.timezone) ||
-      form.theme !== (preferences?.theme || DEFAULT_VALUES.theme);
-    
-    setHasChanges(hasChanged);
-  }, [form, user, preferences]);
+  const handleFieldChange = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
-  // Validate form
-  const validate = () => {
-    const newErrors = {};
-
-    // Name validation (optional but with limits)
-    if (form.first_name && form.first_name.length > 50) {
-      newErrors.first_name = 'First name must be less than 50 characters';
-    }
-    if (form.last_name && form.last_name.length > 50) {
-      newErrors.last_name = 'Last name must be less than 50 characters';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  // Reset to defaults
-  const handleReset = () => {
-    setForm({
-      first_name: user?.first_name || '',
-      last_name: user?.last_name || '',
-      language: preferences?.language || DEFAULT_VALUES.language,
-      timezone: preferences?.timezone || DEFAULT_VALUES.timezone,
-      theme: preferences?.theme || DEFAULT_VALUES.theme,
-    });
-    setHasChanges(false);
-    setErrors({});
-  };
-
-  // Handle form field changes
-  const handleFieldChange = (field, value) => {
-    setForm(prev => ({ ...prev, [field]: value }));
-  };
-
-  // Handle submit
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!validate()) return;
     if (!hasChanges) return;
-
     await onSave(form);
   };
 
-  // Determine save status display
-  const getSaveStatusDisplay = () => {
-    if (parentSaveStatus?.type === 'saving') {
-      return { icon: null, text: 'Saving...', className: 'text-gray-400' };
-    }
-    if (parentSaveStatus?.type === 'success') {
-      return { icon: CheckCircle, text: 'Saved successfully', className: 'text-green-400' };
-    }
-    if (parentSaveStatus?.type === 'error') {
-      return { icon: AlertCircle, text: 'Failed to save', className: 'text-red-400' };
-    }
-    return null;
-  };
-
-  const statusDisplay = getSaveStatusDisplay();
+  const saving = parentSaveStatus?.type === 'saving';
+  const statusDisplay =
+    parentSaveStatus?.type === 'success' ? { icon: CheckCircle, text: 'Saved successfully', className: 'text-green-400' }
+    : parentSaveStatus?.type === 'error' ? { icon: AlertCircle, text: 'Failed to save', className: 'text-red-400' }
+    : null;
 
   return (
     <Card className="bg-gray-900 border border-gray-800">
       <CardHeader>
         <CardTitle className="text-white">General Settings</CardTitle>
-        <CardDescription className="text-gray-400">
-          Manage your basic account information and preferences
-        </CardDescription>
+        <CardDescription className="text-gray-400">Language and time zone used across the app</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Name Fields */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="first_name" className="text-gray-300">
-                First Name
-                <span className="text-xs text-gray-500 ml-1">(optional)</span>
-              </Label>
-              <Input
-                id="first_name"
-                value={form.first_name}
-                onChange={(e) => handleFieldChange('first_name', e.target.value)}
-                placeholder="Your first name"
-                maxLength={50}
-                className={cn(
-                  'min-h-[44px] bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500 focus:ring-offset-black',
-                  errors.first_name && 'border-red-400'
-                )}
-                disabled={parentSaveStatus?.type === 'saving'}
-              />
-              {errors.first_name && (
-                <p className="text-sm text-red-400">{errors.first_name}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="last_name" className="text-gray-300">
-                Last Name
-                <span className="text-xs text-gray-500 ml-1">(optional)</span>
-              </Label>
-              <Input
-                id="last_name"
-                value={form.last_name}
-                onChange={(e) => handleFieldChange('last_name', e.target.value)}
-                placeholder="Your last name"
-                maxLength={50}
-                className={cn(
-                  'min-h-[44px] bg-gray-900 border-gray-800 text-white placeholder:text-gray-500 focus:ring-gray-500 focus:ring-offset-black',
-                  errors.last_name && 'border-red-400'
-                )}
-                disabled={parentSaveStatus?.type === 'saving'}
-              />
-              {errors.last_name && (
-                <p className="text-sm text-red-400">{errors.last_name}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Language */}
           <div className="space-y-2">
             <Label htmlFor="language" className="text-gray-300">Language</Label>
-            <Select 
-              value={form.language} 
-              onValueChange={(value) => handleFieldChange('language', value)}
-            >
-              <SelectTrigger id="language" className="min-h-[44px] bg-gray-900 border-gray-800 text-white focus:ring-gray-500 focus:ring-offset-black" disabled={parentSaveStatus?.type === 'saving'}>
+            <Select value={form.language} onValueChange={(v) => handleFieldChange('language', v)}>
+              <SelectTrigger id="language" className="min-h-[44px] bg-gray-900 border-gray-800 text-white" disabled={saving}>
                 <SelectValue placeholder="Select language" />
               </SelectTrigger>
               <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                {LANGUAGE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value} className="focus:bg-gray-800 focus:text-white text-gray-400 hover:text-white min-h-[44px]">
-                    {option.label}
-                  </SelectItem>
+                {LANGUAGE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value} className="focus:bg-gray-800 focus:text-white text-gray-400 min-h-[44px]">{o.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Time Zone */}
           <div className="space-y-2">
             <Label htmlFor="timezone" className="text-gray-300">Time Zone</Label>
-            <Select 
-              value={form.timezone} 
-              onValueChange={(value) => handleFieldChange('timezone', value)}
-            >
-              <SelectTrigger id="timezone" className="min-h-[44px] bg-gray-900 border-gray-800 text-white focus:ring-gray-500 focus:ring-offset-black" disabled={parentSaveStatus?.type === 'saving'}>
+            <Select value={form.timezone} onValueChange={(v) => handleFieldChange('timezone', v)}>
+              <SelectTrigger id="timezone" className="min-h-[44px] bg-gray-900 border-gray-800 text-white" disabled={saving}>
                 <SelectValue placeholder="Select timezone" />
               </SelectTrigger>
               <SelectContent className="bg-gray-900 border-gray-800 text-white max-h-60 overflow-y-auto">
-                {TIMEZONE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value} className="focus:bg-gray-800 focus:text-white text-gray-400 hover:text-white min-h-[44px]">
-                    {option.label}
-                  </SelectItem>
+                {TIMEZONE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value} className="focus:bg-gray-800 focus:text-white text-gray-400 min-h-[44px]">{o.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Theme */}
-          <div className="space-y-2">
-            <Label className="text-gray-300">Theme</Label>
-            <div className="flex flex-wrap gap-4">
-              {THEME_OPTIONS.map((theme) => (
-                <button
-                  key={theme.value}
-                  type="button"
-                  onClick={() => handleFieldChange('theme', theme.value)}
-                  disabled={parentSaveStatus?.type === 'saving'}
-                  className={cn(
-                    'min-h-[44px] px-4 py-2 rounded-lg border transition-all capitalize',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black',
-                    form.theme === theme.value 
-                      ? 'border-white bg-gray-800 text-white'
-                      : 'border-gray-800 text-gray-400 hover:border-gray-600 hover:bg-gray-800 hover:text-white',
-                    parentSaveStatus?.type === 'saving' && 'opacity-50 cursor-not-allowed'
-                  )}
-                >
-                  {theme.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-4">
-            <Button 
-              type="submit" 
-              disabled={isSaving || !hasChanges || parentSaveStatus?.type === 'saving'}
-              className="min-w-[140px] min-h-[44px] bg-white text-black hover:bg-gray-200 focus-visible:ring-gray-500 focus-visible:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed"
+            <Button
+              type="submit"
+              disabled={isSaving || !hasChanges || saving}
+              className="min-w-[140px] min-h-[44px] bg-white text-black hover:bg-gray-200 disabled:opacity-50"
             >
-              {parentSaveStatus?.type === 'saving' ? (
-                'Saving...'
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Changes
-                </>
-              )}
+              <Save className="h-4 w-4 mr-2" />
+              {saving ? 'Saving...' : 'Save Changes'}
             </Button>
-
             <Button
               type="button"
               variant="outline"
-              onClick={handleReset}
-              disabled={!hasChanges || parentSaveStatus?.type === 'saving'}
-              className="min-w-[120px] min-h-[44px] border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white focus-visible:ring-gray-500 focus-visible:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setForm(fromPrefs(preferences))}
+              disabled={!hasChanges || saving}
+              className="min-w-[120px] min-h-[44px] border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white disabled:opacity-50"
             >
               <RotateCcw className="h-4 w-4 mr-2" />
               Reset
             </Button>
-
-            {/* Save Status */}
             {statusDisplay && (
-              <span className={cn(
-                'flex items-center text-sm',
-                statusDisplay.className
-              )}>
-                {statusDisplay.icon && <statusDisplay.icon className="h-4 w-4 mr-1" />}
+              <span className={`flex items-center text-sm ${statusDisplay.className}`}>
+                <statusDisplay.icon className="h-4 w-4 mr-1" />
                 {statusDisplay.text}
               </span>
             )}
           </div>
-
-          {/* Unsaved Changes Indicator */}
           {hasChanges && parentSaveStatus?.type !== 'success' && (
-            <p className="text-sm text-gray-400">
-              You have unsaved changes
-            </p>
+            <p className="text-sm text-gray-400">You have unsaved changes</p>
           )}
         </form>
       </CardContent>

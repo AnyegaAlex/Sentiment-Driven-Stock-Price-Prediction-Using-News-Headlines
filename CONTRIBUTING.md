@@ -1,348 +1,214 @@
-# Contributing to StockSentiment AI
+# Contributing to Tickflow Intelligence
 
-Thank you for your interest in contributing! We welcome contributions from everyone.
+Thank you for considering a contribution to Tickflow Intelligence. Bug reports, documentation improvements, tests, and code contributions are welcome.
 
----
+Before contributing, please read the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-## Code of Conduct
+## Before you start
 
-By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
+1. Check the [open issues](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues) to see whether the work is already being discussed.
+2. For a significant change, open an issue first so the proposed approach can be discussed before implementation.
+3. Do not include credentials, API keys, private user data, production database contents, or generated secrets in commits or issue reports.
 
----
+## Repository layout
 
-## How to Contribute
+```text
+.
+├── frontend/                                      # React and Vite application
+├── sentiment_driven_stock_price_prediction_engine/ # Django REST API and backend tests
+├── docs/                                          # Project documentation
+├── .github/                                       # Issue templates, PR template, workflows
+├── CODE_OF_CONDUCT.md
+├── CONTRIBUTING.md
+└── README.md
+```
 
-### 1. Find an Issue
+## Set up a development environment
 
-- Check [existing issues](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/issues)
+- Check [existing issues](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues)
 - Look for labels: `good-first-issue`, `help-wanted`, `bug`, `enhancement`
 - Create a new issue if you find something not listed
 
-### 2. Fork and Clone
+- Git
+- Python 3.12 or a version supported by the backend dependencies
+- Node.js 20 or later and npm
+- PostgreSQL for a local database
+- Redis only if you are working on functionality that uses it
+
+### 1. Fork and clone
+
+Fork the repository on GitHub, then clone your fork:
 
 ```bash
-# Fork the repository on GitHub
-# Then clone your fork
-git clone https://github.com/your-username/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines.git
+git clone https://github.com/YOUR_GITHUB_USERNAME/Tickflow-Capital-Intelligence.git
+cd Tickflow-Capital-Intelligence
+```
+
+Keep the upstream repository available as `upstream` if you plan to sync your fork:
+
+```bash
+git remote add upstream https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence.git
+```
+
+### 2. Set up the backend
+
+The Django project and its `manage.py` file are inside `sentiment_driven_stock_price_prediction_engine/`.
+
+```bash
 cd sentiment_driven_stock_price_prediction_engine
-3. Set Up Development Environment
-Backend:
-
-bash
 python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py generate_apikey "Development"
-python manage.py runserver
-Frontend:
 
-bash
+# macOS / Linux
+source .venv/bin/activate
+
+# Windows PowerShell
+# .venv\Scripts\Activate.ps1
+
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+pip install -r requirements-test.txt  # needed for the backend test suite
+cp .env.example .env
+```
+
+Edit `.env` with local development values. Do not commit this file or use production credentials. Configure a reachable PostgreSQL database and any external API credentials required by the feature you are testing.
+
+Apply migrations and start Django:
+
+```bash
+python manage.py migrate
+python manage.py runserver
+```
+
+The API will normally be available at `http://127.0.0.1:8000/`.
+
+### 3. Set up the frontend
+
+In a second terminal, from the repository root:
+
+```bash
 cd frontend
 npm install
+```
+
+Create or update `.env.development` with the local API configuration required by the frontend. Do not commit local environment files or secrets.
+
+Start the Vite development server:
+
+```bash
 npm run dev
-4. Create a Feature Branch
-bash
-git checkout -b feature/your-feature-name
-# or
-git checkout -b fix/your-bug-fix
-5. Make Your Changes
-Coding Standards:
+```
 
-Language	Standard
-Python	PEP 8
-JavaScript/React	ESLint configuration
-Commit Messages	Conventional Commits
-Commit Message Format:
+The frontend will normally be available at `http://localhost:5173/`.
 
-text
-<type>(<scope>): <description>
+## Make a change
 
-[optional body]
+Create a focused branch from the repository's default branch (`master`):
 
-[optional footer]
-Types:
+```bash
+git checkout master
+git pull upstream master
+git checkout -b feature/short-description
+```
 
-feat: New feature
+Use `fix/short-description` for bug fixes and `docs/short-description` for documentation-only changes.
 
-fix: Bug fix
+Keep changes focused. Avoid unrelated formatting, generated files, dependency upgrades, or changes to model behaviour in a contribution that does not require them.
 
-docs: Documentation
+## Coding guidelines
 
-style: Formatting
+- Follow the existing conventions and architecture in the affected area.
+- Python: follow PEP 8 and the project's existing Django patterns.
+- JavaScript and React: follow the existing component patterns and ESLint configuration.
+- Keep API contracts and authentication behaviour backward-compatible unless a breaking change is explicitly proposed and documented.
+- Handle errors in a way that gives users a clear, actionable message without exposing secrets or internal details.
+- Add or update tests for changed behaviour.
+- Update relevant documentation when setup, configuration, API behaviour, or user workflows change.
+- Do not commit `.env` files, credentials, local databases, build output, coverage output, or personal data.
 
-refactor: Code restructuring
+## Run tests and checks
 
-test: Adding tests
+Run the checks relevant to the files you changed before opening a pull request.
 
-chore: Maintenance
+### Backend
 
-Example:
+From the backend directory:
 
-text
-feat(api): add stock comparison endpoint
+```bash
+cd sentiment_driven_stock_price_prediction_engine
+pytest
+```
 
-Adds a new endpoint `/api/v1/stock-comparison/` that allows
-comparing multiple stocks side by side.
+If a change affects Django behaviour that is not covered by the pytest suite, also run the relevant Django tests:
 
-Closes #123
-6. Write Tests
-Backend:
-
-python
-# tests/test_views.py
-from django.test import TestCase
-from rest_framework.test import APIClient
-
-class StockAnalysisTests(TestCase):
-    def setUp(self):
-        self.client = APIClient()
-        # Setup test data
-
-    def test_stock_analysis(self):
-        response = self.client.get('/api/v1/stock-analysis/?symbol=AAPL')
-        self.assertEqual(response.status_code, 200)
-Frontend:
-
-javascript
-// frontend/src/__tests__/components/StockOpinionCard.test.js
-import { render, screen } from '@testing-library/react';
-import StockOpinionCard from '../components/cards/StockOpinionCard';
-
-test('renders stock opinion card', () => {
-  render(<StockOpinionCard symbol="AAPL" />);
-  expect(screen.getByText('AAPL')).toBeInTheDocument();
-});
-7. Run Tests
-bash
-# Backend
+```bash
 python manage.py test
+```
 
-# Frontend
+### Frontend
+
+From the frontend directory:
+
+```bash
 cd frontend
-npm test
-8. Commit and Push
-bash
-git add .
-git commit -m "feat: add your feature"
-git push origin feature/your-feature-name
-9. Open a Pull Request
-Go to the repository on GitHub
-
-Click "Compare & pull request"
-
-Fill in the PR template
-
-Link related issues
-
-Submit
-
-Pull Request Guidelines
-Requirement	Description
-One feature per PR	Keep PRs focused and reviewable
-Include tests	New features must include tests
-Update docs	Update README if needed
-Keep commits atomic	One logical change per commit
-Link issues	Reference related issues
-Pass CI	All checks must pass
-Review comments	Address feedback promptly
-Review Process
-Automated checks run (tests, linting, build)
-
-Maintainer review within 3-5 business days
-
-Feedback may be requested
-
-Approval and merge
-
-Development Tips
-Common Commands
-bash
-# Backend
-python manage.py runserver
-python manage.py shell
-python manage.py migrate
-python manage.py generate_apikey "Development"
-
-# Frontend
-npm run dev
+npm test -- --run
 npm run build
 npm run lint
-npm run test
+```
 
-# Docker
-docker-compose up --build
-docker-compose exec web python manage.py migrate
-Debugging
-python
-# Add debug logging
-import logging
-logger = logging.getLogger(__name__)
-logger.info(f"Debug message: {variable}")
-javascript
-// Frontend debugging
-console.log('Debug:', data);
-debugger; // Open DevTools
-Getting Help
-Resource	How to Use
-Issues	Report bugs, request features
-Discussions	Ask questions, share ideas
-Email	anyega.alex.kamau@gmail.com
-Recognition
-Contributors will be recognized in:
+The lint command checks the frontend project and may report pre-existing issues outside the files changed by your contribution. Report those separately rather than suppressing unrelated rules.
 
-The README
+### Documentation
 
-The CHANGELOG
+Check that Markdown code fences are balanced, local links point to existing files, and command examples use the repository's current paths and scripts.
 
-GitHub contributors list
+## Commit messages
 
-Thank you for contributing!
+Use clear, descriptive commit messages. Conventional Commit prefixes are encouraged:
 
-text
+```text
+feat(frontend): add watchlist filters
+fix(api): handle expired API keys
+docs: clarify local setup
+ test(frontend): cover consent preferences
+refactor(auth): simplify token refresh handling
+chore(deps): update development tooling
+```
 
----
+Do not include a leading space in the commit type. Keep each commit focused on one logical change.
 
-## 4. CODE_OF_CONDUCT.md
+## Open a pull request
 
-**File:** `CODE_OF_CONDUCT.md`
+1. Run the relevant tests and checks.
+2. Review your diff and remove unrelated or generated files.
+3. Push your branch to your fork:
 
-```markdown
-# Code of Conduct
+   ```bash
+   git push -u origin feature/short-description
+   ```
 
-## Our Pledge
+4. Open a pull request against `master` in the [Tickflow Capital Intelligence repository](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/pulls).
+5. Complete the pull request template in `.github/PULL_REQUEST_TEMPLATE.md`.
 
-We as members, contributors, and leaders pledge to make participation in our
-community a harassment-free experience for everyone, regardless of age, body
-size, visible or invisible disability, ethnicity, sex characteristics, gender
-identity and expression, level of experience, education, socio-economic status,
-nationality, personal appearance, race, religion, or sexual identity and orientation.
+A useful pull request description explains:
 
-We pledge to act and interact in ways that contribute to an open, welcoming,
-diverse, inclusive, and healthy community.
+- What changed and why.
+- How the change was tested, including commands and results.
+- Any configuration or migration steps required.
+- Screenshots or recordings for visible frontend changes.
+- Related issue numbers and known limitations.
 
----
+Keep pull requests reviewable. One logical change per pull request is preferred. Maintainers may request revisions before merging.
 
-## Our Standards
+## Reporting bugs and requesting features
 
-### Positive Behavior
+- [Report a bug](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues/new?template=bug_report.md)
+- [Request a feature](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues/new?template=feature_request.md)
+- [Browse existing issues](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues)
 
-Examples of behavior that contributes to a positive environment:
+For security-sensitive reports, do not publish exploit details, credentials, or private data in a public issue. Use the repository's private security reporting channel where available.
 
-- Using welcoming and inclusive language
-- Being respectful of differing viewpoints and experiences
-- Gracefully accepting constructive criticism
-- Focusing on what is best for the community
-- Showing empathy towards other community members
+## Questions
 
-### Unacceptable Behavior
+For project questions, open a GitHub issue with enough detail to reproduce the problem or understand the proposal. Please do not post API keys, passwords, tokens, or private user information.
 
-Examples of unacceptable behavior include:
-
-- Trolling, insulting, or derogatory comments
-- Personal or political attacks
-- Harassment of any kind
-- Publishing others' private information without permission
-- Sexualized language or imagery
-- Other conduct which could reasonably be considered inappropriate
-
----
-
-## Enforcement Responsibilities
-
-Project maintainers are responsible for clarifying and enforcing our standards of
-acceptable behavior and will take appropriate and fair corrective action in
-response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
-
-Project maintainers have the right and responsibility to remove, edit, or reject
-comments, commits, code, wiki edits, issues, and other contributions that are
-not aligned to this Code of Conduct.
-
----
-
-## Scope
-
-This Code of Conduct applies within all community spaces, and also applies when
-an individual is officially representing the community in public spaces.
-
-Examples of representing our community include using an official e-mail address,
-posting via an official social media account, or acting as an appointed
-representative at an online or offline event.
-
----
-
-## Enforcement
-
-### Reporting
-
-Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project team at:
-
-**Email:** anyega.alex.kamau@gmail.com
-
-All complaints will be reviewed and investigated promptly and fairly.
-
-### Enforcement Guidelines
-
-Project maintainers will follow these Community Impact Guidelines in determining
-the consequences for any action they deem in violation of this Code of Conduct:
-
-#### 1. Correction
-
-**Community Impact:** Use of inappropriate language or other behavior deemed
-unprofessional or unwelcome in the community.
-
-**Consequence:** A private, written warning from maintainers, providing clarity
-around the nature of the violation and an explanation of why the behavior was
-inappropriate. A public apology may be requested.
-
-#### 2. Warning
-
-**Community Impact:** A violation through a single incident or series of actions.
-
-**Consequence:** A warning with consequences for continued behavior. No
-interaction with the people involved, including unsolicited interaction with
-those enforcing the Code of Conduct, for a specified period. This includes
-avoiding interactions in community spaces as well as external channels like
-social media. Violating these terms may lead to a temporary or permanent ban.
-
-#### 3. Temporary Ban
-
-**Community Impact:** A serious violation of community standards, including
-sustained inappropriate behavior.
-
-**Consequence:** A temporary ban from any sort of interaction or public
-communication with the community for a specified period. No public or private
-interaction with the people involved, including unsolicited interaction with
-those enforcing the Code of Conduct, is allowed during this period.
-Violating these terms may lead to a permanent ban.
-
-#### 4. Permanent Ban
-
-**Community Impact:** Demonstrating a pattern of violation of community
-standards, including sustained inappropriate behavior, harassment of an
-individual, or aggression toward or disparagement of classes of individuals.
-
-**Consequence:** A permanent ban from any sort of public interaction within
-the community.
-
----
-
-## Attribution
-
-This Code of Conduct is adapted from the [Contributor Covenant][homepage],
-version 2.0, available at
-https://www.contributor-covenant.org/version/2/0/code_of_conduct.html
-
-Community Impact Guidelines were inspired by [Mozilla's code of conduct
-enforcement ladder](https://github.com/mozilla/diversity).
-
-[homepage]: https://www.contributor-covenant.org
-
-For answers to common questions about this code of conduct, see the FAQ at
-https://www.contributor-covenant.org/faq. Translations are available at
-https://www.contributor-covenant.org/translations.
-
----
-
-**Last Updated:** July 14, 2026
+Thank you for helping improve Tickflow Intelligence.

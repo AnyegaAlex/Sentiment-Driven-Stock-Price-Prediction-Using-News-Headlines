@@ -15,6 +15,7 @@ All external dependencies (email sending, cache, throttling, JWT) are mocked.
 
 import json
 import pytest
+from authentication.utils import hash_verification_code
 from unittest.mock import patch, MagicMock, Mock
 from datetime import datetime, timedelta
 from django.urls import reverse
@@ -82,7 +83,7 @@ def auth_client(test_user):
 
 @pytest.fixture
 def mock_email_send():
-    with patch('authentication.utils.send_email_async', return_value=True) as mock:
+    with patch('authentication.utils.send_email_sync', return_value=True) as mock:
         yield mock
 
 
@@ -97,8 +98,16 @@ def mock_security_alert():
 # ============================================================================
 
 def bypass_throttling():
-    return patch.object(AnonRateThrottle, 'allow_request', return_value=True), \
-           patch.object(UserRateThrottle, 'allow_request', return_value=True)
+    """
+    Context manager that disables throttling for tests that are not about throttling.
+    Returns an ExitStack (a single context manager) that holds both patches.
+    Rate-limit tests must NOT use this helper; they exercise real throttling.
+    """
+    from contextlib import ExitStack
+    stack = ExitStack()
+    stack.enter_context(patch.object(AnonRateThrottle, 'allow_request', return_value=True))
+    stack.enter_context(patch.object(UserRateThrottle, 'allow_request', return_value=True))
+    return stack
 
 
 # ============================================================================
@@ -128,7 +137,13 @@ class TestRegisterView:
         mock_email_send.assert_called_once()
 
     def test_register_duplicate_email(self, api_client, test_user):
-        """Duplicate email returns 400."""
+        """Duplicate email is rejected with a field-level error on 'email'.
+
+        RegisterView uses DRF's default error body ({field: [messages]}),
+        not the error_response envelope used by other auth endpoints. That
+        shape is asserted here as-is; the envelope inconsistency is recorded
+        as technical debt rather than changed silently.
+        """
         url = reverse('register')
         data = {
             'username': 'another',
@@ -139,7 +154,10 @@ class TestRegisterView:
         with bypass_throttling():
             response = api_client.post(url, data, format='json')
         assert response.status_code == 400
-        assert 'email' in response.json().get('details', {})
+        body = response.json()
+        assert 'email' in body
+        assert 'already registered' in body['email'][0]
+        assert User.objects.filter(email__iexact='test@example.com').count() == 1
 
     def test_register_password_mismatch(self, api_client):
         """Password mismatch returns 400."""
@@ -153,11 +171,12 @@ class TestRegisterView:
         with bypass_throttling():
             response = api_client.post(url, data, format='json')
         assert response.status_code == 400
-        assert 'password' in response.json().get('details', {})
+        # RegisterView returns DRF's default {field: [messages]} body.
+        assert 'password' in response.json()
 
     def test_register_email_send_failure(self, api_client):
         """If email sending fails, user is still created."""
-        with patch('authentication.utils.send_email_async', return_value=False) as mock_send:
+        with patch('authentication.utils.send_email_sync', return_value=False) as mock_send:
             url = reverse('register')
             data = {
                 'username': 'newuser2',
@@ -215,13 +234,20 @@ class TestLoginView:
         assert 'resend_available' in response.json().get('details', {})
 
     def test_login_inactive_user(self, api_client, inactive_user, test_password):
-        """Inactive user gets 403."""
+        """Inactive account gets the same generic 401 as a wrong password.
+
+        Intended behaviour (not a defect): authenticate() rejects inactive users, and
+        the explicit 403 branch was removed on purpose so that a correct password does
+        not disclose account status. The response must not mention deactivation.
+        """
         url = reverse('login')
         data = {'username': 'inactive', 'password': test_password}
         with bypass_throttling():
             response = api_client.post(url, data, format='json')
-        assert response.status_code == 403
-        assert 'deactivated' in response.json()['error']
+        assert response.status_code == 401
+        body = response.json()
+        assert body['error'] == 'Invalid credentials. Please check your username and password.'
+        assert 'deactivated' not in str(body).lower()
 
     def test_login_rate_limit_exceeded(self, api_client):
         """Rate limiting on login attempts."""
@@ -267,11 +293,13 @@ class TestVerifyEmailView:
         """POST verify with valid code verifies email."""
         from authentication.utils import generate_verification_code
         code = generate_verification_code()
-        cache.set(f"email_verification_{unverified_user.id}", code, timeout=600)
+        cache.set(f"email_verification_{unverified_user.id}", hash_verification_code(unverified_user.id, code), timeout=600)
         url = reverse('verify-email')
-        api_client.force_authenticate(user=unverified_user)
+        # Public endpoint: identifies the account by {email, code}, no session needed.
         with bypass_throttling():
-            response = api_client.post(url, {'code': code}, format='json')
+            response = api_client.post(
+                url, {'email': unverified_user.email, 'code': code}, format='json'
+            )
         assert response.status_code == 200
         unverified_user.refresh_from_db()
         assert unverified_user.email_verified is True
@@ -299,37 +327,38 @@ class TestVerifyEmailView:
 
 class TestResendVerificationView:
 
+    # The view is public, takes {email}, and is enumeration-safe: it returns 202
+    # for every input (unknown, verified, rate-limited, ...). Assertions below
+    # check the observable side effects (email sent / audit row) instead of the body.
+
     def test_resend_success(self, api_client, unverified_user, mock_email_send):
-        """Resend verification email works."""
-        api_client.force_authenticate(user=unverified_user)
+        """Unverified account with a valid email triggers a resend and audit row."""
         url = reverse('resend-verification')
         with bypass_throttling():
-            response = api_client.post(url)
-        assert response.status_code == 200
-        assert 'Verification email sent' in response.json()['message']
+            response = api_client.post(url, {'email': unverified_user.email}, format='json')
+        assert response.status_code == 202
         mock_email_send.assert_called_once()
         assert AuditLog.objects.filter(user=unverified_user, action='VERIFICATION_RESENT').exists()
 
-    def test_resend_already_verified(self, api_client, test_user):
-        """Already verified user gets 400."""
-        api_client.force_authenticate(user=test_user)
+    def test_resend_already_verified(self, api_client, test_user, mock_email_send):
+        """Verified account: same 202 response, but no email is sent."""
         url = reverse('resend-verification')
         with bypass_throttling():
-            response = api_client.post(url)
-        assert response.status_code == 400
-        assert 'already verified' in response.json()['error']
+            response = api_client.post(url, {'email': test_user.email}, format='json')
+        assert response.status_code == 202
+        mock_email_send.assert_not_called()
 
-    def test_resend_rate_limit(self, api_client, unverified_user):
-        """Rate limiting on resend: 60s cooldown."""
-        api_client.force_authenticate(user=unverified_user)
+    def test_resend_rate_limit(self, api_client, unverified_user, mock_email_send):
+        """Per-email 60s cooldown (cache.add on a hashed key): the second request
+        within the window gets the same 202 but does not send a second email."""
         url = reverse('resend-verification')
-        with patch('authentication.views.cache.get') as mock_cache_get:
-            # Simulate cooldown
-            mock_cache_get.return_value = True
-            with bypass_throttling():
-                response = api_client.post(url)
-            assert response.status_code == 429
-            assert 'wait 60 seconds' in response.json()['error']
+        payload = {'email': unverified_user.email}
+        with bypass_throttling():
+            first = api_client.post(url, payload, format='json')
+            second = api_client.post(url, payload, format='json')
+        assert first.status_code == 202
+        assert second.status_code == 202
+        mock_email_send.assert_called_once()
 
 
 # ============================================================================
@@ -358,7 +387,7 @@ class TestPasswordResetRequestView:
         assert response.status_code == 200
         assert 'Password reset email sent' in response.json()['message']
         # No email sent
-        with patch('authentication.utils.send_email_async') as mock_send:
+        with patch('authentication.utils.send_email_sync') as mock_send:
             pass  # not called
 
 
@@ -447,17 +476,12 @@ class TestProfileView:
         # Send invalid data (e.g., username too long? but it's not in profile fields)
         data = {'first_name': 'a' * 200}  # too long
         response = auth_client.patch(url, data, format='json')
-        assert response.status_code == 200  # Actually first_name has max_length=30, so it should fail? But it might not be validated in profile view? It's a model field, so it will raise validation error. Let's test that.
-        # Actually the ProfileView uses UserProfileSerializer which validates fields. Let's check.
-        # We'll just assert it returns 400 if invalid.
-        # Simulate a validation error by using a field that doesn't exist? Better: use a valid but long first_name.
-        data = {'first_name': 'a' * 150}  # max 30? Actually model has max_length=30, but if it's longer, it raises a validation error.
+        # first_name max_length=30: the serializer rejects 200-char input (400).
+        assert response.status_code == 400
+        # first_name is max_length=150 (AbstractUser); 151 must be rejected.
+        data = {'first_name': 'a' * 151}
         response = auth_client.patch(url, data, format='json')
-        # Depending on the serializer, it may raise 400.
-        # Since the serializer validates max_length, it should be 400.
-        assert response.status_code in [400, 200]  # If it's 200, it means the field was truncated? We'll skip detailed testing.
-        # For now, we'll just test happy path and error handling in the view.
-        # We'll patch the serializer to raise an exception.
+        assert response.status_code == 400
         with patch('authentication.serializers.UserProfileSerializer.update', side_effect=Exception('DB error')):
             with patch('authentication.views.logger.error') as mock_log:
                 response = auth_client.patch(url, {'first_name': 'John'}, format='json')
@@ -493,9 +517,11 @@ class TestUpdateProfileView:
         data = {'username': 'anothername'}
         response = auth_client.patch(url, data, format='json')
         assert response.status_code == 400
-        assert 'limit of 2 username changes' in response.json()['error']
+        # UpdateProfileView is a DRF generic view: field errors are top-level.
+        # The limit error is raised as a plain string (not a list) in perform_update.
+        assert 'Limit of 2 changes reached.' in str(response.json()['username'])
 
-    def test_update_profile_duplicate_username(self, auth_client, test_user, test_user2):
+    def test_update_profile_duplicate_username(self, auth_client, test_user):
         """Duplicate username returns 400."""
         # Create another user
         user2 = User.objects.create_user(username='existing', email='existing@example.com', password='pass')
@@ -503,7 +529,8 @@ class TestUpdateProfileView:
         data = {'username': 'existing'}
         response = auth_client.patch(url, data, format='json')
         assert response.status_code == 400
-        assert 'already taken' in response.json()['error']
+        # UpdateProfileView is a DRF generic view: field errors are top-level.
+        assert 'already taken' in response.json()['username'][0]
 
 
 # ============================================================================
@@ -549,7 +576,10 @@ class TestChangePasswordView:
         }
         response = auth_client.post(url, data, format='json')
         assert response.status_code == 400
-        assert 'Passwords do not match' in response.json()['error']
+        # Envelope convention: generic message in 'error', field detail in 'details'.
+        body = response.json()
+        assert body['error'] == 'Validation failed'
+        assert 'Passwords do not match' in str(body['details'])
 
 
 # ============================================================================
@@ -569,7 +599,7 @@ class TestChangeEmailView:
         assert cache.get(f"email_change_{test_user.id}") is not None
         assert AuditLog.objects.filter(user=test_user, action='EMAIL_CHANGE_REQUESTED').exists()
 
-    def test_change_email_request_duplicate(self, auth_client, test_user, test_user2):
+    def test_change_email_request_duplicate(self, auth_client, test_user):
         """New email already in use -> 400."""
         User.objects.create_user(username='other', email='existing@example.com', password='pass')
         url = reverse('change-email')
@@ -618,7 +648,7 @@ class TestChangeUsernameView:
         assert response.status_code == 400
         assert 'Invalid password' in response.json()['error']
 
-    def test_change_username_duplicate(self, auth_client, test_user, test_user2):
+    def test_change_username_duplicate(self, auth_client, test_user):
         """Duplicate username returns 400."""
         User.objects.create_user(username='existing', email='existing@example.com', password='pass')
         url = reverse('change-username')
@@ -705,19 +735,25 @@ class TestUsageStatsView:
     def test_usage_stats(self, auth_client, test_user):
         """GET usage stats returns 31 entries."""
         url = reverse('usage-stats')
-        with patch('stocks.views.cache.get', return_value=5):  # mock cache counts
+        # cache.get is patched globally, which would also feed DRF's throttle
+        # check an int, so throttling is bypassed explicitly for this test.
+        with bypass_throttling(), patch('stocks.views.cache.get', return_value=5):
             response = auth_client.get(url)
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 31
-        assert data[0]['date'] == timezone.now().date().isoformat()
-        assert data[0]['count'] == 0  # no keys? actually we have no keys, so count = 0
-        # Since we have no keys, counts are 0. We'll just check structure.
+        # The view iterates range(30, -1, -1): oldest first, today last.
+        assert data[-1]['date'] == timezone.now().date().isoformat()
+        assert data[0]['date'] == (timezone.now().date() - timedelta(days=30)).isoformat()
+        assert data[-1]['count'] == 0  # user has no API keys, so counts are 0
 
     def test_usage_stats_error(self, auth_client):
         """Exception in view returns 500."""
         url = reverse('usage-stats')
-        with patch('authentication.views.date.today', side_effect=Exception('DB error')):
+        # UsageStatsView imports `date` inside get(), so patch it at its source module.
+        fake_date = MagicMock()
+        fake_date.today.side_effect = Exception('DB error')
+        with bypass_throttling(), patch('datetime.date', fake_date):
             response = auth_client.get(url)
         assert response.status_code == 500
         assert 'Failed to retrieve usage stats' in response.json()['error']

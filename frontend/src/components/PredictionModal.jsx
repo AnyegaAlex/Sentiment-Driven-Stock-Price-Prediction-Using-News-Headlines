@@ -1,4 +1,3 @@
-import React, { useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -6,12 +5,15 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import PropTypes from 'prop-types';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle, XCircle, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { CheckCircle, XCircle, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getCardErrorMessage } from '@/utils/errorHandler';
 import apiClient from '@/services/client';
 import SHAPExplanation from './SHAPExplanation';
 
@@ -21,10 +23,17 @@ const fetchSHAP = async (id) => {
 };
 
 const PredictionModal = ({ prediction, isOpen, onClose }) => {
-  const { data: shapData, isLoading: shapLoading } = useQuery({
+  const {
+    data: shapData,
+    isLoading: shapLoading,
+    isError: shapError,
+    error: shapErrorDetails,
+    refetch: refetchSHAP,
+  } = useQuery({
     queryKey: ['shap', prediction?.id],
     queryFn: () => fetchSHAP(prediction.id),
     enabled: isOpen && !!prediction?.id,
+    retry: 1,
   });
 
   if (!prediction) return null;
@@ -32,6 +41,13 @@ const PredictionModal = ({ prediction, isOpen, onClose }) => {
   const isCorrect = prediction.is_correct === true;
   const isIncorrect = prediction.is_correct === false;
   const isPending = prediction.is_correct === null || prediction.is_correct === undefined;
+  const movement = prediction.predicted_movement?.toLowerCase() || null;
+  const movementLabel = movement ? movement.toUpperCase() : 'Unavailable';
+  const confidencePercent = Number.isFinite(prediction.confidence)
+    ? Math.max(0, Math.min(100, prediction.confidence * 100))
+    : null;
+  const predictionDate = prediction.date ? new Date(prediction.date) : null;
+  const hasPredictionDate = predictionDate && !Number.isNaN(predictionDate.getTime());
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -40,23 +56,23 @@ const PredictionModal = ({ prediction, isOpen, onClose }) => {
           <DialogTitle className="flex flex-wrap items-center gap-3 text-white">
             <span className="font-mono font-bold text-lg">{prediction.stock_symbol}</span>
             <Badge variant="outline" className="border-gray-700 text-gray-400">
-              {new Date(prediction.date).toLocaleString()}
+              {hasPredictionDate ? predictionDate.toLocaleString() : 'Date unavailable'}
             </Badge>
-            <Badge 
+            <Badge
               className={cn(
                 'border-0 text-xs font-medium',
-                prediction.predicted_movement === 'up' 
-                  ? 'bg-green-400/20 text-green-400' 
-                  : prediction.predicted_movement === 'down'
-                  ? 'bg-red-400/20 text-red-400'
-                  : 'bg-gray-700/50 text-gray-400'
+                movement === 'up'
+                  ? 'bg-green-400/20 text-green-400'
+                  : movement === 'down'
+                    ? 'bg-red-400/20 text-red-400'
+                    : 'bg-gray-700/50 text-gray-400'
               )}
             >
-              {prediction.predicted_movement?.toUpperCase() || 'NEUTRAL'}
+              {movementLabel}
             </Badge>
           </DialogTitle>
           <DialogDescription className="flex flex-wrap items-center gap-3 text-gray-400">
-            <span>Prediction: <strong className="text-white">{prediction.predicted_movement?.toUpperCase() || 'NEUTRAL'}</strong></span>
+            <span>Prediction: <strong className="text-white">{movementLabel}</strong></span>
             {isCorrect && (
               <span className="flex items-center gap-1 text-green-400">
                 <CheckCircle className="h-4 w-4" />
@@ -104,19 +120,24 @@ const PredictionModal = ({ prediction, isOpen, onClose }) => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-400">Confidence</p>
-                <div className="flex items-center gap-3 mt-1">
-                  <span className="font-medium text-white">{Math.round(prediction.confidence * 100)}%</span>
-                  <div className="flex-1 h-2 rounded-full bg-gray-800 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-green-400 transition-all"
-                      style={{ width: `${Math.min(100, Math.round(prediction.confidence * 100))}%` }}
-                      role="progressbar"
-                      aria-valuenow={Math.round(prediction.confidence * 100)}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                    />
+                {confidencePercent === null ? (
+                  <p className="mt-1 text-sm text-gray-500">Unavailable</p>
+                ) : (
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="font-medium text-white">{Math.round(confidencePercent)}%</span>
+                    <div className="flex-1 h-2 rounded-full bg-gray-800 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-green-400 transition-all"
+                        style={{ width: `${confidencePercent}%` }}
+                        role="progressbar"
+                        aria-valuenow={Math.round(confidencePercent)}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label="Model confidence"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
               <div>
                 <p className="text-sm text-gray-400">Actual Direction</p>
@@ -134,7 +155,7 @@ const PredictionModal = ({ prediction, isOpen, onClose }) => {
               </div>
               <div>
                 <p className="text-sm text-gray-400">Source</p>
-                <p className="font-medium text-white">{prediction.source || 'LSTM'}</p>
+                <p className="font-medium text-white">{prediction.source || 'Source unavailable'}</p>
               </div>
             </div>
             {prediction.headline && (
@@ -148,14 +169,21 @@ const PredictionModal = ({ prediction, isOpen, onClose }) => {
           <TabsContent value="shap" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded">
             {shapLoading ? (
               <Skeleton className="h-48 w-full bg-gray-800" />
+            ) : shapError ? (
+              <div className="space-y-3" role="alert">
+                <p className="text-sm text-gray-400">{getCardErrorMessage(shapErrorDetails)}</p>
+                <Button variant="outline" size="sm" onClick={() => refetchSHAP()}>
+                  Try again
+                </Button>
+              </div>
             ) : shapData ? (
-              <SHAPExplanation 
+              <SHAPExplanation
                 shapValues={shapData.shap_values}
                 featureImportance={shapData.feature_importance}
                 explanation={shapData.explanation}
               />
             ) : (
-              <p className="text-gray-400">No SHAP explanation available for this prediction.</p>
+              <p className="text-gray-400">No explanation was saved for this prediction.</p>
             )}
           </TabsContent>
 
@@ -174,6 +202,28 @@ const PredictionModal = ({ prediction, isOpen, onClose }) => {
       </DialogContent>
     </Dialog>
   );
+};
+
+PredictionModal.propTypes = {
+  prediction: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    stock_symbol: PropTypes.string,
+    date: PropTypes.string,
+    predicted_movement: PropTypes.string,
+    is_correct: PropTypes.bool,
+    confidence: PropTypes.number,
+    actual_direction: PropTypes.string,
+    price_change_percent: PropTypes.number,
+    source: PropTypes.string,
+    headline: PropTypes.string,
+    market_context: PropTypes.shape({
+      spy_return: PropTypes.number,
+      spy_price_start: PropTypes.number,
+      spy_price_end: PropTypes.number,
+    }),
+  }),
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
 };
 
 export default PredictionModal;

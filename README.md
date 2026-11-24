@@ -35,54 +35,42 @@
 
 | Component | URL | Status |
 |-----------|-----|--------|
-| Frontend (Vercel) | [https://sentiment-driven-stock-price-predic.vercel.app/](https://sentiment-driven-stock-price-predic.vercel.app/) | Live |
-| Backend API (Render) | [https://sentiment-driven-stock-price-prediction.onrender.com](https://sentiment-driven-stock-price-prediction.onrender.com) | Live |
-| API Documentation (Swagger) | [https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/](https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/) | Live |
-| LSTM Model (Gradio) | [https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics](https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics) | Live |
+| Frontend | [https://intelligence.tickflowcapital.com/](https://intelligence.tickflowcapital.com/) | Live |
+| Backend API (Render) | [https://sentiment-driven-stock-price-prediction.onrender.com](https://sentiment-driven-stock-price-prediction.onrender.com) | Verify before use |
+| API Documentation (Swagger) | [https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/](https://sentiment-driven-stock-price-prediction.onrender.com/api/docs/) | Verify before use |
+| LSTM Model (Gradio) | [https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics](https://huggingface.co/spaces/AnyegaAlex/stock-prediction-analytics) | Verify before use |
 
 ---
 
 ## Overview
 
-Tickflow Intelligence is an AI-powered stock intelligence platform. It is the first open-source project from [Tickflow Capital](https://tickflowcapital.com/), a trading technology and quantitative research firm that deploys its own capital using the same systems it builds.
+Tickflow Intelligence is an AI-powered stock intelligence platform built by [Tickflow Capital](https://tickflowcapital.com/).
 
 **What the platform does:**
-- LSTM neural networks predict stock price movements with 63% accuracy
-- FinBERT sentiment analysis processes 10,000+ news articles per day
-- 7+ technical indicators provide market context
-- REST API with authentication and rate limiting
-- React dashboard for real-time monitoring and analysis
+- An LSTM model (PyTorch) produces UP, DOWN, or HOLD predictions with a confidence score
+- FinBERT (`ProsusAI/finbert`) scores the sentiment of news headlines
+- A REST API with JWT and API key authentication and per-client rate limits
+- A React dashboard for stock analysis, predictions, and account settings
 
-**Key metrics:**
-- 63% prediction accuracy
-- 3,500+ active users
-- 5,000+ predictions generated
-- 10,000+ news articles analyzed daily
-- 200 requests/minute rate limit for API keys
-
-**Target audience:**
-- Traders and investors
-- Quantitative analysts
-- Developers building trading applications
-- Students learning AI and financial markets
+**Rate limits (from settings):**
+- API keys: 200 requests/minute
+- Authenticated users: 1,000 requests/hour
+- Anonymous users: 100 requests/hour
 
 ---
 
 ## Key Capabilities
 
 ### 1. LSTM Neural Network Predictions
-- 7 input features: sentiment score + 6 technical indicators
 - Directional predictions: UP, DOWN, HOLD
 - Confidence scoring from 0 to 100 percent
 - 7-day resolution tracking with accuracy calculation
 
 ### 2. FinBERT Sentiment Analysis
-- Processes 10,000+ news articles per day
+- Model: FinBERT (`ProsusAI/finbert`)
 - Classifies sentiment as Positive, Negative, or Neutral
-- Source reliability ranking from 1 to 100
-- Key phrase extraction using spaCy
 
-### 3. Technical Indicators
+### 3. Technical Indicators (unverified: not found in the stocks code during review)
 - SMA-50 and SMA-200
 - RSI (Relative Strength Index)
 - Bollinger Bands (Upper and Lower)
@@ -91,30 +79,28 @@ Tickflow Intelligence is an AI-powered stock intelligence platform. It is the fi
 - Volatility and Volume metrics
 - 30-day price history
 
-### 4. Hybrid Prediction Model
-- Combines LSTM output, sentiment analysis, and technical indicators
-- Weighted average: 50% LSTM, 30% Sentiment, 20% Technicals
+### 4. Hybrid Prediction Model (unverified: weights not found in the code during review)
+- Intended to combine LSTM output, sentiment analysis, and technical indicators
 - Sentiment-only fallback when LSTM model is unavailable
 
 ### 5. Automated Prediction Resolution (Cron Jobs)
 - Predictions resolve 7 days after creation
-- Daily cron job fetches current prices
+- Scheduled job fetches current prices (`resolve_predictions` management command)
 - Compares predicted vs actual movement
 - Updates accuracy metrics and user statistics
 - Logs resolution results
 
-### 6. Production-Grade API
+### 6. REST API
 - REST API with JWT and API key authentication
 - Rate limiting: 200 requests/minute for API keys
 - Multiple API keys per user with revocation
 - OpenAPI/Swagger documentation
 
 ### 7. User Dashboard
-- Real-time stock analysis
-- Prediction history with filtering and export
-- Watchlist management
+- Stock analysis
+- Prediction history
 - User profile and settings
-- Dark/light theme support
+- Theme settings
 
 ---
 
@@ -226,7 +212,7 @@ sequenceDiagram
 
 ## Documentation
 
-Complete documentation is available in the [GitHub Wiki](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki).
+Complete documentation is available in the [GitHub Wiki](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/wiki).
 
 ### Wiki Sections
 - **Getting Started**: Introduction, Quick Start, Installation, Configuration
@@ -255,7 +241,7 @@ Complete documentation is available in the [GitHub Wiki](https://github.com/Anye
 | `/api/v1/symbols/` | GET | Supported symbols |
 | `/health/` | GET | Health check |
 
-Full API documentation is available in the [Wiki](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki).
+Full API documentation is available in the [Wiki](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/wiki).
 
 ---
 
@@ -273,7 +259,7 @@ Get the backend running in 5 minutes.
 
 ```bash
 # Clone the repository
-git clone https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines.git
+git clone https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence.git
 cd sentiment_driven_stock_price_prediction_engine
 
 # Create and activate virtual environment
@@ -337,12 +323,12 @@ npm run dev
 ### Docker Setup
 
 ```bash
-docker-compose up --build
-docker-compose exec web python manage.py migrate
-docker-compose exec web python manage.py generate_apikey "Development"
+docker build -t tickflow-backend sentiment_driven_stock_price_prediction_engine
+docker exec <container-id> python manage.py migrate
+docker exec <container-id> python manage.py generate_apikey "Development"
 ```
 
-Detailed installation guide is available in the [Wiki](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki).
+Detailed installation guide is available in the [Wiki](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/wiki).
 
 ---
 
@@ -382,7 +368,7 @@ Detailed installation guide is available in the [Wiki](https://github.com/Anyega
 4. Set build command: `./build.sh`
 5. Set start command: `gunicorn sentiment_driven_stock_price_prediction_engine.wsgi:application`
 
-Detailed deployment guide is available in the [Wiki](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki).
+Detailed deployment guide is available in the [Wiki](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/wiki).
 
 ### Frontend (Vercel)
 
@@ -394,7 +380,7 @@ Detailed deployment guide is available in the [Wiki](https://github.com/AnyegaAl
 ### Docker
 
 ```bash
-docker-compose up --build
+docker build -t tickflow-backend sentiment_driven_stock_price_prediction_engine
 ```
 
 ---
@@ -404,33 +390,28 @@ docker-compose up --build
 ### Backend
 - Django 5.1
 - Django REST Framework
-- PostgreSQL 16
-- Redis 7
-- Celery 5.3 (optional)
+- PostgreSQL (Neon in production)
+- Redis (optional cache)
 
 ### Frontend
 - React 18
-- React Router 6
+- React Router 7
 - React Query 5
-- Tailwind CSS 3
-- Vite 5
+- Vite 6
 - Axios
 
 ### Machine Learning
 - PyTorch
-- scikit-learn
 - FinBERT (Hugging Face Transformers)
-- spaCy
 - pandas
 - numpy
 
 ### DevOps
 - Docker
-- Docker Compose
 - Vercel (frontend)
 - Render (backend)
 - Hugging Face Spaces (ML model)
-- GitHub Actions (CI/CD)
+- GitHub Actions (data ingestion, prediction pipeline, database maintenance, deploy; no test workflow)
 
 ---
 
@@ -438,17 +419,11 @@ docker-compose up --build
 
 ### Automated Prediction Resolution (Cron Jobs)
 
-Predictions resolve 7 days after creation. A daily cron job:
+Predictions resolve 7 days after creation. A scheduled job:
 - Fetches current stock prices for pending predictions
 - Compares predicted vs actual movement
 - Updates accuracy metrics and user statistics
 - Logs resolution results
-
-### Performance Metrics
-- API Response Time (p95): < 500ms
-- Uptime: 99.9%
-- Error Rate: < 1%
-- Cache Hit Rate: > 80%
 
 ### Error Tracking
 - Sentry integration for real-time error monitoring
@@ -461,7 +436,7 @@ Predictions resolve 7 days after creation. A daily cron job:
 ## Security
 
 ### Authentication
-- API keys for external API access (hashed with PBKDF2)
+- API keys for external API access (stored as SHA-256 hashes)
 - JWT tokens for frontend authentication (60 min access, 7 day refresh)
 - Multiple API keys per user with individual revocation
 
@@ -471,19 +446,10 @@ Predictions resolve 7 days after creation. A daily cron job:
 - Anonymous Users: 100 requests/hour
 
 ### Data Protection
-- HTTPS enforced for all connections
 - API keys hashed, never stored in plain text
-- Passwords hashed with PBKDF2
-- 30-day log retention policy
+- Passwords hashed with Django's default password hasher (PBKDF2)
 
-### Security Headers
-- Content-Security-Policy
-- Strict-Transport-Security
-- X-Content-Type-Options: nosniff
-- X-Frame-Options: DENY
-- Referrer-Policy: same-origin
-
-Full security documentation is available in the [Wiki](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki).
+Full security documentation is available in the [Wiki](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/wiki).
 
 ---
 
@@ -493,10 +459,10 @@ Contributions are welcome. Please follow these steps:
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Make changes with tests
+3. Make changes with tests (`pytest` in `sentiment_driven_stock_price_prediction_engine`; `npm test` in `frontend`)
 4. Commit with a clear message
 5. Push to your branch
-6. Open a Pull Request against `main`
+6. Open a Pull Request against `master`, the repository's default branch
 
 **Guidelines:**
 - Follow existing code style
@@ -504,7 +470,7 @@ Contributions are welcome. Please follow these steps:
 - Update documentation
 - Reference related issues in PR description
 
-Full contributing guide is available in the [Wiki](https://github.com/AnyegaAlex/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines/wiki).
+Full contributing guide is available in the [Wiki](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/wiki).
 
 ---
 

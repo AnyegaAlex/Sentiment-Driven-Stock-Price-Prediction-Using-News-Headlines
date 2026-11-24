@@ -16,10 +16,10 @@
  * @param {function} [props.onError] - Error callback handler
  */
 
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { useTechnicalIndicatorsQuery } from '@/hooks/queries/useTechnicalIndicatorsQuery';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Line } from 'react-chartjs-2';
 import {
@@ -109,8 +109,10 @@ TimeframeSelector.propTypes = {
 // TrendIndicator – shows N/A when SMAs are zero
 // ----------------------------------------------------------------------------
 const TrendIndicator = ({ isUptrend, sma50, sma200, strength }) => {
-  const hasData = sma50 !== 0 || sma200 !== 0;
-  const config = isUptrend ? COLOR_SCHEMES.positive : COLOR_SCHEMES.negative;
+  const hasData = Number.isFinite(sma50) && sma50 > 0 && Number.isFinite(sma200) && sma200 > 0;
+  const config = hasData
+    ? (isUptrend ? COLOR_SCHEMES.positive : COLOR_SCHEMES.negative)
+    : COLOR_SCHEMES.neutral;
   const Icon = isUptrend ? TrendingUp : TrendingDown;
 
   return (
@@ -135,13 +137,13 @@ const TrendIndicator = ({ isUptrend, sma50, sma200, strength }) => {
         <div>
           <div className="mb-2 text-sm text-gray-500">SMA 50</div>
           <div className="text-xl font-bold text-white font-mono">
-            {sma50 !== 0 ? `$${sma50.toFixed(2)}` : '—'}
+            {Number.isFinite(sma50) && sma50 > 0 ? `$${sma50.toFixed(2)}` : '—'}
           </div>
         </div>
         <div>
           <div className="mb-2 text-sm text-gray-500">SMA 200</div>
           <div className="text-xl font-bold text-white font-mono">
-            {sma200 !== 0 ? `$${sma200.toFixed(2)}` : '—'}
+            {Number.isFinite(sma200) && sma200 > 0 ? `$${sma200.toFixed(2)}` : '—'}
           </div>
         </div>
       </div>
@@ -175,8 +177,8 @@ const TrendIndicator = ({ isUptrend, sma50, sma200, strength }) => {
 
 TrendIndicator.propTypes = {
   isUptrend: PropTypes.bool.isRequired,
-  sma50: PropTypes.number.isRequired,
-  sma200: PropTypes.number.isRequired,
+  sma50: PropTypes.number,
+  sma200: PropTypes.number,
   strength: PropTypes.number.isRequired,
 };
 
@@ -184,8 +186,11 @@ TrendIndicator.propTypes = {
 // MomentumIndicator – unchanged (RSI=0 is handled inside the component)
 // ----------------------------------------------------------------------------
 const MomentumIndicator = ({ rsi, isOversold, isOverbought }) => {
-  const config = isOversold ? COLOR_SCHEMES.positive : isOverbought ? COLOR_SCHEMES.negative : COLOR_SCHEMES.neutral;
-  const status = isOversold ? 'Oversold' : isOverbought ? 'Overbought' : 'Neutral';
+  const hasRsi = Number.isFinite(rsi);
+  const config = !hasRsi
+    ? COLOR_SCHEMES.neutral
+    : isOversold ? COLOR_SCHEMES.positive : isOverbought ? COLOR_SCHEMES.negative : COLOR_SCHEMES.neutral;
+  const status = !hasRsi ? 'Unavailable' : isOversold ? 'Oversold' : isOverbought ? 'Overbought' : 'Neutral';
 
   return (
     <div className={cn('rounded-xl border p-4 sm:p-5', config.bg, config.border)}>
@@ -199,20 +204,24 @@ const MomentumIndicator = ({ rsi, isOversold, isOverbought }) => {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm text-gray-500">RSI (14)</span>
-          <span className={cn('text-xl font-bold font-mono', config.text)}>{rsi.toFixed(1)}</span>
+          <span className={cn('text-xl font-bold font-mono', config.text)}>{hasRsi ? rsi.toFixed(1) : '—'}</span>
         </div>
-        <div
-          className="relative h-2.5 overflow-hidden rounded-full bg-gray-800"
-          role="progressbar"
-          aria-valuenow={Math.min(rsi, 100)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
+        {hasRsi ? (
           <div
-            className={cn('absolute left-0 top-0 h-full rounded-full transition-all', config.bg.replace('/20', '/50'))}
-            style={{ width: `${Math.min(rsi, 100)}%` }}
-          />
-        </div>
+            className="relative h-2.5 overflow-hidden rounded-full bg-gray-800"
+            role="progressbar"
+            aria-valuenow={Math.min(rsi, 100)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className={cn('absolute left-0 top-0 h-full rounded-full transition-all', config.bg.replace('/20', '/50'))}
+              style={{ width: `${Math.min(rsi, 100)}%` }}
+            />
+          </div>
+        ) : (
+          <div className="h-2.5 rounded-full bg-gray-800" />
+        )}
         <div className="flex justify-between text-xs text-gray-500">
           <span>Oversold (30)</span>
           <span>Neutral</span>
@@ -240,8 +249,10 @@ const LevelCard = ({ label, value, type, distance }) => {
   }[type];
 
   const Icon = config.icon;
-  const isAbove = distance > 0;
-  const isZero = value === 0;
+  const hasValue = Number.isFinite(value) && value > 0;
+  const hasDistance = Number.isFinite(distance);
+  const isAbove = hasDistance && distance > 0;
+  const isZero = !hasValue;
 
   return (
     <div className="rounded-lg border border-gray-800 bg-gray-900 p-3 sm:p-4">
@@ -250,13 +261,13 @@ const LevelCard = ({ label, value, type, distance }) => {
           <Icon className={cn('h-4 w-4', config.color.text)} aria-hidden="true" />
           <span className="text-sm text-gray-400">{label}</span>
         </div>
-        {type !== 'current' && !isZero && (
+        {type !== 'current' && hasValue && hasDistance && (
           <Badge className={cn('text-xs font-medium', isAbove ? COLOR_SCHEMES.positive.badge : COLOR_SCHEMES.negative.badge)}>
             {isAbove ? '+' : ''}{distance.toFixed(1)}%
           </Badge>
         )}
-        {type !== 'current' && isZero && (
-          <Badge variant="outline" className="text-xs text-gray-500 border-gray-700">N/A</Badge>
+        {type !== 'current' && (!hasValue || !hasDistance) && (
+          <Badge variant="outline" className="text-xs text-gray-500 border-gray-700">Unavailable</Badge>
         )}
       </div>
       <div className="text-lg font-bold text-white sm:text-xl font-mono">
@@ -268,7 +279,7 @@ const LevelCard = ({ label, value, type, distance }) => {
 
 LevelCard.propTypes = {
   label: PropTypes.string.isRequired,
-  value: PropTypes.number.isRequired,
+  value: PropTypes.number,
   type: PropTypes.oneOf(['current', 'support', 'resistance']).isRequired,
   distance: PropTypes.number.isRequired,
 };
@@ -307,12 +318,12 @@ const KeyLevels = ({ current, support, resistance, distances, isOpen, onToggle }
 );
 
 KeyLevels.propTypes = {
-  current: PropTypes.number.isRequired,
-  support: PropTypes.number.isRequired,
-  resistance: PropTypes.number.isRequired,
+  current: PropTypes.number,
+  support: PropTypes.number,
+  resistance: PropTypes.number,
   distances: PropTypes.shape({
-    support: PropTypes.number.isRequired,
-    resistance: PropTypes.number.isRequired,
+    support: PropTypes.number,
+    resistance: PropTypes.number,
   }).isRequired,
   isOpen: PropTypes.bool.isRequired,
   onToggle: PropTypes.func.isRequired,
@@ -328,7 +339,7 @@ const PivotPoint = ({ label, value, current, type, className }) => {
     pivot: COLOR_SCHEMES.neutral,
   }[type];
 
-  const isZero = value === 0;
+  const isZero = !Number.isFinite(value) || value <= 0 || !Number.isFinite(current);
   const distance = isZero ? 0 : ((current - value) / value) * 100;
   const isAbove = distance > 0;
 
@@ -367,9 +378,12 @@ PivotPoint.propTypes = {
 // PivotPoints – collapsible section, shows "Pivot data unavailable" if all zero
 // ----------------------------------------------------------------------------
 const PivotPoints = ({ pivot, support, resistance, current, distance, isOpen, onToggle }) => {
-  const hasData = pivot !== 0 || support !== 0 || resistance !== 0;
-  const range = resistance - support;
-  const safeRange = range || 1;
+  const hasData = [pivot, support, resistance, current].every(
+    (value) => Number.isFinite(value) && value > 0
+  );
+  const range = hasData ? resistance - support : 0;
+  const hasUsableRange = hasData && range > 0;
+  const safeRange = range;
   const levels = [
     { label: 'R2', value: pivot + safeRange, type: 'resistance' },
     { label: 'R1', value: pivot + safeRange * 0.5, type: 'resistance' },
@@ -398,7 +412,7 @@ const PivotPoints = ({ pivot, support, resistance, current, distance, isOpen, on
       </button>
       {isOpen && (
         <div id="pivot-points-content" className="p-4 pt-0 sm:p-5 sm:pt-0">
-          {hasData ? (
+          {hasUsableRange ? (
             <>
               <div className="grid grid-cols-1 gap-3 sm:gap-4">
                 {levels.map((level) => (
@@ -475,18 +489,31 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
     if (!data?.technical) return null;
     const tech = data.technical;
 
-    const hasSmaData = tech.sma_50 !== 0 || tech.sma_200 !== 0;
-    const safeSma200 = tech.sma_200 || 1;
+    const hasSmaData =
+      Number.isFinite(tech.sma_50) && tech.sma_50 > 0 &&
+      Number.isFinite(tech.sma_200) && tech.sma_200 > 0;
+    const safeSma200 = hasSmaData ? tech.sma_200 : null;
+    const hasCurrentPrice = Number.isFinite(tech.current_price) && tech.current_price > 0;
 
     return {
       isUptrend: hasSmaData ? tech.sma_50 > safeSma200 : false,
-      isOversold: tech.rsi < 30,
-      isOverbought: tech.rsi > 70,
-      distanceToSupport: tech.support ? ((tech.current_price - tech.support) / tech.support) * 100 : 0,
-      distanceToResistance: tech.current_price ? ((tech.resistance - tech.current_price) / tech.current_price) * 100 : 0,
-      distanceToPivot: tech.pivot ? ((tech.current_price - tech.pivot) / tech.pivot) * 100 : 0,
-      trendStrength: hasSmaData ? Math.abs(tech.sma_50 - safeSma200) / safeSma200 * 100 : 0,
-      volatilityLevel: tech.volatility > 0.2 ? 'high' : tech.volatility > 0.1 ? 'medium' : 'low',
+      isOversold: Number.isFinite(tech.rsi) && tech.rsi < 30,
+      isOverbought: Number.isFinite(tech.rsi) && tech.rsi > 70,
+      distanceToSupport: hasCurrentPrice && Number.isFinite(tech.support) && tech.support > 0
+        ? ((tech.current_price - tech.support) / tech.support) * 100
+        : null,
+      distanceToResistance: hasCurrentPrice && Number.isFinite(tech.resistance) && tech.resistance > 0
+        ? ((tech.resistance - tech.current_price) / tech.current_price) * 100
+        : null,
+      distanceToPivot: hasCurrentPrice && Number.isFinite(tech.pivot) && tech.pivot > 0
+        ? ((tech.current_price - tech.pivot) / tech.pivot) * 100
+        : null,
+      trendStrength: hasSmaData
+        ? Math.abs(tech.sma_50 - safeSma200) / safeSma200 * 100
+        : null,
+      volatilityLevel: !Number.isFinite(tech.volatility)
+        ? 'unavailable'
+        : tech.volatility > 0.2 ? 'high' : tech.volatility > 0.1 ? 'medium' : 'low',
     };
   }, [data]);
 
@@ -499,11 +526,9 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
     const isMobile = chartDimensions.width < 640;
 
     return {
-      labels: history.map((_, index) => {
-        const date = new Date();
-        date.setDate(date.getDate() - (history.length - 1 - index));
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      }),
+      labels: data.technical.price_dates?.length === history.length
+        ? data.technical.price_dates.map((d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+        : history.map((_, index) => `${index + 1}`),
       datasets: [
         {
           label: 'Price',
@@ -517,7 +542,7 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
         },
         {
           label: 'SMA 50',
-          data: history.map(() => data.technical.sma_50),
+          data: data.technical.sma_50_series || [],
           borderColor: COLOR_SCHEMES.warning.chart,
           borderDash: [5, 5],
           tension: 0,
@@ -525,7 +550,7 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
         },
         {
           label: 'SMA 200',
-          data: history.map(() => data.technical.sma_200),
+          data: data.technical.sma_200_series || [],
           borderColor: COLOR_SCHEMES.negative.chart,
           borderDash: [5, 5],
           tension: 0,
@@ -634,14 +659,14 @@ const TechnicalIndicatorsCard = ({ symbol, className, onError }) => {
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
           <Badge variant="outline" className="border-gray-700 bg-gray-900 text-xs text-gray-400">
             <TrendingUp className="mr-2 h-4 w-4" aria-hidden="true" />
-            Volatility: {indicators.volatilityLevel}
+            Volatility: {indicators.volatilityLevel === 'unavailable' ? 'Unavailable' : indicators.volatilityLevel}
           </Badge>
           <Badge variant="outline" className="border-gray-700 bg-gray-900 text-xs text-gray-400">
             <Zap className="mr-2 h-4 w-4" aria-hidden="true" />
-            Trend Strength: {indicators.trendStrength > 0 ? `${indicators.trendStrength.toFixed(1)}%` : 'N/A'}
+            Trend Strength: {indicators.trendStrength === null ? 'Unavailable' : `${indicators.trendStrength.toFixed(1)}%`}
           </Badge>
           <Badge variant="outline" className={cn('border', rsiStatus.color.border)}>
-            RSI: {tech.rsi > 0 ? `${tech.rsi.toFixed(1)} (${rsiStatus.label})` : 'N/A'}
+            RSI: {Number.isFinite(tech.rsi) ? `${tech.rsi.toFixed(1)} (${rsiStatus.label})` : 'Unavailable'}
           </Badge>
         </div>
       </CardHeader>

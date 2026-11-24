@@ -94,6 +94,7 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
 
             # 4. Update last_used timestamp asynchronously
             self._update_last_used_async(key_obj)
+            self._count_daily_usage(key_obj)
 
             # 5. Log successful authentication
             self._log_auth_attempt(key_obj.user, api_key, success=True)
@@ -217,6 +218,16 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
         except Exception as e:
             logger.warning(f"Rate limit check failed: {e}")
             return True  # Fail open if cache is down
+
+    def _count_daily_usage(self, key_obj):
+        """Count one authenticated request against this key for today (read by the usage chart)."""
+        from datetime import date
+        cache_key = f"usage_daily_{key_obj.id}_{date.today().isoformat()}"
+        try:
+            cache.add(cache_key, 0, timeout=60 * 60 * 24 * 40)
+            cache.incr(cache_key)
+        except Exception as exc:
+            logger.warning(f"Usage counter failed for key {key_obj.id}: {exc}")
 
     def _update_last_used_async(self, key_obj):
         """

@@ -1,5 +1,5 @@
-export const APP_NAME = 'Tickflow Intelligence';
-export const COMPANY_NAME = 'Tickflow Capital';
+export const APP_NAME = 'TickFlow Intelligence';
+export const COMPANY_NAME = 'TickFlow Capital';
 export const TAGLINE = 'AI-Powered Financial News Intelligence';
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';

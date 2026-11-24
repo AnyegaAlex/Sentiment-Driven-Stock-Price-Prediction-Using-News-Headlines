@@ -19,10 +19,10 @@ import { Button } from "@/components/ui/button";
 import { Info, Loader2, ExternalLink, Newspaper, RefreshCw } from "lucide-react";
 import { AiFillSmile, AiFillMeh, AiFillFrown } from "react-icons/ai";
 import KeyPhraseChip from "@/components/KeyPhraseChip";
+import NewsArticleImage from "@/components/NewsArticleImage";
 import { useSymbolsQuery } from "@/hooks/queries/useSymbolsQuery";
 import { useNewsQuery } from "@/hooks/queries/useNewsQuery";
 import { useDashboard } from "@/context/DashboardContext";
-import { cn } from "@/lib/utils";
 
 // Constants
 const SENTIMENT_FILTERS = [
@@ -37,8 +37,6 @@ const SENTIMENT_ICONS = {
   neutral: <AiFillMeh className="w-5 h-5 text-gray-400" />,
   negative: <AiFillFrown className="w-5 h-5 text-red-400" />,
 };
-
-const PLACEHOLDER_IMAGE = "/placeholder-news.jpg";
 
 // Helper: Format date
 const formatDate = (dateString) => {
@@ -69,7 +67,7 @@ const truncateText = (text, maxLength = 150) => {
 };
 
 const NewsAnalysis = () => {
-  const { stockSymbol, setStockSymbol } = useDashboard();
+  const { stockSymbol } = useDashboard();
 
   // Local state
   const [selectedSymbol, setSelectedSymbol] = useState(stockSymbol || "");
@@ -129,12 +127,11 @@ const NewsAnalysis = () => {
   }, [stockSymbol]);
 
   // Handle symbol change
+  // Only switches the stored news view. It does not update the dashboard
+  // context, so no analysis or technicals are fetched from here.
   const handleSymbolChange = useCallback((symbol) => {
     setSelectedSymbol(symbol);
-    if (symbol) {
-      setStockSymbol(symbol);
-    }
-  }, [setStockSymbol]);
+  }, []);
 
   // Handle retry
   const handleRetry = useCallback(() => {
@@ -346,22 +343,10 @@ const NewsAnalysis = () => {
               className="h-full flex flex-col transition-shadow hover:shadow-lg bg-gray-900 border border-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
             >
               {/* Image */}
-              {item.banner_image_url ? (
-                <img
-                  src={item.banner_image_url}
-                  alt={item.title || 'News article image'}
-                  className="w-full h-48 object-cover rounded-t-lg"
-                  loading="lazy"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = PLACEHOLDER_IMAGE;
-                  }}
-                />
-              ) : (
-                <div className="w-full h-48 bg-gray-800 flex items-center justify-center rounded-t-lg">
-                  <Newspaper className="w-12 h-12 text-gray-600" />
-                </div>
-              )}
+              <NewsArticleImage
+                src={item.banner_image_url}
+                title={item.title}
+              />
 
               <CardContent className="p-4 flex flex-col gap-4 flex-1">
                 <CardTitle className="text-base font-semibold text-white line-clamp-2">

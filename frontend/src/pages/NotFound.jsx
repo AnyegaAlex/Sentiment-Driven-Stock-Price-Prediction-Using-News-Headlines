@@ -1,96 +1,55 @@
-/**
- * 404 Not Found Page
- * 
- * Features:
- * - Clean, branded 404 page
- * - Navigation back to home/dashboard
- * - Dark mode only
- * - Accessibility
- * 
- * @version 1.0.0
- */
-
-import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Home, ArrowLeft, AlertCircle, Radar } from 'lucide-react';
+import { Home, ArrowLeft, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 const NotFound = () => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const hasWorkspace = isAuthenticated && Boolean(user);
 
   const handleGoBack = () => {
-    navigate(-1);
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate(hasWorkspace ? '/dashboard' : '/', { replace: true });
   };
 
   return (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4 bg-black">
-      {/* Icon */}
-      <div className="mb-6 flex items-center justify-center">
-        <div className="p-4 rounded-full bg-gray-800 border border-gray-700">
-          <AlertCircle className="h-16 w-16 text-gray-400" strokeWidth={1.5} />
-        </div>
+    <main
+      className="flex min-h-[60vh] flex-col items-center justify-center bg-black px-4 py-12 text-center"
+      aria-labelledby="not-found-title"
+    >
+      <div className="mb-6 flex items-center justify-center rounded-full border border-gray-700 bg-gray-900 p-4">
+        <AlertCircle className="h-12 w-12 text-gray-400" strokeWidth={1.5} aria-hidden="true" />
       </div>
 
-      {/* Error Code */}
-      <div className="flex items-center gap-3 mb-4">
-        <span className="text-7xl font-extrabold text-white">4</span>
-        <span className="text-7xl font-extrabold text-gray-400">0</span>
-        <span className="text-7xl font-extrabold text-white">4</span>
-      </div>
-
-      {/* Title */}
-      <h1 className="text-2xl font-bold text-white mb-2">
-        Page Not Found
+      <p className="mb-2 text-sm font-medium tracking-widest text-gray-500">ERROR 404</p>
+      <h1 id="not-found-title" className="mb-3 text-3xl font-bold text-white">
+        This page isn’t available
       </h1>
-
-      {/* Description */}
-      <p className="text-gray-400 max-w-md mb-8">
-        The page you're looking for doesn't exist or has been moved. 
-        Let's get you back on track.
+      <p className="mb-8 max-w-md text-gray-400">
+        The address may be outdated, or the page may have moved. Choose where you’d like to go next.
       </p>
 
-      {/* Actions */}
-      <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
-        {isAuthenticated ? (
-          <Link
-            to="/dashboard"
-            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-          >
-            <Home className="h-4 w-4" />
-            Go to Dashboard
-          </Link>
-        ) : (
-          <Link
-            to="/"
-            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-          >
-            <Home className="h-4 w-4" />
-            Go Home
-          </Link>
-        )}
-        <button
-          onClick={handleGoBack}
-          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] border border-gray-700 text-gray-400 rounded-lg hover:bg-gray-800 hover:text-white transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+      <div className="flex w-full max-w-sm flex-col gap-3 sm:flex-row">
+        <Link
+          to={hasWorkspace ? '/dashboard' : '/'}
+          className="inline-flex min-h-[46px] flex-1 items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 font-medium text-black transition-colors hover:bg-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
         >
-          <ArrowLeft className="h-4 w-4" />
-          Go Back
+          <Home className="h-4 w-4" aria-hidden="true" />
+          {hasWorkspace ? 'Go to dashboard' : 'Go to home'}
+        </Link>
+        <button
+          type="button"
+          onClick={handleGoBack}
+          className="inline-flex min-h-[46px] flex-1 items-center justify-center gap-2 rounded-lg border border-gray-700 px-4 py-3 font-medium text-gray-300 transition-colors hover:bg-gray-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Go back
         </button>
       </div>
-
-      {/* Help Section */}
-      <div className="mt-8 pt-6 border-t border-gray-800 w-full max-w-sm">
-        <p className="text-xs text-gray-500">
-          If you believe this is an error, please contact us at{' '}
-          <a 
-            href="mailto:support@tickflow.com" 
-            className="text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-          >
-            support@tickflow.com
-          </a>
-        </p>
-      </div>
-    </div>
+    </main>
   );
 };
 

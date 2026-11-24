@@ -3,7 +3,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
-import api from '@/services/api'
+import apiClient from '@/services/client'
 
 export const PredictionForm = ({ onPredict }) => {
   const [input, setInput] = useState('')
@@ -22,16 +22,18 @@ export const PredictionForm = ({ onPredict }) => {
 
     setIsLoading(true)
     try {
-      const response = await api.post('/predictions/', { news_text: input })
-      onPredict(response.data)
+      // The unified client resolves with the response body; fall back to response.data for safety.
+      const response = await apiClient.post('/predictions/', { news_text: input })
+      const result = response?.data ?? response
+      onPredict(result)
       toast({
         title: "Prediction Generated",
-        description: `LSTM model predicts: ${response.data.prediction} (${(response.data.confidence * 100).toFixed(1)}% confidence)`
+        description: `LSTM model predicts: ${result.prediction} (${(result.confidence * 100).toFixed(1)}% confidence)`
       })
     } catch (error) {
       toast({
         title: "Prediction Failed",
-        description: error.response?.data?.detail || "Service unavailable. Please try again.",
+        description: error?.error || error?.response?.data?.detail || "Service unavailable. Please try again.",
         variant: "destructive"
       })
     } finally {

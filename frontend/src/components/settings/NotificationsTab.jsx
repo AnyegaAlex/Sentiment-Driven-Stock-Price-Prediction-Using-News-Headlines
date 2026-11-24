@@ -20,52 +20,34 @@ import { Switch } from '@/components/ui/switch';
 import { Save, CheckCircle, AlertCircle, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Constants
+// Constants: only preferences the backend actually stores and applies.
 const DEFAULT_VALUES = {
   email_notifications: true,
   price_alerts: false,
-  sentiment_alerts: false,
-  product_updates: true,
+  news_alerts: false,
   weekly_digest: true,
-  research_reports: false,
 };
 
 const NOTIFICATIONS = [
   {
     id: 'email_notifications',
     label: 'Email Notifications',
-    description: 'Receive email updates about your account and activity',
-    default: true,
+    description: 'Stored as a preference. This setting does not currently control account emails or send alerts.',
   },
   {
     id: 'price_alerts',
     label: 'Price Alerts',
-    description: 'Get notified when stocks reach your target prices',
-    default: false,
+    description: 'Stored as a preference. Automated price alerts are not currently sent.',
   },
   {
-    id: 'sentiment_alerts',
-    label: 'Sentiment Alerts',
-    description: 'Receive alerts when sentiment shifts significantly',
-    default: false,
-  },
-  {
-    id: 'product_updates',
-    label: 'Product Updates',
-    description: 'Stay informed about new features and improvements',
-    default: true,
+    id: 'news_alerts',
+    label: 'News Alerts',
+    description: 'Stored as a preference. Automated news alerts are not currently sent.',
   },
   {
     id: 'weekly_digest',
     label: 'Weekly Digest',
-    description: 'Receive a summary of your activity and key insights',
-    default: true,
-  },
-  {
-    id: 'research_reports',
-    label: 'Research Reports',
-    description: 'Get notified when new research reports are published',
-    default: false,
+    description: 'Stored as a preference. Weekly digest delivery is not currently available.',
   },
 ];
 
@@ -77,14 +59,9 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
   // Sync with preferences
   useEffect(() => {
     if (preferences) {
-      setForm({
-        email_notifications: preferences.email_notifications ?? DEFAULT_VALUES.email_notifications,
-        price_alerts: preferences.price_alerts ?? DEFAULT_VALUES.price_alerts,
-        sentiment_alerts: preferences.sentiment_alerts ?? DEFAULT_VALUES.sentiment_alerts,
-        product_updates: preferences.product_updates ?? DEFAULT_VALUES.product_updates,
-        weekly_digest: preferences.weekly_digest ?? DEFAULT_VALUES.weekly_digest,
-        research_reports: preferences.research_reports ?? DEFAULT_VALUES.research_reports,
-      });
+      setForm(Object.fromEntries(
+        Object.keys(DEFAULT_VALUES).map((key) => [key, preferences[key] ?? DEFAULT_VALUES[key]])
+      ));
       setHasChanges(false);
     }
   }, [preferences]);
@@ -102,10 +79,16 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
     setHasChanges(hasChanged);
   }, [form, preferences]);
 
-  // Reset to defaults
+  // Discard local edits and restore the last saved preferences.
   const handleReset = () => {
-    setForm(DEFAULT_VALUES);
-    setHasChanges(true);
+    const savedValues = Object.fromEntries(
+      Object.keys(DEFAULT_VALUES).map((key) => [
+        key,
+        preferences?.[key] ?? DEFAULT_VALUES[key],
+      ])
+    );
+    setForm(savedValues);
+    setHasChanges(false);
   };
 
   // Handle toggle change
@@ -126,10 +109,12 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
       return { icon: null, text: 'Saving...', className: 'text-gray-400' };
     }
     if (parentSaveStatus?.type === 'success') {
-      return { icon: CheckCircle, text: 'Saved successfully', className: 'text-green-400' };
+      return hasChanges
+        ? null
+        : { icon: CheckCircle, text: 'Preferences saved', className: 'text-green-400' };
     }
     if (parentSaveStatus?.type === 'error') {
-      return { icon: AlertCircle, text: 'Failed to save', className: 'text-red-400' };
+      return { icon: AlertCircle, text: 'Could not save preferences', className: 'text-red-400' };
     }
     return null;
   };
@@ -147,15 +132,18 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
           <div>
             <CardTitle className="text-white">Notification Preferences</CardTitle>
             <CardDescription className="text-gray-400">
-              Choose what notifications you want to receive
+              Save your notification preferences
             </CardDescription>
           </div>
           <div className="text-sm text-gray-400">
-            {enabledCount} of {totalCount} enabled
+            {enabledCount} of {totalCount} preferences enabled
           </div>
         </div>
       </CardHeader>
       <CardContent>
+        <p className="rounded-lg border border-gray-800 bg-gray-950 p-3 text-sm text-gray-400">
+          These preferences are saved to your account, but automated alert and digest delivery is not active yet. Changing a switch will not send a notification.
+        </p>
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Notification Toggles */}
           <div className="space-y-4">
@@ -213,7 +201,7 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
               className="min-w-[120px] min-h-[44px] border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white focus-visible:ring-gray-500 focus-visible:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <RotateCcw className="h-4 w-4 mr-2" />
-              Reset
+              Discard Changes
             </Button>
 
             {/* Save Status */}
@@ -229,7 +217,7 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
           </div>
 
           {/* Unsaved Changes Indicator */}
-          {hasChanges && parentSaveStatus?.type !== 'success' && (
+          {hasChanges && parentSaveStatus?.type !== 'saving' && (
             <p className="text-sm text-gray-400">
               You have unsaved changes
             </p>

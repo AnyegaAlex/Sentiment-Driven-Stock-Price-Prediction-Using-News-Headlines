@@ -4,7 +4,8 @@
  * design consistency, type safety, and maintainability across the application.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { getCardErrorMessage } from '@/utils/errorHandler';
 import PropTypes from 'prop-types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -155,7 +156,15 @@ export const calculateVolatility = (history) => {
  * @returns {number} Reliability percentage (0-100)
  */
 export const calculateReliabilityScore = (stats) => {
-  if (!stats || !stats.reliability_sum || !stats.tier1_count) return 0;
+  if (
+    !stats ||
+    stats.reliability_sum === null ||
+    stats.reliability_sum === undefined ||
+    !Number.isFinite(Number(stats.tier1_count)) ||
+    Number(stats.tier1_count) <= 0
+  ) {
+    return null;
+  }
   return Math.min(100, Math.max(0, Math.round((stats.reliability_sum / stats.tier1_count) * 100)));
 };
 
@@ -165,6 +174,7 @@ export const calculateReliabilityScore = (stats) => {
  * @returns {RSIStatus} Object containing label and color scheme
  */
 export const getRSIStatus = (rsi) => {
+  if (!Number.isFinite(rsi)) return { label: 'Unavailable', color: COLOR_SCHEMES.neutral };
   if (rsi >= 70) return { label: 'Overbought', color: COLOR_SCHEMES.negative };
   if (rsi <= 30) return { label: 'Oversold', color: COLOR_SCHEMES.positive };
   return { label: 'Neutral', color: COLOR_SCHEMES.neutral };
@@ -309,8 +319,9 @@ CardSkeleton.propTypes = {
  * @param {string} [props.className]
  * @param {string} [props.title='Error Loading Data']
  */
-export const CardError = ({ error, onRetry, className, title = 'Error Loading Data' }) => {
+export const CardError = ({ error, onRetry, className, title = 'This section is unavailable' }) => {
   const [isRetrying, setIsRetrying] = useState(false);
+  const isAccessGate = [5030, 5031].includes(Number(error?.serviceCode));
 
   const handleRetry = useCallback(async () => {
     setIsRetrying(true);
@@ -321,10 +332,10 @@ export const CardError = ({ error, onRetry, className, title = 'Error Loading Da
     }
   }, [onRetry]);
 
-  const errorMessage = useMemo(() => {
-    if (typeof error === 'string') return error;
-    return error?.message || 'An unknown error occurred while fetching data.';
-  }, [error]);
+  const errorMessage = useMemo(
+    () => getCardErrorMessage(typeof error === 'string' ? { message: error } : error),
+    [error]
+  );
 
   return (
     <Card className={cn('border border-red-400 bg-red-400/10', className)}>
@@ -335,17 +346,19 @@ export const CardError = ({ error, onRetry, className, title = 'Error Loading Da
           <AlertDescription className="mt-1 text-gray-300">
             {errorMessage}
           </AlertDescription>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRetry}
-            disabled={isRetrying}
-            aria-busy={isRetrying}
-            className="mt-3 min-h-[44px] border border-red-400 text-red-400 hover:bg-red-400/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-          >
-            <RefreshCw className={cn('mr-2 h-4 w-4', isRetrying && 'animate-spin')} aria-hidden="true" />
-            {isRetrying ? 'Retrying...' : 'Retry'}
-          </Button>
+          {!isAccessGate && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRetry}
+              disabled={isRetrying}
+              aria-busy={isRetrying}
+              className="mt-3 min-h-[44px] border border-red-400 text-red-400 hover:bg-red-400/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+            >
+              <RefreshCw className={cn('mr-2 h-4 w-4', isRetrying && 'animate-spin')} aria-hidden="true" />
+              {isRetrying ? 'Trying again...' : 'Try again'}
+            </Button>
+          )}
         </Alert>
       </CardContent>
     </Card>

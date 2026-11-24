@@ -18,6 +18,7 @@ from unittest.mock import patch, MagicMock
 from django.urls import reverse
 from django.db import connection
 from django.core.cache import cache
+from django.test import override_settings
 from rest_framework.test import APIClient
 import requests
 
@@ -29,9 +30,12 @@ pytestmark = pytest.mark.django_db
 # ============================================================================
 
 def bypass_throttling():
+    from contextlib import ExitStack
     from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
-    return patch.object(AnonRateThrottle, 'allow_request', return_value=True), \
-           patch.object(UserRateThrottle, 'allow_request', return_value=True)
+    stack = ExitStack()
+    stack.enter_context(patch.object(AnonRateThrottle, 'allow_request', return_value=True))
+    stack.enter_context(patch.object(UserRateThrottle, 'allow_request', return_value=True))
+    return stack
 
 
 # ============================================================================
@@ -61,9 +65,12 @@ class TestChaosDatabase:
             assert data['status'] == 'not_ready'
             assert any('Database' in issue for issue in data['issues'])
 
-    @patch('stocks.views.Prediction.objects.all')
+    @patch('stocks.views._visible_predictions')
+    @override_settings(PRICE_DATA_PUBLIC_ACCESS=True)
     def test_db_query_failure_returns_500(self, mock_queryset, api_client):
-        """DB query error in view returns 500."""
+        """DB query error in view returns 500 (authenticated owner, price gate open)."""
+        from tests.factories import UserFactory
+        api_client.force_authenticate(user=UserFactory())
         mock_queryset.side_effect = Exception('Query error')
         url = reverse('prediction-history')
         response = api_client.get(url)
@@ -193,12 +200,16 @@ class TestChaosPerformance:
             assert response.status_code == 200
 
     @patch('stocks.views.cache.get')
+    @override_settings(PRICE_DATA_PUBLIC_ACCESS=True)
     def test_cache_timeout_does_not_break(self, mock_cache_get, api_client):
-        """If cache is slow to respond, request still completes."""
+        """If cache is slow to respond, request still completes (authenticated, price gate open)."""
         import time
+        from tests.factories import UserFactory
+        api_client.force_authenticate(user=UserFactory())
         def slow_cache_get(*args, **kwargs):
             time.sleep(0.2)
-            return None
+            # Empty list, not None: DRF throttling reads this key as a list of timestamps.
+            return []
         mock_cache_get.side_effect = slow_cache_get
         url = reverse('prediction-history')
         response = api_client.get(url)

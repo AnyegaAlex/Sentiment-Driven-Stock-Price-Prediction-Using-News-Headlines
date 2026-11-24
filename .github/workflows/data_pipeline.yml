@@ -1,0 +1,43 @@
+name: Data Ingestion Pipeline
+
+on:
+  schedule:
+    # Runs every 30 minutes
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # Allows you to trigger it manually from the GitHub UI
+
+jobs:
+  fetch-and-process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15 # Prevents infinite hangs
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          cd sentiment_driven_stock_price_prediction_engine
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install psycopg2-binary # Required for PostgreSQL on GitHub Actions
+
+      - name: Run Pipeline
+        env:
+          # These pull from your GitHub Repository Secrets
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          ALPHA_VANTAGE_KEY: ${{ secrets.ALPHA_VANTAGE_KEY }}
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          RAPIDAPI_HOST: ${{ secrets.RAPIDAPI_HOST }}
+          SECRET_KEY: "github-actions-dummy-key"
+          SENTRY_DSN: "" # Disable Sentry for cron jobs to keep logs clean
+        run: |
+          cd sentiment_driven_stock_price_prediction_engine
+          python manage.py fetch_news

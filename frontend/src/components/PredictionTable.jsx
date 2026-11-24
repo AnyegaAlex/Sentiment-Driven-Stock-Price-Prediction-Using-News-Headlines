@@ -1,4 +1,4 @@
-import React from 'react';
+import PropTypes from 'prop-types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight, CheckCircle, XCircle } from 'lucide-react';
@@ -25,10 +25,15 @@ const PredictionTable = ({ predictions, total, page, limit, onPageChange, onRowC
           {predictions.map((pred) => (
             <TableRow 
               key={pred.id} 
-              className="cursor-pointer hover:bg-gray-800/50 border-b border-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+              className="cursor-pointer border-b border-gray-800 hover:bg-gray-800/50 active:bg-gray-800/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+              aria-label={`Open prediction details for ${pred.stock_symbol}`}
               onClick={() => onRowClick(pred)}
               tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && onRowClick(pred)}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+                e.preventDefault();
+                onRowClick(pred);
+              }}
             >
               <TableCell className="text-gray-300">{new Date(pred.date).toLocaleDateString()}</TableCell>
               <TableCell className="font-medium text-white">{pred.stock_symbol}</TableCell>
@@ -108,6 +113,15 @@ const PredictionTable = ({ predictions, total, page, limit, onPageChange, onRowC
       )}
     </div>
   );
+};
+
+PredictionTable.propTypes = {
+  predictions: PropTypes.arrayOf(PropTypes.object).isRequired,
+  total: PropTypes.number.isRequired,
+  page: PropTypes.number.isRequired,
+  limit: PropTypes.number.isRequired,
+  onPageChange: PropTypes.func.isRequired,
+  onRowClick: PropTypes.func,
 };
 
 export default PredictionTable;

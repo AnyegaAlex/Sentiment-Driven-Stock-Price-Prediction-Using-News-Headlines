@@ -1,45 +1,39 @@
-import React from 'react';
-
-const features = [
+const modules = [
   {
-    title: 'News Processing',
-    description: 'Multi-source aggregation (Alpha Vantage, Finnhub, Yahoo Finance). SHA-256 deduplication prevents duplicate processing. FinBERT sentiment analysis (Positive/Negative/Neutral) with key phrase extraction and source reliability ranking (1-100) based on trusted sources (Bloomberg, Reuters, FT).',
+    title: 'News context',
+    description: 'The codebase includes news ingestion and sentiment-analysis components. Their availability depends on provider configuration, access permissions and current service status.',
   },
   {
-    title: 'Technical Indicators',
-    description: 'SMA-50, SMA-200, RSI (Relative Strength Index), Bollinger Bands (Upper and Lower), Support and Resistance levels, Pivot Points, Volatility, Volume, and 30-day price history.',
+    title: 'Technical analysis',
+    description: 'Technical indicators are calculated from market data when the relevant data access is enabled and the required history is available.',
   },
   {
-    title: 'LSTM Neural Network',
-    description: '7 input features (sentiment score + 6 technical indicators: MA7, MA21, STD21, RSI14, UpperBB, LowerBB). 32 hidden units. Directional predictions (UP, DOWN, HOLD). Confidence scoring (0-100%). 7-day resolution tracking with yfinance. Falls back to sentiment-only when insufficient price data (<200 days).',
+    title: 'Prediction engine',
+    description: 'The repository contains an LSTM prediction pipeline. A prediction should only be presented when the model and its required inputs return a valid result.',
   },
   {
-    title: 'Hybrid Prediction',
-    description: 'Weighted average: 50% LSTM, 30% Sentiment, 20% Technicals. Sentiment-only fallback when LSTM model is unavailable or insufficient price history exists (less than 200 trading days).',
+    title: 'Account and API layer',
+    description: 'The application includes account authentication, preferences and developer settings for managing API access.',
   },
 ];
 
-const TechnicalBreakdown = () => {
-  return (
-    <section className="bg-black py-16 px-4 md:px-8 lg:px-16 border-t border-gray-800">
-      <div className="max-w-6xl mx-auto">
-        <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-4">
-          Technical Breakdown
-        </h2>
-        <p className="text-gray-400 text-center mb-12 max-w-2xl mx-auto">
-          How the platform actually works – from data ingestion to prediction.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {features.map((feature) => (
-            <div key={feature.title} className="bg-gray-900 border border-gray-800 p-6 rounded-lg hover:border-gray-600 transition duration-200">
-              <h3 className="text-xl font-semibold text-white mb-3">{feature.title}</h3>
-              <p className="text-gray-400 text-sm leading-relaxed">{feature.description}</p>
-            </div>
-          ))}
-        </div>
+const TechnicalBreakdown = () => (
+  <section className="border-t border-gray-800 bg-black px-4 py-16 sm:px-6 lg:px-16">
+    <div className="mx-auto max-w-6xl">
+      <h2 className="mb-4 text-center text-3xl font-bold text-white sm:text-4xl">What sits behind the workspace</h2>
+      <p className="mx-auto mb-12 max-w-2xl text-center text-gray-400">
+        The platform is modular. Each analysis area has its own data requirements and availability conditions.
+      </p>
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        {modules.map((module) => (
+          <article key={module.title} className="rounded-lg border border-gray-800 bg-gray-900 p-6">
+            <h3 className="mb-3 text-xl font-semibold text-white">{module.title}</h3>
+            <p className="text-sm leading-relaxed text-gray-400">{module.description}</p>
+          </article>
+        ))}
       </div>
-    </section>
-  );
-};
+    </div>
+  </section>
+);
 
 export default TechnicalBreakdown;

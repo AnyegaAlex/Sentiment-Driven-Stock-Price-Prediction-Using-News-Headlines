@@ -236,22 +236,14 @@ class TestFilteringLeakage:
 
     def test_list_predictions_only_returns_own(self, auth_client, user, foreign_user):
         """List endpoint should filter predictions to only the requesting user."""
-        # Create predictions for both users
-        PredictionFactory(user=user, stock_symbol="AAPL")
-        PredictionFactory(user=foreign_user, stock_symbol="MSFT")
+        from django.test import override_settings
+        PredictionFactory(user=user, stock_symbol="AAPL", headline="owner-row")
+        PredictionFactory(user=foreign_user, stock_symbol="MSFT", headline="foreign-row")
 
         url = reverse("prediction-history")
-        response = auth_client.get(url)
+        with override_settings(PRICE_DATA_PUBLIC_ACCESS=True):
+            response = auth_client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        results = response.data.get("results", [])
-        # All predictions should belong to the current user
-        for pred in results:
-            # If predictions are not filtered by user, this will fail.
-            # We assume the view filters by user.
-            # If the view is globally public, this test might need adjustment.
-            # For now, we'll just check that only user's predictions are included.
-            # Since we don't have a user field in the response, we'll rely on the view's logic.
-            # We can check the total count.
-            # We'll skip if the view is public.
-            # We'll implement a more robust test if needed.
-            pass
+        body = str(response.data)
+        assert "owner-row" in body
+        assert "foreign-row" not in body

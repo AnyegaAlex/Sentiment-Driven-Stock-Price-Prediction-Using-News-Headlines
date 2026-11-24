@@ -11,11 +11,11 @@
  * @param {function} [props.onError] - Error callback handler
  */
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { useSentimentAnalysisQuery } from '@/hooks/queries/useSentimentAnalysisQuery';
 import { useNewsQuery } from '@/hooks/queries/useNewsQuery';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Line, Bar } from 'react-chartjs-2';
@@ -200,17 +200,17 @@ const NewsSourceAnalysis = ({ newsCount, sourceStats, reliabilityScore }) => (
       News Source Analysis
     </h3>
     <div className="grid grid-cols-2 gap-2 sm:gap-3">
-      <SourceMetric label="Total Articles" value={newsCount} icon={Newspaper} />
-      <SourceMetric label="Tier 1 Sources" value={sourceStats?.tier1_count || 0} icon={Shield} />
+      <SourceMetric label="Total Articles" value={newsCount ?? '—'} icon={Newspaper} />
+      <SourceMetric label="Tier 1 Sources" value={sourceStats?.tier1_count ?? '—'} icon={Shield} />
       <SourceMetric
         label="Reliability"
-        value={`${reliabilityScore}%`}
+        value={reliabilityScore === null ? '—' : `${reliabilityScore}%`}
         icon={Shield}
-        variant={reliabilityScore >= 70 ? 'positive' : reliabilityScore >= 50 ? 'neutral' : 'negative'}
+        variant={reliabilityScore === null ? 'neutral' : reliabilityScore >= 70 ? 'positive' : reliabilityScore >= 50 ? 'neutral' : 'negative'}
       />
       <SourceMetric
         label="Top Source"
-        value={sourceStats?.tier1_sources?.[0] || 'N/A'}
+        value={sourceStats?.tier1_sources?.[0] || '—'}
         icon={Newspaper}
         truncate
       />
@@ -232,7 +232,7 @@ NewsSourceAnalysis.propTypes = {
  * RecentNewsList – shows the latest headlines for the symbol.
  */
 const RecentNewsList = ({ symbol }) => {
-  const { data: newsData, isLoading, error } = useNewsQuery(symbol);
+  const { data: newsData, isLoading, error, refetch } = useNewsQuery(symbol);
 
   const news = useMemo(() => {
     if (!newsData) return [];
@@ -254,8 +254,19 @@ const RecentNewsList = ({ symbol }) => {
     );
   }
 
-  if (error || !news.length) {
-    return <div className="text-xs text-gray-500">No recent news available</div>;
+  if (error) {
+    return (
+      <div className="flex items-center justify-between gap-3 text-xs text-gray-400" role="alert">
+        <span>We couldn’t load recent headlines.</span>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="min-h-[36px] border-gray-700">
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  if (!news.length) {
+    return <div className="text-xs text-gray-500">No recent headlines are available for {symbol}.</div>;
   }
 
   const headlines = news.slice(0, 3);
@@ -264,27 +275,45 @@ const RecentNewsList = ({ symbol }) => {
     <div className="space-y-2">
       <h4 className="text-xs font-medium text-gray-400">Recent News</h4>
       <div className="space-y-1.5">
-        {headlines.map((item, idx) => (
-          <a
-            key={idx}
-            href={item.url || '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-start gap-2 rounded-lg border border-gray-800 bg-gray-900 p-2 hover:bg-gray-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-          >
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-300 line-clamp-2">
-                {item.title || 'Untitled'}
-              </p>
-              <div className="mt-0.5 flex items-center gap-2 text-[10px] text-gray-500">
-                <span>{item.source || 'Unknown'}</span>
-                <span className="h-1 w-1 rounded-full bg-gray-600" />
-                <span>{item.date ? new Date(item.date).toLocaleDateString() : ''}</span>
+        {headlines.map((item, idx) => {
+          const content = (
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-300 line-clamp-2">
+                  {item.title || 'Untitled article'}
+                </p>
+                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-gray-500">
+                  <span>{item.source || 'Source unavailable'}</span>
+                  {item.published_at && (
+                    <>
+                      <span className="h-1 w-1 rounded-full bg-gray-600" />
+                      <span>{new Date(item.published_at).toLocaleDateString()}</span>
+                    </>
+                  )}
+                </div>
               </div>
+              {item.url && <ExternalLink className="h-3 w-3 flex-shrink-0 text-gray-500" aria-hidden="true" />}
+            </>
+          );
+
+          const className = "flex items-start gap-2 rounded-lg border border-gray-800 bg-gray-900 p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black";
+
+          return item.url ? (
+            <a
+              key={item.id || idx}
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(className, 'hover:bg-gray-800')}
+            >
+              {content}
+            </a>
+          ) : (
+            <div key={item.id || idx} className={className}>
+              {content}
             </div>
-            <ExternalLink className="h-3 w-3 flex-shrink-0 text-gray-500" />
-          </a>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -323,47 +352,67 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
   // Validate and normalize API response
   const validateSentimentData = useCallback((responseData) => {
     const apiData = responseData?.data || responseData || {};
-    const sentiment = apiData?.sentiment || {};
-    const newsCount = Number(apiData?.news_count) || 0;
+    const rawScore = apiData?.sentiment?.score;
+    const parsedScore = rawScore === null || rawScore === undefined ? null : Number(rawScore);
+    const newsCount =
+      apiData?.news_count === null || apiData?.news_count === undefined
+        ? null
+        : Number(apiData.news_count);
+    const hasArticles = Number.isFinite(newsCount) && newsCount > 0;
+
+    const distribution = apiData?.distribution && typeof apiData.distribution === 'object'
+      ? {
+          positive: Number(apiData.distribution.positive) || 0,
+          neutral: Number(apiData.distribution.neutral) || 0,
+          negative: Number(apiData.distribution.negative) || 0,
+        }
+      : null;
 
     return {
-      sentiment: Math.max(-1, Math.min(1, Number(sentiment?.score) || 0)),
-      sentimentLabel: sentiment?.label || 'Neutral',
-      newsCount,
-      sourceStats: apiData?.source_stats || { tier1_count: 0, reliability_sum: 0, tier1_sources: [] },
+      // The backend's empty-dataset response uses score=0 / Neutral.
+      // Do not present that placeholder as an observed neutral sentiment.
+      sentiment: hasArticles && Number.isFinite(parsedScore)
+        ? Math.max(-1, Math.min(1, parsedScore))
+        : null,
+      sentimentLabel: hasArticles ? apiData?.sentiment?.label ?? null : null,
+      newsCount: Number.isFinite(newsCount) ? newsCount : null,
+      sourceStats: apiData?.source_stats ?? null,
       history: Array.isArray(apiData?.history) ? apiData.history : [],
+      distribution,
     };
   }, []);
 
   const data = useMemo(() => (rawData ? validateSentimentData(rawData) : null), [rawData, validateSentimentData]);
 
-  // Derived metrics
+  // Derived metrics use only observed scores and article counts.
   const metrics = useMemo(() => {
     if (!data) return null;
 
-    const sentimentScore = ((data.sentiment + 1) / 2) * 100;
-    const isBullish = sentimentScore >= 60;
-    const isBearish = sentimentScore <= 40;
+    const sentimentScore = data.sentiment === null ? null : ((data.sentiment + 1) / 2) * 100;
+    const isBullish = sentimentScore !== null && sentimentScore >= 60;
+    const isBearish = sentimentScore !== null && sentimentScore <= 40;
 
-    // Build a realistic distribution (approximated from sentiment score)
-    let distribution = {
-      positive: Math.round(sentimentScore * 0.7),
-      neutral: Math.round(30 - Math.abs(sentimentScore - 50) * 0.3),
-      negative: 100 - Math.round(sentimentScore * 0.7 + (30 - Math.abs(sentimentScore - 50) * 0.3)),
-    };
+    const counts = data.distribution;
+    const totalArticles = counts
+      ? counts.positive + counts.neutral + counts.negative
+      : 0;
+    const pct = (n) => (totalArticles > 0 ? Math.round((n / totalArticles) * 100) : 0);
+    const distribution = totalArticles > 0
+      ? {
+          positive: pct(counts.positive),
+          neutral: pct(counts.neutral),
+          negative: 100 - pct(counts.positive) - pct(counts.neutral),
+        }
+      : null;
 
-    // Normalise to ensure sum = 100
-    const total = distribution.positive + distribution.neutral + distribution.negative;
-    if (total !== 100 && total > 0) {
-      distribution.positive = Math.round((distribution.positive / total) * 100);
-      distribution.neutral = Math.round((distribution.neutral / total) * 100);
-      distribution.negative = 100 - distribution.positive - distribution.neutral;
+    if (sentimentScore === null && !distribution && data.history.length === 0) {
+      return null;
     }
 
     const recentHistory = data.history?.slice(-7) || [];
     const trend = recentHistory.length >= 2
-      ? ((recentHistory[recentHistory.length - 1]?.score || 0) - (recentHistory[0]?.score || 0)) * 50
-      : 0;
+      ? ((recentHistory[recentHistory.length - 1]?.score ?? 0) - (recentHistory[0]?.score ?? 0)) * 50
+      : null;
 
     return {
       sentimentScore,
@@ -371,13 +420,13 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
       isBearish,
       distribution,
       trend,
-      volatility: calculateVolatility(data.history),
+      volatility: data.history.length >= 2 ? calculateVolatility(data.history) : null,
     };
   }, [data]);
 
   // Historical chart data
   const historicalChartData = useMemo(() => {
-    if (!data?.history) return null;
+    if (!data?.history?.length) return null;
     const history = data.history.slice(-getTimeRangeDays(timeRange));
     const isMobile = chartDimensions.width < 640;
 
@@ -496,7 +545,9 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
   // Render
   // ========================================================================
   const sentimentVariant = metrics.isBullish ? 'positive' : metrics.isBearish ? 'negative' : 'neutral';
-  const sentimentLabel = metrics.isBullish ? 'Bullish' : metrics.isBearish ? 'Bearish' : 'Neutral';
+  const sentimentLabel = metrics.sentimentScore === null
+    ? 'Score unavailable'
+    : metrics.isBullish ? 'Bullish' : metrics.isBearish ? 'Bearish' : 'Neutral';
   const SentimentIcon = SENTIMENT_ICONS[sentimentVariant];
 
   return (
@@ -531,7 +582,7 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
             {sentimentLabel} Sentiment
           </Badge>
           <Badge variant="outline" className="border-gray-700 bg-gray-900 text-xs text-gray-400">
-            Volatility: {metrics.volatility.toFixed(1)}%
+            Volatility: {metrics.volatility === null ? '—' : `${metrics.volatility.toFixed(1)}%`}
           </Badge>
           <Badge variant="outline" className="border-gray-700 bg-gray-900 text-xs text-gray-400">
             <Calendar className="mr-1 h-3 w-3" aria-hidden="true" />
@@ -542,23 +593,35 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
 
       <CardContent className="relative space-y-3 p-3 sm:space-y-4 sm:p-4">
         {/* Sentiment Metrics – stacked vertically */}
-        <div className="grid grid-cols-1 gap-2 sm:gap-3">
-          <SentimentMetric
-            icon={Smile}
-            label="Positive"
-            value={metrics.distribution.positive}
-            trend={metrics.trend > 0 ? `+${metrics.trend.toFixed(1)}%` : `${metrics.trend.toFixed(1)}%`}
-            variant="positive"
-          />
-          <SentimentMetric icon={Meh} label="Neutral" value={metrics.distribution.neutral} trend="Stable" variant="neutral" />
-          <SentimentMetric
-            icon={Frown}
-            label="Negative"
-            value={metrics.distribution.negative}
-            trend={metrics.trend < 0 ? `+${Math.abs(metrics.trend).toFixed(1)}%` : `${(-metrics.trend).toFixed(1)}%`}
-            variant="negative"
-          />
-        </div>
+        {metrics.distribution ? (
+          <div className="grid grid-cols-1 gap-2 sm:gap-3">
+            <SentimentMetric
+              icon={Smile}
+              label="Positive"
+              value={metrics.distribution.positive}
+              trend={metrics.trend === null ? 'Not enough history' : metrics.trend > 0 ? `+${metrics.trend.toFixed(1)}%` : `${metrics.trend.toFixed(1)}%`}
+              variant="positive"
+            />
+            <SentimentMetric
+              icon={Meh}
+              label="Neutral"
+              value={metrics.distribution.neutral}
+              trend={metrics.trend === null ? 'Not enough history' : 'Based on article counts'}
+              variant="neutral"
+            />
+            <SentimentMetric
+              icon={Frown}
+              label="Negative"
+              value={metrics.distribution.negative}
+              trend={metrics.trend === null ? 'Not enough history' : metrics.trend < 0 ? `+${Math.abs(metrics.trend).toFixed(1)}%` : `${(-metrics.trend).toFixed(1)}%`}
+              variant="negative"
+            />
+          </div>
+        ) : (
+          <p className="rounded-lg border border-gray-800 bg-gray-900 p-4 text-sm text-gray-400">
+            No scored articles are available for this period. The sentiment breakdown will appear when articles have been processed.
+          </p>
+        )}
 
         {historicalChartData && (
           <div ref={chartContainerRef} className="rounded-xl border border-gray-800 bg-gray-900 p-3">
@@ -572,38 +635,40 @@ const SentimentAnalysisCard = ({ symbol, className, onError }) => {
           </div>
         )}
 
-        <div className="rounded-xl border border-gray-800 bg-gray-900 p-3">
-          <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold text-gray-300 sm:text-sm">
-            <BarChart3 className="h-4 w-4 text-gray-500" aria-hidden="true" />
-            Sentiment Distribution
-          </h3>
-          <div className="h-[180px] sm:h-[220px] lg:h-[250px]">
-            <Bar
-              data={distributionChartData}
-              options={getChartOptions(chartDimensions.width, {
-                plugins: { legend: { display: false } },
-                scales: {
-                  y: {
-                    beginAtZero: true,
-                    max: 100,
-                    grid: { color: 'rgba(75, 85, 99, 0.15)' },
-                    ticks: {
-                      color: '#9CA3AF',
-                      font: { size: chartDimensions.width < 640 ? 9 : 11 },
-                      callback: (value) => `${value}%`,
+        {metrics.distribution && (
+          <div className="rounded-xl border border-gray-800 bg-gray-900 p-3">
+            <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold text-gray-300 sm:text-sm">
+              <BarChart3 className="h-4 w-4 text-gray-500" aria-hidden="true" />
+              Sentiment Distribution
+            </h3>
+            <div className="h-[180px] sm:h-[220px] lg:h-[250px]">
+              <Bar
+                data={distributionChartData}
+                options={getChartOptions(chartDimensions.width, {
+                  plugins: { legend: { display: false } },
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                      max: 100,
+                      grid: { color: 'rgba(75, 85, 99, 0.15)' },
+                      ticks: {
+                        color: '#9CA3AF',
+                        font: { size: chartDimensions.width < 640 ? 9 : 11 },
+                        callback: (value) => `${value}%`,
+                      },
+                    },
+                    x: {
+                      ticks: {
+                        color: '#9CA3AF',
+                        font: { size: chartDimensions.width < 640 ? 9 : 11 },
+                      },
                     },
                   },
-                  x: {
-                    ticks: {
-                      color: '#9CA3AF',
-                      font: { size: chartDimensions.width < 640 ? 9 : 11 },
-                    },
-                  },
-                },
-              })}
-            />
+                })}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <NewsSourceAnalysis
           newsCount={data.newsCount}

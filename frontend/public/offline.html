@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#071525">
+  <title>You're offline · TickFlow Intelligence</title>
+  <style>
+    :root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#071525;color:#f4fffd}
+    body{min-height:100vh;margin:0;display:grid;place-items:center;padding:24px;box-sizing:border-box}
+    main{max-width:34rem;text-align:center}
+    h1{font-size:clamp(1.75rem,6vw,2.5rem);margin:0 0 1rem}
+    p{color:#c2d0dd;line-height:1.6}
+    button{min-height:44px;margin-top:1rem;padding:.7rem 1.2rem;border:0;border-radius:.5rem;background:#f4fffd;color:#071525;font:600 1rem system-ui,-apple-system,sans-serif;cursor:pointer}
+    button:hover{background:#c8fff3}
+    button:focus-visible{outline:3px solid #38d6bd;outline-offset:3px}
+    @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>You're offline</h1>
+    <p>Reconnect to load current market data, news, and account information. This app does not keep live research data for offline use.</p>
+    <button type="button" onclick="location.reload()">Try again</button>
+  </main>
+</body>
+</html>

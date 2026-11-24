@@ -3,6 +3,7 @@ import axios from "axios";
 import PropTypes from "prop-types";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getActionErrorMessage } from "@/utils/errorHandler";
 
 const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predict/" }) => {
   const [formData, setFormData] = useState({
@@ -59,17 +60,17 @@ const PredictionForm = ({ apiEndpoint = "http://127.0.0.1:8000/api/stocks/predic
       });
 
       if (!response.data?.prediction) {
-        throw new Error("Invalid response from server");
+        setError('The prediction service returned an incomplete result. Try again shortly.');
+        return;
       }
 
       setPrediction(response.data.prediction);
     } catch (err) {
       console.error("Prediction error:", err);
-      setError(
-        err.response?.data?.message ||
-        err.message ||
-        "Failed to fetch prediction. Please try again."
-      );
+      setError(getActionErrorMessage(
+        err,
+        'We couldn’t generate a prediction. Check your inputs and try again.'
+      ));
     } finally {
       setLoading(false);
     }

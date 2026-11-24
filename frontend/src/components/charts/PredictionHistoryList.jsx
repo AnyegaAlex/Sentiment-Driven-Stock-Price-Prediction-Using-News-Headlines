@@ -12,7 +12,7 @@
  * - Clickable rows to open detailed view (via onRowClick prop)
  */
 
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { format, isValid } from 'date-fns';
 import {
@@ -40,11 +40,14 @@ import {
   Minus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getCardErrorMessage } from '@/utils/errorHandler';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 // ============================================================================
 // Color & Style Constants
 // ============================================================================
+
+const EMPTY_PREDICTIONS = Object.freeze([]);
 
 const MOVEMENT_CONFIG = {
   up: {
@@ -65,6 +68,12 @@ const MOVEMENT_CONFIG = {
     label: 'Neutral',
     color: 'text-gray-400',
   },
+  unavailable: {
+    badge: 'bg-gray-800 text-gray-500 border-gray-700',
+    icon: Minus,
+    label: 'Unavailable',
+    color: 'text-gray-500',
+  },
 };
 
 const CONFIDENCE_LEVELS = {
@@ -78,23 +87,21 @@ const CONFIDENCE_LEVELS = {
 // ============================================================================
 
 const formatDate = (dateString) => {
-  if (!dateString) return '—';
-  try {
-    const date = new Date(dateString);
-    if (!isValid(date)) return 'Invalid date';
-    return format(date, 'MMM dd, yyyy HH:mm');
-  } catch {
-    return 'Invalid date';
-  }
+  if (!dateString) return 'Date unavailable';
+  const date = new Date(dateString);
+  if (!isValid(date)) return 'Date unavailable';
+  return format(date, 'MMM dd, yyyy HH:mm');
 };
 
 const getConfidenceLevel = (confidence) => {
+  if (!Number.isFinite(confidence)) return null;
   if (confidence >= 0.8) return 'high';
   if (confidence >= 0.6) return 'medium';
   return 'low';
 };
 
 const getSentimentLabel = (score) => {
+  if (!Number.isFinite(score)) return null;
   if (score > 0.2) return 'Bullish';
   if (score < -0.2) return 'Bearish';
   return 'Neutral';
@@ -105,7 +112,8 @@ const getSentimentLabel = (score) => {
 // ============================================================================
 
 const MovementBadge = ({ movement }) => {
-  const config = MOVEMENT_CONFIG[movement] || MOVEMENT_CONFIG.neutral;
+  const normalizedMovement = typeof movement === 'string' ? movement.toLowerCase() : '';
+  const config = MOVEMENT_CONFIG[normalizedMovement] || MOVEMENT_CONFIG.unavailable;
   const Icon = config.icon;
   return (
     <Badge className={cn('px-3 py-1 text-sm font-semibold border', config.badge)}>
@@ -115,14 +123,19 @@ const MovementBadge = ({ movement }) => {
   );
 };
 
+MovementBadge.propTypes = {
+  movement: PropTypes.string,
+};
+
 const ConfidenceDisplay = ({ confidence }) => {
   const level = getConfidenceLevel(confidence);
+  if (!level) return <span className="text-sm text-gray-500">Unavailable</span>;
+
   const levelConfig = CONFIDENCE_LEVELS[level];
+  const percent = Math.max(0, Math.min(100, confidence * 100));
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm font-medium text-gray-200">
-        {(confidence * 100).toFixed(0)}%
-      </span>
+      <span className="text-sm font-medium text-gray-200">{percent.toFixed(0)}%</span>
       <Badge className={cn('text-xs border-0 px-2 py-0.5', levelConfig.bg, levelConfig.color)}>
         {levelConfig.label}
       </Badge>
@@ -130,8 +143,14 @@ const ConfidenceDisplay = ({ confidence }) => {
   );
 };
 
+ConfidenceDisplay.propTypes = {
+  confidence: PropTypes.number,
+};
+
 const SentimentScore = ({ score }) => {
   const label = getSentimentLabel(score);
+  if (!label) return <span className="text-sm text-gray-500">Not scored</span>;
+
   const normalized = ((score + 1) / 2) * 100;
   const isPositive = score > 0.2;
   const isNegative = score < -0.2;
@@ -149,6 +168,10 @@ const SentimentScore = ({ score }) => {
       <span className="text-xs text-gray-400">{score.toFixed(2)}</span>
     </div>
   );
+};
+
+SentimentScore.propTypes = {
+  score: PropTypes.number,
 };
 
 const StatCard = ({ label, value }) => (
@@ -223,7 +246,7 @@ PaginationControls.propTypes = {
 // ============================================================================
 
 const PredictionHistoryList = ({
-  predictions = [],
+  predictions = EMPTY_PREDICTIONS,
   isLoading = false,
   error = null,
   onRetry,
@@ -236,6 +259,10 @@ const PredictionHistoryList = ({
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [predictions, itemsPerPage]);
 
   const sortedPredictions = useMemo(() => {
     if (!sortConfig.key || !sortable) return predictions;
@@ -264,6 +291,13 @@ const PredictionHistoryList = ({
   }, [sortedPredictions, currentPage, itemsPerPage, showPagination]);
 
   const totalPages = Math.ceil(predictions.length / itemsPerPage);
+  const confidenceValues = predictions
+    .map((prediction) => prediction.confidence)
+    .filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value)))
+    .map(Number);
+  const averageConfidence = confidenceValues.length
+    ? (confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length) * 100
+    : null;
 
   const handleSort = (key) => {
     if (!sortable) return;
@@ -304,7 +338,7 @@ const PredictionHistoryList = ({
         <StatCard label="Total" value={predictions.length} />
         <StatCard
           label="Avg Confidence"
-          value={`${(predictions.reduce((acc, p) => acc + (p.confidence || 0), 0) / predictions.length * 100).toFixed(0)}%`}
+          value={averageConfidence === null ? '—' : `${averageConfidence.toFixed(0)}%`}
         />
         <StatCard
           label="Bullish"
@@ -322,38 +356,104 @@ const PredictionHistoryList = ({
           <TableHeader>
             <TableRow className="border-gray-800 hover:bg-gray-800/50">
               <TableHead
-                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-                onClick={() => handleSort('date')}
+                className={cn(
+                  "text-gray-300 select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+                  sortable && "cursor-pointer transition-colors hover:text-white hover:underline hover:underline-offset-4"
+                )}
+                onClick={sortable ? () => handleSort('date') : undefined}
+                tabIndex={sortable ? 0 : undefined}
+                aria-sort={sortConfig.key === 'date' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleSort('date');
+                  }
+                }}
               >
                 <span className="flex items-center">Date {getSortIcon('date')}</span>
               </TableHead>
               <TableHead
-                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-                onClick={() => handleSort('stock_symbol')}
+                className={cn(
+                  "text-gray-300 select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+                  sortable && "cursor-pointer transition-colors hover:text-white hover:underline hover:underline-offset-4"
+                )}
+                onClick={sortable ? () => handleSort('stock_symbol') : undefined}
+                tabIndex={sortable ? 0 : undefined}
+                aria-sort={sortConfig.key === 'stock_symbol' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleSort('stock_symbol');
+                  }
+                }}
               >
                 <span className="flex items-center">Symbol {getSortIcon('stock_symbol')}</span>
               </TableHead>
               <TableHead
-                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-                onClick={() => handleSort('predicted_movement')}
+                className={cn(
+                  "text-gray-300 select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+                  sortable && "cursor-pointer transition-colors hover:text-white hover:underline hover:underline-offset-4"
+                )}
+                onClick={sortable ? () => handleSort('predicted_movement') : undefined}
+                tabIndex={sortable ? 0 : undefined}
+                aria-sort={sortConfig.key === 'predicted_movement' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleSort('predicted_movement');
+                  }
+                }}
               >
                 <span className="flex items-center">Movement {getSortIcon('predicted_movement')}</span>
               </TableHead>
               <TableHead
-                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-                onClick={() => handleSort('confidence')}
+                className={cn(
+                  "text-gray-300 select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+                  sortable && "cursor-pointer transition-colors hover:text-white hover:underline hover:underline-offset-4"
+                )}
+                onClick={sortable ? () => handleSort('confidence') : undefined}
+                tabIndex={sortable ? 0 : undefined}
+                aria-sort={sortConfig.key === 'confidence' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleSort('confidence');
+                  }
+                }}
               >
                 <span className="flex items-center">Confidence {getSortIcon('confidence')}</span>
               </TableHead>
               <TableHead
-                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-                onClick={() => handleSort('sentiment_score')}
+                className={cn(
+                  "text-gray-300 select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+                  sortable && "cursor-pointer transition-colors hover:text-white hover:underline hover:underline-offset-4"
+                )}
+                onClick={sortable ? () => handleSort('sentiment_score') : undefined}
+                tabIndex={sortable ? 0 : undefined}
+                aria-sort={sortConfig.key === 'sentiment_score' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleSort('sentiment_score');
+                  }
+                }}
               >
                 <span className="flex items-center">Sentiment {getSortIcon('sentiment_score')}</span>
               </TableHead>
               <TableHead
-                className="text-gray-300 cursor-pointer select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-                onClick={() => handleSort('source')}
+                className={cn(
+                  "text-gray-300 select-none py-3 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+                  sortable && "cursor-pointer transition-colors hover:text-white hover:underline hover:underline-offset-4"
+                )}
+                onClick={sortable ? () => handleSort('source') : undefined}
+                tabIndex={sortable ? 0 : undefined}
+                aria-sort={sortConfig.key === 'source' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleSort('source');
+                  }
+                }}
               >
                 <span className="flex items-center">Source {getSortIcon('source')}</span>
               </TableHead>
@@ -361,17 +461,29 @@ const PredictionHistoryList = ({
           </TableHeader>
           <TableBody>
             {paginatedPredictions.map((pred, index) => {
-              const confidence = Number(pred.confidence) || 0;
-              const movement = pred.predicted_movement || 'neutral';
+              const confidence = pred.confidence === null || pred.confidence === undefined
+                ? null
+                : Number.isFinite(Number(pred.confidence))
+                  ? Number(pred.confidence)
+                  : null;
+              const movement = pred.predicted_movement ?? null;
               const symbol = pred.stock_symbol || pred.symbol || '—';
               return (
                 <TableRow
                   key={pred.id || index}
                   className={cn(
-                    'border-gray-800 hover:bg-gray-800/50 transition-colors',
-                    onRowClick && 'cursor-pointer'
+                    'border-gray-800 transition-colors',
+                    onRowClick && 'cursor-pointer hover:bg-gray-800/50 active:bg-gray-800/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500'
                   )}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  aria-label={onRowClick ? `Open prediction details for ${symbol}` : undefined}
                   onClick={() => onRowClick?.(pred)}
+                  onKeyDown={(event) => {
+                    if (onRowClick && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault();
+                      onRowClick(pred);
+                    }
+                  }}
                 >
                   <TableCell className="font-mono text-sm text-gray-300 py-3">
                     {formatDate(pred.date || pred.created_at)}
@@ -386,7 +498,7 @@ const PredictionHistoryList = ({
                     <ConfidenceDisplay confidence={confidence} />
                   </TableCell>
                   <TableCell>
-                    <SentimentScore score={pred.sentiment_score || 0} />
+                    <SentimentScore score={pred.sentiment_score ?? null} />
                   </TableCell>
                   <TableCell className="text-sm text-gray-400 py-3">
                     {pred.source || '—'}
@@ -401,14 +513,29 @@ const PredictionHistoryList = ({
       {/* Mobile Cards */}
       <div className="md:hidden grid grid-cols-1 gap-3">
         {paginatedPredictions.map((pred, index) => {
-          const confidence = Number(pred.confidence) || 0;
-          const movement = pred.predicted_movement || 'neutral';
+          const confidence = pred.confidence === null || pred.confidence === undefined
+            ? null
+            : Number.isFinite(Number(pred.confidence))
+              ? Number(pred.confidence)
+              : null;
+          const movement = pred.predicted_movement ?? null;
           const symbol = pred.stock_symbol || pred.symbol || '—';
           return (
             <div
               key={pred.id || index}
-              className="p-4 bg-gray-900/95 border border-gray-800/50 rounded-lg hover:border-gray-700 transition-colors cursor-pointer"
+              className={cn(
+                'p-4 bg-gray-900/95 border border-gray-800/50 rounded-lg transition-colors',
+                onRowClick && 'cursor-pointer hover:border-gray-600 hover:bg-gray-800/50 active:bg-gray-800/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500'
+              )}
+              role={onRowClick ? 'button' : undefined}
+              tabIndex={onRowClick ? 0 : undefined}
               onClick={() => onRowClick?.(pred)}
+              onKeyDown={(event) => {
+                if (onRowClick && (event.key === 'Enter' || event.key === ' ')) {
+                  event.preventDefault();
+                  onRowClick(pred);
+                }
+              }}
             >
               <div className="flex justify-between items-start">
                 <div>
@@ -424,7 +551,7 @@ const PredictionHistoryList = ({
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Sentiment</span>
-                  <SentimentScore score={pred.sentiment_score || 0} />
+                  <SentimentScore score={pred.sentiment_score ?? null} />
                 </div>
                 {pred.source && (
                   <div className="flex justify-between text-xs text-gray-400">
@@ -502,7 +629,9 @@ const ErrorDisplay = ({ error, onRetry, className }) => (
     <Alert variant="destructive" className="border-0 bg-transparent">
       <AlertCircle className="h-5 w-5 text-red-400" />
       <AlertTitle className="text-white font-semibold">Failed to load predictions</AlertTitle>
-      <AlertDescription className="text-gray-400 text-sm">{error}</AlertDescription>
+      <AlertDescription className="text-gray-400 text-sm">
+        {getCardErrorMessage(typeof error === 'string' ? { message: error } : error)}
+      </AlertDescription>
       {onRetry && (
         <Button
           variant="outline"

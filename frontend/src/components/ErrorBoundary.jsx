@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { captureException } from '@/sentry';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -30,8 +31,10 @@ class ErrorBoundary extends React.Component {
       error 
     });
     
-    // TODO: Add error logging service here
-    // logErrorToService(error, errorInfo.componentStack);
+    captureException(error, {
+      componentStack: errorInfo.componentStack,
+      boundary: this.props.name || 'application',
+    });
   }
 
   handleReset = () => {
@@ -41,6 +44,20 @@ class ErrorBoundary extends React.Component {
       errorInfo: null 
     });
   };
+
+  componentDidUpdate(previousProps) {
+    if (!this.state.hasError || !this.props.resetKeys) return;
+
+    const previousKeys = previousProps.resetKeys || [];
+    const nextKeys = this.props.resetKeys || [];
+    const keysChanged =
+      previousKeys.length !== nextKeys.length ||
+      nextKeys.some((key, index) => key !== previousKeys[index]);
+
+    if (keysChanged) {
+      this.handleReset();
+    }
+  }
 
   handleFullReload = () => {
     window.location.reload();
@@ -67,15 +84,16 @@ class ErrorBoundary extends React.Component {
                 Something went wrong
               </h2>
               <p className="text-gray-400 mb-1">
-                {this.state.error?.toString() || "An unexpected error occurred."}
+                This part of TickFlow didn’t load as expected. Try again. If the problem continues, reload the page.
               </p>
-              {this.state.errorInfo?.componentStack && (
+              {import.meta.env.DEV && this.state.error && (
                 <details className="mt-3 text-left">
                   <summary className="text-sm text-gray-400 hover:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded px-2 py-1 transition-colors">
-                    Technical details
+                    Developer details
                   </summary>
                   <pre className="mt-2 p-2 bg-black/50 text-xs overflow-x-auto rounded border border-gray-800 text-gray-400">
-                    {this.state.errorInfo.componentStack}
+                    {this.state.error.toString()}
+                    {this.state.errorInfo?.componentStack}
                   </pre>
                 </details>
               )}
@@ -108,8 +126,8 @@ class ErrorBoundary extends React.Component {
 
 ErrorBoundary.propTypes = {
   children: PropTypes.node.isRequired,
-  // Optional: Add resetKeys prop for advanced error recovery
-  // resetKeys: PropTypes.arrayOf(PropTypes.any)
+  resetKeys: PropTypes.arrayOf(PropTypes.any),
+  name: PropTypes.string
 };
 
 export default ErrorBoundary;

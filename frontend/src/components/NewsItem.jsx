@@ -13,7 +13,7 @@
  * @component
  */
 
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -40,6 +40,11 @@ const SENTIMENT_CONFIG = {
     badgeClass: 'bg-red-400/20 text-red-400 border-red-400/30',
     icon: TrendingDown,
     label: 'Negative',
+  },
+  unavailable: {
+    badgeClass: 'bg-gray-800 text-gray-500 border-gray-700',
+    icon: Minus,
+    label: 'Not scored',
   },
 };
 
@@ -68,15 +73,14 @@ const getReliabilityLevel = (score) => {
 
 const parseDate = (dateString) => {
   if (!dateString) return 'Date not available';
-  try {
-    return new Date(dateString).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return dateString;
-  }
+  const parsedDate = new Date(dateString);
+  if (Number.isNaN(parsedDate.getTime())) return 'Date not available';
+
+  return parsedDate.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 };
 
 // ============================================================================
@@ -84,16 +88,24 @@ const parseDate = (dateString) => {
 // ============================================================================
 
 const NewsItem = React.memo(function NewsItem({ item }) {
-  const sentiment = item.sentiment?.toLowerCase() || 'neutral';
-  const config = SENTIMENT_CONFIG[sentiment] || SENTIMENT_CONFIG.neutral;
+  const [imageFailed, setImageFailed] = useState(false);
+  const rawSentiment = typeof item.sentiment === 'string' ? item.sentiment.toLowerCase() : '';
+  const sentiment = SENTIMENT_CONFIG[rawSentiment] ? rawSentiment : 'unavailable';
+  const config = SENTIMENT_CONFIG[sentiment];
   const SentimentIcon = config.icon;
 
   const keyPhrases = useMemo(() => normalizeKeyPhrases(item.key_phrases || item.keyPhrases), [item.key_phrases, item.keyPhrases]);
-  const reliabilityScore = item.source_reliability || 0;
-  const reliabilityLevel = getReliabilityLevel(reliabilityScore);
-  const reliabilityConfig = RELIABILITY_CONFIG[reliabilityLevel];
-  const confidencePercent = Math.round((item.confidence || 0) * 100);
-  const hasImage = !!(item.banner_image_url || item.image);
+  const reliabilityScore = Number.isFinite(item.source_reliability)
+    ? item.source_reliability
+    : null;
+  const reliabilityLevel = reliabilityScore === null ? null : getReliabilityLevel(reliabilityScore);
+  const reliabilityConfig = reliabilityLevel
+    ? RELIABILITY_CONFIG[reliabilityLevel]
+    : { badge: 'bg-gray-800 text-gray-500', label: 'Not rated' };
+  const confidencePercent = Number.isFinite(item.confidence)
+    ? Math.max(0, Math.min(100, Math.round(item.confidence * 100)))
+    : null;
+  const hasImage = !!(item.banner_image_url || item.image) && !imageFailed;
 
   return (
     <Card className="flex h-full flex-col transition-shadow hover:shadow-md border border-gray-800 bg-gray-900">
@@ -107,15 +119,7 @@ const NewsItem = React.memo(function NewsItem({ item }) {
               className="h-40 w-full object-cover"
               loading="lazy"
               decoding="async"
-              onError={(e) => {
-                e.target.style.display = 'none';
-                const parent = e.target.parentNode;
-                if (parent) {
-                  parent.innerHTML = `<div class="flex h-40 items-center justify-center bg-gray-800">
-                    <svg class="h-10 w-10 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
-                  </div>`;
-                }
-              }}
+              onError={() => setImageFailed(true)}
             />
           ) : (
             <div className="flex h-40 items-center justify-center bg-gray-800">
@@ -126,15 +130,19 @@ const NewsItem = React.memo(function NewsItem({ item }) {
 
         {/* Title */}
         <h3 className="line-clamp-2 text-base font-semibold text-white">
-          <a
-            href={item.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-gray-300 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px]"
-          >
-            {item.title || 'No title available'}
-            <ExternalLink className="inline-block h-3 w-3 flex-shrink-0 text-gray-500" />
-          </a>
+          {item.url ? (
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-[44px] items-center gap-1 rounded text-gray-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+            >
+              {item.title || 'Untitled article'}
+              <ExternalLink className="inline-block h-3 w-3 flex-shrink-0 text-gray-500" aria-hidden="true" />
+            </a>
+          ) : (
+            <span className="text-gray-300">{item.title || 'Untitled article'}</span>
+          )}
         </h3>
 
         {/* Summary */}
@@ -147,7 +155,7 @@ const NewsItem = React.memo(function NewsItem({ item }) {
           <div>
             <p className="text-gray-500">Source</p>
             <p className="truncate font-medium text-gray-300">
-              {item.source || item.source_name || 'Unknown'}
+              {item.source || item.source_name || 'Source unavailable'}
             </p>
           </div>
           <div>
@@ -162,7 +170,9 @@ const NewsItem = React.memo(function NewsItem({ item }) {
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">Reliability:</span>
           <Badge className={cn('text-xs border-0', reliabilityConfig.badge)}>
-            {reliabilityScore}% ({reliabilityConfig.label})
+            {reliabilityScore === null
+              ? reliabilityConfig.label
+              : `${reliabilityScore}% (${reliabilityConfig.label})`}
           </Badge>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -174,7 +184,7 @@ const NewsItem = React.memo(function NewsItem({ item }) {
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-[200px] border border-gray-800 bg-gray-900 text-white">
-              <p className="text-xs">Source reliability score based on historical accuracy.</p>
+              <p className="text-xs">Source reliability rating, when available.</p>
             </TooltipContent>
           </Tooltip>
         </div>
@@ -191,35 +201,42 @@ const NewsItem = React.memo(function NewsItem({ item }) {
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500">Confidence:</span>
-            <div className="relative h-1.5 flex-1 rounded bg-gray-800">
-              <div
-                className={cn(
-                  'absolute inset-0 h-full rounded transition-all',
-                  sentiment === 'positive' ? 'bg-green-400' :
-                  sentiment === 'negative' ? 'bg-red-400' :
-                  'bg-gray-500'
-                )}
-                style={{ width: `${confidencePercent}%` }}
-                role="progressbar"
-                aria-valuenow={confidencePercent}
-                aria-valuemin={0}
-                aria-valuemax={100}
-              />
-            </div>
-            <span className="w-12 text-right text-xs text-gray-400">{confidencePercent}%</span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="text-gray-500 hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] min-w-[44px] flex items-center justify-center"
-                  aria-label="Confidence info"
-                >
-                  <Info className="h-3 w-3" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[200px] border border-gray-800 bg-gray-900 text-white">
-                <p className="text-xs">LSTM model confidence in sentiment analysis.</p>
-              </TooltipContent>
-            </Tooltip>
+            {confidencePercent === null ? (
+              <span className="text-xs text-gray-500">Not available</span>
+            ) : (
+              <>
+                <div className="relative h-1.5 flex-1 rounded bg-gray-800">
+                  <div
+                    className={cn(
+                      'absolute inset-0 h-full rounded transition-all',
+                      sentiment === 'positive' ? 'bg-green-400' :
+                      sentiment === 'negative' ? 'bg-red-400' :
+                      'bg-gray-500'
+                    )}
+                    style={{ width: `${confidencePercent}%` }}
+                    role="progressbar"
+                    aria-valuenow={confidencePercent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="Article sentiment classification confidence"
+                  />
+                </div>
+                <span className="w-12 text-right text-xs text-gray-400">{confidencePercent}%</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      className="text-gray-500 hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded min-h-[44px] min-w-[44px] flex items-center justify-center"
+                      aria-label="Confidence info"
+                    >
+                      <Info className="h-3 w-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[200px] border border-gray-800 bg-gray-900 text-white">
+                    <p className="text-xs">Model-reported confidence for this article’s sentiment classification.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </>
+            )}
           </div>
         </div>
 

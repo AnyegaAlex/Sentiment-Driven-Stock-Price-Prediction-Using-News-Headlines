@@ -17,7 +17,7 @@ import CTASection from '../components/landing/CTASection';
 const LandingPage = () => {
   return (
     <div className="min-h-screen bg-black">
-      <Navbar variant="public" />
+      <Navbar />
       <Hero />
       <Metrics />
       <HowItWorks />

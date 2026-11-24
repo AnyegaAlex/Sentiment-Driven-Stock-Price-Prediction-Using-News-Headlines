@@ -58,7 +58,7 @@ def get_sentry_config() -> Dict[str, Any]:
         'traces_sample_rate': float(getattr(settings, 'SENTRY_TRACES_SAMPLE_RATE', DEFAULT_TRACES_SAMPLE_RATE)),
         'profiles_sample_rate': float(getattr(settings, 'SENTRY_PROFILES_SAMPLE_RATE', DEFAULT_PROFILES_SAMPLE_RATE)),
         'release': getattr(settings, 'SENTRY_RELEASE', DEFAULT_RELEASE),
-        'debug': getattr(settings, 'DEBUG', False),
+        'debug': getattr(settings, 'SENTRY_DEBUG', False),
         'send_default_pii': getattr(settings, 'SENTRY_SEND_PII', True),
         'attach_stacktrace': getattr(settings, 'SENTRY_ATTACH_STACKTRACE', True),
         'max_breadcrumbs': getattr(settings, 'SENTRY_MAX_BREADCRUMBS', 100),

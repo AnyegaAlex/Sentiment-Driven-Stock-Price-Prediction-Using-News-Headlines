@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#071525"/>
+  <text x="240" y="310" text-anchor="middle" fill="#f4fffd" font-family="Inter, ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="176" font-weight="750" letter-spacing="-12">TFI</text>
+  <path d="M340 375l35-38 29 16 46-60" fill="none" stroke="#38d6bd" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
