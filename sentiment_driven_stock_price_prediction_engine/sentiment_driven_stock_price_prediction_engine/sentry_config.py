@@ -254,6 +254,7 @@ def init_sentry() -> bool:
             traces_sample_rate=config['traces_sample_rate'],
             profiles_sample_rate=config['profiles_sample_rate'],
             send_default_pii=config['send_default_pii'],
+            include_local_variables=False,
             attach_stacktrace=config['attach_stacktrace'],
             max_breadcrumbs=config['max_breadcrumbs'],
             enable_tracing=config['enable_tracing'],

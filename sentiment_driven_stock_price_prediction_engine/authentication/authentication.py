@@ -103,7 +103,7 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
             request.api_key_obj = key_obj
             request.api_key = api_key
 
-            logger.info(f"API key authentication successful: {key_obj.user.username} - {key_obj.name}")
+            logger.info(f"API key authentication successful: user_id={key_obj.user.id} api_key_id={key_obj.id}")
             return (key_obj.user, None)
 
         except UserAPIKey.DoesNotExist:
@@ -323,7 +323,7 @@ class CustomJWTAuthentication(JWTAuthentication):
                 if hasattr(user, 'deletion_requested_at') and user.deletion_requested_at:
                     raise InvalidToken('User account is scheduled for deletion')
 
-                logger.info(f"JWT authentication successful: {user.username} (ID: {user.id})")
+                logger.info(f"JWT authentication successful: user_id={user.id}")
                 return result
 
             return None

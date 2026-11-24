@@ -223,7 +223,7 @@ def send_email_sync(subject: str, to_email: str, html_content: str, plain_conten
     before Render can terminate the worker process.
     """
     if not validate_email(to_email):
-        logger.error(f"Invalid email address: {to_email}")
+        logger.error("Invalid email address rejected")
         return False
 
     plain_text = plain_content or strip_html_tags(html_content)
@@ -248,11 +248,11 @@ def send_email_sync(subject: str, to_email: str, html_content: str, plain_conten
             response = sg.send(message)
 
             if 200 <= response.status_code < 300:
-                logger.info(f"[SendGrid] Email sent to {to_email} (status: {response.status_code})")
+                logger.info(f"[SendGrid] Email sent (status: {response.status_code})")
                 return True
             else:
                 last_error = f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}"
-                logger.error(f"[SendGrid] Failed for {to_email}: {last_error}")
+                logger.error(f"[SendGrid] Failed: {last_error}")
                 
                 # Don't retry on 4xx errors (except 429) as they indicate a configuration issue
                 if 400 <= response.status_code < 500 and response.status_code != 429:
@@ -274,16 +274,16 @@ def send_email_sync(subject: str, to_email: str, html_content: str, plain_conten
                 html_message=html_content,
                 fail_silently=False,
             )
-            logger.info(f"[SMTP] Email sent to {to_email}")
+            logger.info("[SMTP] Email sent")
             return True
         except Exception as e:
             last_error = str(e)
-            logger.error(f"[SMTP] Fallback failed for {to_email}: {e}")
+            logger.error(f"[SMTP] Fallback failed: {e}")
 
         if attempt < retry_count - 1:
             time.sleep(EMAIL_RETRY_DELAY)
 
-    logger.error(f"[Email] Failed after {retry_count} attempts for {to_email}. Last error: {last_error}")
+    logger.error(f"[Email] Failed after {retry_count} attempts. Last error: {last_error}")
     return False
 
 
@@ -330,7 +330,7 @@ def send_verification_email(user: User, request) -> bool:
         return send_email_sync(subject, user.email, html_content, plain_content)
         
     except Exception as e:
-        logger.error(f"Failed to send verification email for {user.email}: {e}", exc_info=True)
+        logger.error(f"Failed to send verification email for user_id={user.id}: {e}", exc_info=True)
         return False
 
 
@@ -372,7 +372,7 @@ The Tickflow Capital Team
         
         return send_email_sync(subject, user.email, html_content, plain_content)
     except Exception as e:
-        logger.error(f"Failed to send welcome email for {user.email}: {e}", exc_info=True)
+        logger.error(f"Failed to send welcome email for user_id={user.id}: {e}", exc_info=True)
         return False
 
 
@@ -402,7 +402,7 @@ def send_password_reset_email(user: User, request) -> bool:
         
         return send_email_sync(subject, user.email, html_content, plain_content)
     except Exception as e:
-        logger.error(f"Failed to send password reset email to {user.email}: {e}", exc_info=True)
+        logger.error(f"Failed to send password reset email for user_id={user.id}: {e}", exc_info=True)
         return False
 
 
@@ -423,7 +423,7 @@ def send_email_change_code(new_email: str, code: str) -> bool:
         
         return send_email_sync(subject, new_email, html_content, plain_content)
     except Exception as e:
-        logger.error(f"Failed to send email change code to {new_email}: {e}", exc_info=True)
+        logger.error(f"Failed to send email change code: {e}", exc_info=True)
         return False
 
 

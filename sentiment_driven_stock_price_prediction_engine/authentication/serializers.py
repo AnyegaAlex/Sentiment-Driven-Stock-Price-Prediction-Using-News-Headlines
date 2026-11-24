@@ -173,7 +173,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.set_password(validated_data['password'])
         user.save()
         
-        logger.info(f"User created via registration: {user.email}")
+        logger.info(f"User created via registration: user_id={user.id}")
         return user
 
 
