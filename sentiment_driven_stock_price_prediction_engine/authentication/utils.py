@@ -3,10 +3,9 @@ Utility functions for authentication: email sending, token generation,
 verification, and response formatting.
 
 Production-Ready Refactor:
-- Removed asynchronous threading (which gets killed by Render/serverless platforms).
-- Switched to synchronous SendGrid API calls with strict timeouts.
-- Added atomic rate limiting using cache.incr().
-- Added extensive logging for failure diagnostics.
+- Uses the configured Django email backend synchronously (Brevo SMTP in production).
+- Keeps delivery bounded by EMAIL_TIMEOUT in Django settings.
+- Adds bounded retries and avoids logging recipient addresses or provider responses.
 """
 
 import re
@@ -217,56 +216,17 @@ def verify_password_reset_token(uid: str, token: str) -> Optional[User]:
 # ============================================================================
 
 def send_email_sync(subject: str, to_email: str, html_content: str, plain_content: Optional[str] = None, retry_count: int = EMAIL_MAX_RETRIES) -> bool:
-    """
-    Send email synchronously using SendGrid Web API with SMTP fallback.
-    This blocks the request for ~200ms but guarantees the email is dispatched 
-    before Render can terminate the worker process.
-    """
+    """Send email through the configured Django backend with bounded retries."""
     if not validate_email(to_email):
-        logger.error(f"Invalid email address: {to_email}")
+        logger.warning("Email delivery skipped because the recipient address is invalid")
         return False
 
     plain_text = plain_content or strip_html_tags(html_content)
-    last_error = None
+    attempts = max(1, retry_count)
 
-    for attempt in range(retry_count):
-        # --- Primary: SendGrid Web API ---
+    for attempt in range(attempts):
         try:
-            from sendgrid import SendGridAPIClient
-            from sendgrid.helpers.mail import Mail
-
-            message = Mail(
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to_emails=to_email,
-                subject=subject,
-                html_content=html_content,
-                plain_text_content=plain_text,
-            )
-
-            # 10-second timeout ensures Render doesn't hang indefinitely if SendGrid is down
-            sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=10)
-            response = sg.send(message)
-
-            if 200 <= response.status_code < 300:
-                logger.info(f"[SendGrid] Email sent to {to_email} (status: {response.status_code})")
-                return True
-            else:
-                last_error = f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}"
-                logger.error(f"[SendGrid] Failed for {to_email}: {last_error}")
-                
-                # Don't retry on 4xx errors (except 429) as they indicate a configuration issue
-                if 400 <= response.status_code < 500 and response.status_code != 429:
-                    break 
-
-        except ImportError:
-            logger.warning("[Email] SendGrid library not installed, falling back to SMTP.")
-        except Exception as e:
-            last_error = str(e)
-            logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {e}")
-
-        # --- Fallback: Django SMTP ---
-        try:
-            send_mail(
+            sent_count = send_mail(
                 subject=subject,
                 message=plain_text,
                 from_email=settings.DEFAULT_FROM_EMAIL,
@@ -274,16 +234,23 @@ def send_email_sync(subject: str, to_email: str, html_content: str, plain_conten
                 html_message=html_content,
                 fail_silently=False,
             )
-            logger.info(f"[SMTP] Email sent to {to_email}")
-            return True
-        except Exception as e:
-            last_error = str(e)
-            logger.error(f"[SMTP] Fallback failed for {to_email}: {e}")
+            if sent_count == 1:
+                logger.info("Email sent through the configured Django email backend")
+                return True
+            logger.warning("Email backend did not confirm delivery on attempt %s", attempt + 1)
+        except Exception as exc:
+            # Do not log exception text: SMTP/provider errors can contain addresses
+            # or configuration details. Keep only the exception type for diagnosis.
+            logger.warning(
+                "Email delivery attempt %s failed (%s)",
+                attempt + 1,
+                type(exc).__name__,
+            )
 
-        if attempt < retry_count - 1:
+        if attempt < attempts - 1:
             time.sleep(EMAIL_RETRY_DELAY)
 
-    logger.error(f"[Email] Failed after {retry_count} attempts for {to_email}. Last error: {last_error}")
+    logger.error("Email delivery failed after %s attempt(s)", attempts)
     return False
 
 

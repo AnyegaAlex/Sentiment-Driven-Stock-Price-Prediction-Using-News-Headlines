@@ -17,6 +17,7 @@ Refactored for Production:
 """
 
 import hashlib
+import hmac
 import logging
 import time
 import uuid
@@ -36,7 +37,8 @@ from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
-from .models import User, AuditLog, UserPreferences, UserAPIKey
+from .models import User, AuditLog, UserPreferences, UserAPIKey, TermsAcceptance, PrivacyNoticeAcknowledgement
+from .legal_config import PRIVACY_NOTICE, TERMS, legal_documents_configured
 from .serializers import (
     RegisterSerializer,
     LoginSerializer,
@@ -49,6 +51,7 @@ from .serializers import (
     ChangeUsernameSerializer,
     UserPreferencesSerializer,
     UserAPIKeySerializer,
+    CancelDeletionSerializer,
 )
 from .utils import (
     send_verification_email,
@@ -60,6 +63,7 @@ from .utils import (
     send_security_alert_email,
     send_account_deletion_confirmation,
     generate_verification_code,
+    hash_verification_code,
     verify_password_reset_token,
     send_email_change_code,
     error_response,
@@ -160,6 +164,15 @@ class RegisterView(generics.CreateAPIView):
             with transaction.atomic():
                 user = serializer.save()
                 UserPreferences.objects.get_or_create(user=user)
+                if getattr(settings, 'LEGAL_ACCEPTANCE_ENFORCEMENT_ENABLED', False):
+                    if not legal_documents_configured():
+                        raise serializers.ValidationError({'legal': 'Legal documents are not configured for acceptance.'})
+                    TermsAcceptance.objects.create(
+                        user=user, version=TERMS.version, content_hash=TERMS.sha256,
+                    )
+                    PrivacyNoticeAcknowledgement.objects.create(
+                        user=user, version=PRIVACY_NOTICE.version, content_hash=PRIVACY_NOTICE.sha256,
+                    )
                 # Audit log (does not depend on email)
                 request_context = get_request_context(self.request)
                 AuditLog.objects.create(
@@ -884,7 +897,7 @@ class ChangeEmailView(APIView):
                     return Response(error_response(message=f'Cooldown active. Try in {EMAIL_CHANGE_COOLDOWN_DAYS - days_since} days.', code='COOLDOWN_ACTIVE', request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
             
             code = generate_verification_code()
-            cache.set(f"email_change_code_{user.id}", code, timeout=600)
+            cache.set(f"email_change_code_{user.id}", hash_verification_code(user.id, code), timeout=600)
             cache.set(f"email_change_{user.id}", {'new_email': new_email, 'requested_at': timezone.now().isoformat()}, timeout=3600)
             
             email_sent = send_email_change_code(new_email, code)
@@ -913,7 +926,7 @@ class ChangeEmailView(APIView):
                 return Response(error_response(message='Verification code required', code='MISSING_CODE', request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
             
             cached_code = cache.get(f"email_change_code_{user.id}")
-            if not cached_code or cached_code != code:
+            if not cached_code or not hmac.compare_digest(cached_code, hash_verification_code(user.id, code)):
                 return Response(error_response(message='Invalid verification code', code='INVALID_CODE', request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
             
             pending = cache.get(f"email_change_{user.id}")
@@ -1308,31 +1321,77 @@ class DeleteAccountView(APIView):
 
 
 class CancelDeletionView(APIView):
-    """Cancel a pending account deletion request."""
-    permission_classes = [permissions.IsAuthenticated]
-    throttle_classes = [UserRateThrottle]
-    serializer_class = serializers.Serializer
+    """Cancel a pending deletion using an active session or email/password."""
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [AnonRateThrottle]
+    serializer_class = CancelDeletionSerializer
 
     def post(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
-        
+
         try:
-            user = request.user
+            serializer = self.serializer_class(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    error_response(
+                        message='A valid email address and password are required.',
+                        code='INVALID_INPUT',
+                        request_id=request_id,
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            email = serializer.validated_data['email']
+            password = serializer.validated_data['password']
+            user = User.objects.filter(email__iexact=email).first()
+
+            # Keep the response identical for unknown accounts and bad passwords.
+            if user is None or not user.check_password(password):
+                return Response(
+                    error_response(
+                        message='The email or password is incorrect.',
+                        code='INVALID_CREDENTIALS',
+                        request_id=request_id,
+                    ),
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
             if not user.deletion_requested_at:
-                return Response(error_response(message='No pending deletion request', code='NO_PENDING_REQUEST', request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
-            
+                return Response(
+                    error_response(
+                        message='No pending deletion request',
+                        code='NO_PENDING_REQUEST',
+                        request_id=request_id,
+                    ),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             with transaction.atomic():
                 user.deletion_requested_at = None
                 user.deletion_scheduled_for = None
                 user.is_active = True
                 user.save()
-            
+
             request_context = get_request_context(request)
-            AuditLog.objects.create(user=user, action='ACCOUNT_DELETION_CANCELLED', details={'ip': request_context['ip'], 'request_id': request_id})
-            logger.info(f"Account deletion cancelled for user {user.id}")
-            
-            return Response(success_response(message='Account deletion cancelled'), status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            logger.error(f"Cancel deletion error: {e}", exc_info=True)
-            return Response(error_response(message='Failed to cancel deletion.', code='SERVER_ERROR', request_id=request_id), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            AuditLog.objects.create(
+                user=user,
+                action='ACCOUNT_DELETION_CANCELLED',
+                details={'ip': request_context['ip'], 'request_id': request_id},
+            )
+            logger.info("Account deletion cancelled for user %s", user.id)
+            return Response(
+                success_response(message='Account deletion cancelled. Please sign in again.'),
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception:
+            logger.exception("Account deletion cancellation failed")
+            return Response(
+                error_response(
+                    message='Failed to cancel deletion.',
+                    code='SERVER_ERROR',
+                    request_id=request_id,
+                ),
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

@@ -15,6 +15,7 @@ import logging
 from django.conf import settings
 from django.http import JsonResponse
 from django.core.cache import cache
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.settings import api_settings
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -50,6 +51,7 @@ PUBLIC_PATHS = [
     '/api/v1/auth/password-reset/',
     '/api/v1/auth/password-reset/confirm/',
     '/api/v1/auth/refresh/',
+    '/api/v1/auth/delete-account/cancel/',
 
     # Public Data (Read-only)
     '/api/v1/stock-analysis/',
@@ -58,6 +60,22 @@ PUBLIC_PATHS = [
     '/api/v1/lstm-predict/',
     '/api/v1/symbols/',
     '/api/v1/subscribe/',
+    '/api/v1/news/',
+    '/api/v1/performance/',
+    '/api/v1/stock-opinion/',
+    '/api/v1/stocks/symbols/',
+    '/api/v1/cron/resolve-predictions/',
+    # Legacy aliases retained by the root URL configuration.
+    '/stocks/stock-analysis/',
+    '/stocks/technical-indicators/',
+    '/stocks/sentiment-analysis/',
+    '/stocks/lstm-predict/',
+    '/stocks/symbols/',
+    '/stocks/stocks/symbols/',
+    '/stocks/subscribe/',
+    '/stocks/stock-opinion/',
+    '/stocks/performance/',
+    '/stocks/cron/resolve-predictions/',
 ]
 
 DEPRECATED_PATHS = [
@@ -83,25 +101,28 @@ class APIKeyMiddleware:
         self.jwt_auth = JWTAuthentication()
 
     def __call__(self, request):
-        # 1. Try JWT authentication for ALL requests
+        # Authentication is enforced in process_view so Django can resolve the
+        # URL first. Unknown routes must remain 404s rather than becoming 401s.
+        return self.get_response(request)
+
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        # 1. Try JWT authentication before checking the public-path allowlist.
         try:
             auth_result = self.jwt_auth.authenticate(request)
             if auth_result:
                 user, _ = auth_result
                 request.user = user
-                return self.get_response(request)
-        except (InvalidToken, TokenError, Exception):
-            # JWT failed – continue to public paths check or API key check
+                return None
+        except Exception:
+            # Invalid JWT credentials may still be accompanied by a valid API key.
             pass
 
-        # 2. Skip public paths if JWT failed
+        # 2. Public endpoints apply their own access gates where applicable.
         if self._is_public_path(request.path):
-            return self.get_response(request)
+            return None
 
-        # 3. Check API key (X-API-Key header)
+        # 3. Check API key (X-API-Key header or Authorization: Bearer ts_...).
         api_key = request.headers.get('X-API-Key')
-        
-        # Also check Authorization: Bearer <key> if it starts with 'ts_'
         if not api_key:
             auth_header = request.headers.get('Authorization', '')
             if auth_header.startswith('Bearer ts_'):
@@ -112,44 +133,45 @@ class APIKeyMiddleware:
                 error_response(
                     message='API key required. Please provide X-API-Key header.',
                     code='AUTH_API_KEY_REQUIRED',
-                    status_code=401
+                    status_code=401,
                 ),
-                status=401
+                status=401,
             )
 
-        # 4. Validate API key using O(1) hashed lookup
+        # 4. Validate API key using the indexed SHA-256 hash.
         key_obj = self._validate_api_key(api_key)
         if not key_obj:
-            logger.warning(f"Invalid API key attempt: {api_key[:8]}...")
+            logger.warning("Invalid API key attempt: %s...", api_key[:8])
             return JsonResponse(
                 error_response(
                     message='Invalid or inactive API key.',
                     code='AUTH_INVALID_API_KEY',
-                    status_code=401
+                    status_code=401,
                 ),
-                status=401
+                status=401,
             )
 
-        # 5. Update last_used (cached, flushed on response)
+        # 5. Attach authenticated identity and update usage metadata.
         self._update_last_used(key_obj)
-
-        # 6. Set user and key on request
         request.user = key_obj.user
         request.api_key_obj = key_obj
         request.api_key = api_key
-
-        # 7. Process request
-        response = self.get_response(request)
-
-        return response
+        return None
 
     def _is_public_path(self, path):
         """
         Check if the path is in the public whitelist.
         Uses strict matching to prevent bypasses like `/login-bypass/`.
         """
-        for p in PUBLIC_PATHS:
-            if path == p or path.startswith(f"{p.rstrip('/')}/"):
+        for public_path in PUBLIC_PATHS:
+            # The root path is public only as an exact match. Treating every
+            # path as a child of "/" would silently bypass API-key checks.
+            if public_path == '/':
+                if path == '/':
+                    return True
+                continue
+
+            if path == public_path or path.startswith(f"{public_path.rstrip('/')}/"):
                 return True
         return False
 
@@ -166,10 +188,15 @@ class APIKeyMiddleware:
         cached_key_id = cache.get(cache_key)
         if cached_key_id:
             try:
-                return UserAPIKey.objects.select_related('user').get(
+                key_obj = UserAPIKey.objects.select_related('user').get(
                     id=cached_key_id,
-                    is_active=True
+                    key_hash=hashed,
+                    is_active=True,
                 )
+                if key_obj.expires_at and key_obj.expires_at <= timezone.now():
+                    cache.delete(cache_key)
+                    return None
+                return key_obj
             except UserAPIKey.DoesNotExist:
                 # Cache is stale (key was revoked/deleted)
                 cache.delete(cache_key)
@@ -179,8 +206,9 @@ class APIKeyMiddleware:
         try:
             # ✅ FIX: Changed 'hashed_key' to 'key_hash' to match models.py
             key_obj = UserAPIKey.objects.select_related('user').get(
+                Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()),
                 key_hash=hashed,
-                is_active=True
+                is_active=True,
             )
             # Cache positive result for 5 minutes
             cache.set(cache_key, key_obj.id, timeout=300)

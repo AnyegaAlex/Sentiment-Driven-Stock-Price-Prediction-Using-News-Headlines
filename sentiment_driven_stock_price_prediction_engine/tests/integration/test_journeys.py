@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
+from django.test import override_settings
 from rest_framework.test import APIClient
 
 from authentication.models import User
@@ -105,6 +106,7 @@ class TestFullUserJourney:
     @patch("stocks.lstm_predictor.LSTMPredictor")  # patch the class, not the function
     @patch("yfinance.Ticker")
     @patch("yfinance.download")
+    @override_settings(PRICE_DATA_PUBLIC_ACCESS=True, NEWS_PUBLIC_ACCESS=True)
     def test_full_journey(self, mock_download, mock_ticker, mock_lstm_class, mock_send_email, api_client, user_data):
         """
         Complete flow: register, verify, login, stock analysis, prediction history.
@@ -198,19 +200,16 @@ class TestFullUserJourney:
             assert response.status_code == 200
 
             from stocks.models import Prediction
-            predictions = Prediction.objects.filter(stock_symbol="AAPL")  # not filtering by user
-            assert predictions.count() == 1
-            prediction = predictions.first()
-            assert prediction.predicted_movement == "up"
-            assert prediction.confidence == 0.8
+            # Dashboard GETs are read-only. The background pipeline owns prediction creation.
+            assert Prediction.objects.filter(stock_symbol="AAPL").count() == 0
+            analysis_data = response.json()["data"]
+            assert analysis_data["lstm_prediction"]["direction"] is None
+            assert analysis_data["dataStatus"]["prediction"] in {"disabled", "unavailable"}
 
-            # Prediction history
             history_url = reverse("prediction-history")
             response = api_client.get(history_url, {"symbol": "AAPL", "limit": 10})
             assert response.status_code == 200
-            data = response.json()
-            found = any(item["id"] == prediction.id for item in data["results"])
-            assert found is True
+            assert response.json()["results"] == []
 
     @patch("authentication.utils.send_email_sync", return_value=True)
     @patch("authentication.views.send_verification_email", return_value=True)
@@ -315,7 +314,22 @@ class TestFullUserJourney:
         user.refresh_from_db()
         assert user.is_active is False
 
-        # Cancel deletion – token is blacklisted, so 401 is correct
+        # The JWT is blacklisted, so cancellation must use account credentials.
         cancel_url = reverse("cancel-deletion")
-        response = api_client.post(cancel_url, content_type="application/json")
+        response = api_client.post(
+            cancel_url,
+            data=json.dumps({"email": user_data["email"], "password": "incorrect-password"}),
+            content_type="application/json",
+        )
         assert response.status_code == 401
+        assert response.json()["code"] == "INVALID_CREDENTIALS"
+
+        response = api_client.post(
+            cancel_url,
+            data=json.dumps({"email": user_data["email"], "password": user_data["password"]}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        user.refresh_from_db()
+        assert user.is_active is True
+        assert user.deletion_requested_at is None

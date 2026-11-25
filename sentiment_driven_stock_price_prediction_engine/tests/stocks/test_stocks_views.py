@@ -23,6 +23,8 @@ from authentication.models import User
 from stocks.models import Prediction, Subscription
 import stocks.views
 
+from tests.conftest import JWTAPIClient
+
 pytestmark = pytest.mark.django_db
 
 GATES_OPEN = dict(PRICE_DATA_PUBLIC_ACCESS=True, NEWS_PUBLIC_ACCESS=True)
@@ -44,7 +46,7 @@ def authenticated_user():
 
 @pytest.fixture
 def auth_client(authenticated_user):
-    client = APIClient()
+    client = JWTAPIClient()
     client.force_authenticate(user=authenticated_user)
     return client
 

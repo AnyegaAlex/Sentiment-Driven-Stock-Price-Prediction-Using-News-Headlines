@@ -268,7 +268,7 @@ REST_FRAMEWORK = {
         'apikey': '200/minute',
     },
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'authentication.legal.LegalGatedJWTAuthentication',
         'authentication.authentication.APIKeyAuthentication',
     ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
@@ -290,14 +290,13 @@ SIMPLE_JWT = {
 }
 
 # ---------------------------------------------------------------------------
-# Email (SendGrid SMTP)
+# Email (Brevo SMTP)
 # ---------------------------------------------------------------------------
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "smtp-relay.brevo.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = "c49d83001@smtp-brevo.com"  # Brevo SMTP login
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 EMAIL_HOST_PASSWORD = os.getenv("BREVO_SMTP_KEY")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "info@tickflowcapital.com")
 DEFAULT_FROM_NAME = os.getenv("DEFAULT_FROM_NAME", "Tickflow Sentiment")
@@ -477,9 +476,9 @@ LOGGING = {
             'level': 'ERROR',
             'propagate': False,
         },
-        'authentication': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
-        'stocks': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
-        'news': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'authentication': {'handlers': [], 'level': 'INFO', 'propagate': True},
+        'stocks': {'handlers': [], 'level': 'INFO', 'propagate': True},
+        'news': {'handlers': [], 'level': 'INFO', 'propagate': True},
     },
 }
 
@@ -571,3 +570,7 @@ SPECTACULAR_SETTINGS = {
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
 }
+
+# GAP-03 Stage A: keep enforcement disabled until legal copy and effective
+# dates are approved and canonical SHA-256 hashes are pinned.
+LEGAL_ACCEPTANCE_ENFORCEMENT_ENABLED = os.getenv("LEGAL_ACCEPTANCE_ENFORCEMENT_ENABLED", "false").lower() == "true"

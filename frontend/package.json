@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "lint:ci": "node scripts/check-eslint-baseline.mjs"
   },
   "dependencies": {
     "@heroui/card": "^2.2.14",

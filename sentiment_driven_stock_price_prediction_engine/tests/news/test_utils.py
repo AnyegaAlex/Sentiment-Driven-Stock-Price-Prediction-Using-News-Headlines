@@ -15,6 +15,7 @@ All external dependencies (torch, transformers, cache) are mocked.
 
 import pytest
 import time
+import torch
 from unittest.mock import patch, MagicMock
 from django.core.cache import cache
 
@@ -69,6 +70,18 @@ def mock_tokenizer():
     mock = MagicMock()
     mock.return_value = {"input_ids": [[1, 2, 3]]}
     return mock
+
+
+@pytest.fixture(autouse=True)
+def reset_sentiment_circuit():
+    """Prevent one test's open circuit from leaking into subsequent tests."""
+    _sentiment_circuit._state = "CLOSED"
+    _sentiment_circuit._failures = 0
+    _sentiment_circuit._last_failure_time = 0
+    yield
+    _sentiment_circuit._state = "CLOSED"
+    _sentiment_circuit._failures = 0
+    _sentiment_circuit._last_failure_time = 0
 
 
 # ============================================================================
@@ -288,7 +301,9 @@ class TestAnalyzeSentiment:
                 with patch('news.utils.load_tokenizer', return_value=mock_tokenizer):
                     with patch('news.utils.load_model', return_value=mock_model):
                         # Mock tokenizer and model outputs
-                        mock_tokenizer.return_value = {"input_ids": [[1]]}
+                        encoded = MagicMock()
+                        encoded.to.return_value = {"input_ids": [[1]]}
+                        mock_tokenizer.return_value = encoded
                         mock_model.return_value = MagicMock()
                         mock_model.return_value.logits = MagicMock()
                         # Simulate softmax output: positive with 0.9
@@ -296,12 +311,8 @@ class TestAnalyzeSentiment:
                             mock_softmax.return_value = torch.tensor([[0.1, 0.9]])
                             # Mock torch.max
                             with patch('torch.max') as mock_max:
-                                mock_max.return_value = (torch.tensor(0.9), torch.tensor(1))
-                                result = analyze_sentiment("Great product!")
-                                assert result['label'] == 'positive'  # id2label[1] = positive? Actually our mapping: 0=negative,1=neutral,2=positive. We set idx=1 -> 'neutral'? Wait: Our mock_model.config.id2label = {0: "negative", 1: "neutral", 2: "positive"}. If we set idx=1, label would be 'neutral'. Let's adjust idx=2 for positive.
-                                # We'll control idx by mocking torch.max to return 2.
                                 mock_max.return_value = (torch.tensor(0.9), torch.tensor(2))
-                                result = analyze_sentiment("Great product!")
+                                result = analyze_sentiment("This is a great product with excellent quality and service.")
                                 assert result['label'] == 'positive'
 
     def test_analyze_sentiment_model_not_ready_returns_neutral_and_records_failure(self):
@@ -326,14 +337,16 @@ class TestAnalyzeSentiment:
             with patch('news.utils.ensure_model_ready', return_value=True):
                 with patch('news.utils.load_tokenizer') as mock_tokenizer:
                     mock_tokenizer.return_value = MagicMock()
-                    mock_tokenizer.return_value.return_value = {"input_ids": [[1]]}
+                    encoded = MagicMock()
+                    encoded.to.return_value = {"input_ids": [[1]]}
+                    mock_tokenizer.return_value.return_value = encoded
                     with patch('news.utils.load_model') as mock_model:
                         mock_model.return_value = MagicMock()
                         # Simulate OOM
                         mock_model.return_value.side_effect = torch.cuda.OutOfMemoryError
                         with patch.object(_sentiment_circuit, 'record_failure') as mock_fail:
                             with patch('torch.cuda.empty_cache') as mock_empty:
-                                result = analyze_sentiment("long text")
+                                result = analyze_sentiment("This is a sufficiently long text for sentiment analysis.")
                                 assert result == {'label': 'neutral', 'score': 0.0}
                                 mock_fail.assert_called_once()
                                 mock_empty.assert_called_once()
@@ -343,7 +356,7 @@ class TestAnalyzeSentiment:
             with patch('news.utils.ensure_model_ready', return_value=True):
                 with patch('news.utils.load_tokenizer', side_effect=Exception("Fail")):
                     with patch.object(_sentiment_circuit, 'record_failure') as mock_fail:
-                        result = analyze_sentiment("long text")
+                        result = analyze_sentiment("This is a sufficiently long text for sentiment analysis.")
                         assert result == {'label': 'neutral', 'score': 0.0}
                         mock_fail.assert_called_once()
 
@@ -376,14 +389,17 @@ class TestAnalyzeBatch:
             with patch('news.utils.ensure_model_ready', return_value=True):
                 with patch('news.utils.load_tokenizer') as mock_tokenizer:
                     mock_tokenizer.return_value = MagicMock()
-                    mock_tokenizer.return_value.return_value = {"input_ids": [[1,2,3]]}
+                    encoded = MagicMock()
+                    encoded.to.return_value = {"input_ids": [[1, 2, 3]]}
+                    mock_tokenizer.return_value.return_value = encoded
                     with patch('news.utils.load_model') as mock_model:
                         mock_model.return_value = MagicMock()
+                        mock_model.return_value.config.id2label = {0: "negative", 1: "neutral", 2: "positive"}
                         mock_model.return_value.return_value.logits = MagicMock()
                         with patch('torch.nn.functional.softmax') as mock_softmax:
                             mock_softmax.return_value = torch.tensor([[0.1, 0.9]])
                             with patch('torch.max') as mock_max:
-                                mock_max.return_value = (torch.tensor(0.9), torch.tensor(2))
+                                mock_max.return_value = (torch.tensor([0.9]), torch.tensor([2]))
                                 result = analyze_batch(texts)
                                 # Should have 2 results: first neutral, second positive
                                 assert len(result) == 2
@@ -391,12 +407,14 @@ class TestAnalyzeBatch:
                                 assert result[1]['label'] == 'positive'
 
     def test_analyze_batch_oom_falls_back_to_single(self):
-        texts = ["long text 1", "long text 2"]
+        texts = ["This is a sufficiently long text number one.", "This is a sufficiently long text number two."]
         with patch('news.utils._get_cached_result', return_value=None):
             with patch('news.utils.ensure_model_ready', return_value=True):
                 with patch('news.utils.load_tokenizer') as mock_tokenizer:
                     mock_tokenizer.return_value = MagicMock()
-                    mock_tokenizer.return_value.return_value = {"input_ids": [[1,2,3]]}
+                    encoded = MagicMock()
+                    encoded.to.return_value = {"input_ids": [[1, 2, 3]]}
+                    mock_tokenizer.return_value.return_value = encoded
                     with patch('news.utils.load_model') as mock_model:
                         # Simulate OOM on batch, then single works
                         mock_model.return_value = MagicMock()

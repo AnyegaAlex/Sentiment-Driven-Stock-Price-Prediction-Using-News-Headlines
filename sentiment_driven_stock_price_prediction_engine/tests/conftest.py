@@ -12,6 +12,7 @@ import pandas as pd
 from django.core.cache import cache
 from django.urls import reverse
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 from unittest.mock import patch, MagicMock
 
 from tests.factories import (
@@ -45,15 +46,27 @@ def plain_static_storage(settings):
     }
 
 
+class JWTAPIClient(APIClient):
+    """APIClient whose force_authenticate helper exercises production JWT auth."""
+
+    def force_authenticate(self, user=None, token=None):
+        if user is not None:
+            token = RefreshToken.for_user(user).access_token
+        if token is None:
+            self.credentials()
+        else:
+            self.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+
 @pytest.fixture
 def api_client():
-    """Return an unauthenticated DRF API client."""
-    return APIClient()
+    """Return an unauthenticated client with production-compatible auth helpers."""
+    return JWTAPIClient()
 
 
 @pytest.fixture
 def auth_client(api_client, user):
-    """Return an authenticated API client."""
+    """Return a client authenticated through the same JWT path as production."""
     api_client.force_authenticate(user=user)
     return api_client
 

@@ -115,6 +115,10 @@ class RegisterSerializer(serializers.ModelSerializer):
         style={'input_type': 'password'},
         help_text="Confirm password"
     )
+
+    # Stage A scaffold. These become mandatory only when legal enforcement is enabled.
+    accept_terms = serializers.BooleanField(write_only=True, required=False)
+    acknowledge_privacy_notice = serializers.BooleanField(write_only=True, required=False)
     
     # Custom email field with additional validation
     email = serializers.EmailField(
@@ -125,7 +129,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('username', 'email', 'password', 'password2', 'first_name', 'last_name')
+        fields = ('username', 'email', 'password', 'password2', 'first_name', 'last_name', 'accept_terms', 'acknowledge_privacy_notice')
         extra_kwargs = {
             'first_name': {'required': False, 'help_text': "First name (optional)"},
             'last_name': {'required': False, 'help_text': "Last name (optional)"},
@@ -144,6 +148,14 @@ class RegisterSerializer(serializers.ModelSerializer):
         """Ensure passwords match."""
         if attrs['password'] != attrs['password2']:
             raise serializers.ValidationError({"password": "Password fields didn't match."})
+        if getattr(settings, 'LEGAL_ACCEPTANCE_ENFORCEMENT_ENABLED', False):
+            from .legal_config import legal_documents_configured
+            if not legal_documents_configured():
+                raise serializers.ValidationError({'legal': 'Legal documents are not configured for acceptance.'})
+            if attrs.get('accept_terms') is not True:
+                raise serializers.ValidationError({'accept_terms': 'You must accept the Terms of Service.'})
+            if attrs.get('acknowledge_privacy_notice') is not True:
+                raise serializers.ValidationError({'acknowledge_privacy_notice': 'You must acknowledge the Privacy Policy.'})
         return attrs
 
     def validate_username(self, value: str) -> str:
@@ -161,6 +173,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data: Dict) -> User:
         """Create user with hashed password."""
+        validated_data.pop('accept_terms', None)
+        validated_data.pop('acknowledge_privacy_notice', None)
         # Normalize email
         validated_data['email'] = validated_data['email'].lower()
         
@@ -568,6 +582,12 @@ class DeleteAccountSerializer(serializers.Serializer):
 # USER PREFERENCES SERIALIZER
 # ============================================================================
 
+class CancelDeletionSerializer(serializers.Serializer):
+    """Credentials required to cancel deletion after JWTs have been revoked."""
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+
 class UserPreferencesSerializer(serializers.ModelSerializer):
     """
     Serializer for user investment preferences and watchlist.
@@ -623,6 +643,10 @@ class UserPreferencesSerializer(serializers.ModelSerializer):
             'theme': {'help_text': "UI theme: light or dark"},
             'language': {'help_text': "Language code (e.g., 'en', 'fr', 'es')"},
         }
+
+    def validate_watchlist(self, value: list) -> list:
+        """Normalize symbols and remove duplicates while preserving order."""
+        return list(dict.fromkeys(symbol.upper().strip() for symbol in value))
 
     def validate_language(self, value: str) -> str:
         """Validate language code."""

@@ -629,3 +629,48 @@ class SymbolUsage(models.Model):
 #     This model is kept only for migration compatibility.
 #     """
 #     ...  # Remove this model in a future migration
+
+# ----- Legal acknowledgements (GAP-03) -----
+# These records are separate: accepting the Terms is not the same as
+# acknowledging receipt of the Privacy Policy. Retention after account deletion
+# remains subject to the separate GAP-04 retention decision.
+
+class TermsAcceptance(models.Model):
+    """Affirmative acceptance of a specific Terms of Service version."""
+    user = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='terms_acceptances',
+    )
+    version = models.CharField(max_length=32)
+    content_hash = models.CharField(max_length=64)
+    accepted_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'version'], name='uniq_terms_acceptance_user_version'),
+        ]
+
+    def __str__(self):
+        return f"Terms {self.version} accepted"
+
+
+class PrivacyNoticeAcknowledgement(models.Model):
+    """Acknowledgement that a specific Privacy Policy version was presented.
+
+    This record is not consent to any particular data-processing purpose.
+    """
+    user = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='privacy_acknowledgements',
+    )
+    version = models.CharField(max_length=32)
+    content_hash = models.CharField(max_length=64)
+    acknowledged_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'version'], name='uniq_privacy_ack_user_version'),
+        ]
+
+    def __str__(self):
+        return f"Privacy notice {self.version} acknowledged"

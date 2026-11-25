@@ -479,6 +479,14 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // Existing users must acknowledge the current legal documents before continuing.
+    if (status === 403 && data?.code === 'legal_acceptance_required') {
+      // Retain the signal in case an early API request finishes before the
+      // app-level dialog has mounted and subscribed to the event.
+      window.__tickflowLegalAcceptanceRequired = true;
+      window.dispatchEvent(new CustomEvent('tickflow:legal-acceptance-required'));
+    }
+
     // Rate limiting
     if (status === 429) {
       const retryAfter = parseInt(error.response.headers['retry-after'], 10) || 60;

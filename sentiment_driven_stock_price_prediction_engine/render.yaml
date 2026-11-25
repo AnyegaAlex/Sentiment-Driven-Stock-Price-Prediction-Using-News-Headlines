@@ -29,8 +29,8 @@ services:
       - key: CONTACT_EMAIL
         value: "info@tickflowcapital.com"
 
-      # Email (SendGrid)
-      - key: SENDGRID_API_KEY
+      # Email (Brevo SMTP)
+      - key: BREVO_SMTP_KEY
         sync: false  # Set manually in Render dashboard
       - key: DEFAULT_FROM_EMAIL
         value: "info@tickflowcapital.com"

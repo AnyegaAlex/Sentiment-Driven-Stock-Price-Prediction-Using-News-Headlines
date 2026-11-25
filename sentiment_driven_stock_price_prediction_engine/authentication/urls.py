@@ -20,6 +20,8 @@ All endpoints use JWT authentication where required.
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from .legal_views import LegalStatusView
+
 from .views import (
     # Authentication
     RegisterView,
@@ -59,6 +61,7 @@ urlpatterns = [
     # AUTHENTICATION
     # ========================================================================
     path('register/', RegisterView.as_view(), name='register'),
+    path('legal/', LegalStatusView.as_view(), name='legal-status'),
     path('login/', LoginView.as_view(), name='login'),
     path('refresh/', TokenRefreshView.as_view(), name='token-refresh'),
     path('verify-email/', VerifyEmailView.as_view(), name='verify-email'),

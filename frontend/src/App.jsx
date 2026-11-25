@@ -21,7 +21,6 @@ import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { MotionConfig } from 'framer-motion';
 import { trackPageView } from './utils/analytics';
 import ConsentManager from './components/consent/ConsentManager';
-import { Analytics } from '@vercel/analytics/react';
 
 // ============================================================================
 // Lazy Load Components
@@ -34,6 +33,7 @@ import Breadcrumbs from "./components/Breadcrumbs";
 import ErrorBoundary from "./components/ErrorBoundary";
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import LegalAcceptanceGate from "./components/legal/LegalAcceptanceGate";
 import HomeRoute from "./components/auth/HomeRoute";
 
 // Context providers
@@ -382,8 +382,8 @@ const App = () => {
             <OnboardingProvider>
               <DashboardProvider>
                 <AppContent />
+                <LegalAcceptanceGate />
                 <ConsentManager />
-                <Analytics />
               </DashboardProvider>
             </OnboardingProvider>
           </AuthSessionProvider>

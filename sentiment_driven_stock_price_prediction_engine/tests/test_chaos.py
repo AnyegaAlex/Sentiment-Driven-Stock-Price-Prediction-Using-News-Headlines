@@ -108,14 +108,14 @@ class TestChaosExternalAPI:
         symbols = [item['symbol'] for item in data['data']]
         assert 'AAPL' in symbols
 
-    @patch('stocks.views.fetch_and_save_news')
-    def test_news_fetch_timeout(self, mock_fetch, api_client):
-        """get_news handles fetch timeout gracefully."""
-        mock_fetch.side_effect = requests.exceptions.Timeout
-        url = reverse('get-news')
-        response = api_client.get(url, {'symbol': 'AAPL'})
-        # Returns 200 with whatever news exists (or empty)
+    @override_settings(NEWS_PUBLIC_ACCESS=True)
+    @patch('news.views.requests.get')
+    def test_news_fetch_timeout(self, mock_get, api_client):
+        """The read-only news endpoint does not fetch provider data inline."""
+        mock_get.side_effect = requests.exceptions.Timeout
+        response = api_client.get(reverse('get-news'), {'symbol': 'AAPL'})
         assert response.status_code == 200
+        mock_get.assert_not_called()
 
 
 # ============================================================================
@@ -130,6 +130,7 @@ class TestChaosUnicode:
         # Should not 500; the view validates symbol format.
         assert response.status_code in [400, 200]  # Some endpoints may fallback
 
+    @override_settings(PRICE_DATA_PUBLIC_ACCESS=True)
     def test_unicode_in_news_text_for_lstm(self, api_client):
         """Unicode in news text for LSTM should not crash."""
         url = reverse('lstm-predict')
@@ -142,7 +143,7 @@ class TestChaosUnicode:
                 response = api_client.get(url, {'symbol': 'AAPL', 'news': '📈 股票大涨'})
                 assert response.status_code in [200, 400]
 
-    def test_emoji_in_preferences(self, auth_client):
+    def test_emoji_in_preferences(self, auth_client, user):
         """Emoji in preferences should be saved correctly."""
         url = reverse('user-preferences')
         data = {'bio': 'I ❤️ stocks 🚀'}  # bio is in User model, not UserPreferences
@@ -150,7 +151,6 @@ class TestChaosUnicode:
         url2 = reverse('update-profile')
         response = auth_client.patch(url2, {'bio': 'I ❤️ stocks 🚀'}, format='json')
         assert response.status_code == 200
-        user = auth_client.handler._user  # hacky, but we can check refresh
         user.refresh_from_db()
         assert '❤️' in user.bio
 

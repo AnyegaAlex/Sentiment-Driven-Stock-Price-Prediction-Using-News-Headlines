@@ -10,6 +10,10 @@ vi.mock('@/utils/analytics', () => ({
   trackPageView: vi.fn(),
 }));
 
+vi.mock('@vercel/analytics/react', () => ({
+  Analytics: () => <div data-testid="vercel-analytics" />,
+}));
+
 const renderConsentManager = () => render(
   <MemoryRouter>
     <ConsentManager />
@@ -29,6 +33,7 @@ describe('ConsentManager', () => {
     expect(screen.getByRole('button', { name: /reject optional/i })).toBeInTheDocument();
     expect(initializeConsentMode).toHaveBeenCalledOnce();
     expect(updateAnalyticsConsent).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('vercel-analytics')).not.toBeInTheDocument();
   });
 
   it('stores a rejection and keeps analytics disabled', () => {
@@ -39,6 +44,7 @@ describe('ConsentManager', () => {
     expect(JSON.parse(localStorage.getItem('tickflow_consent_v1')).analytics).toBe(false);
     expect(updateAnalyticsConsent).toHaveBeenCalledWith(false);
     expect(trackPageView).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('vercel-analytics')).not.toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: /cookie preferences/i })).not.toBeInTheDocument();
   });
 

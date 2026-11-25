@@ -29,6 +29,8 @@ from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from authentication.models import User, AuditLog, UserPreferences, UserAPIKey, SymbolUsage
 from authentication.serializers import UserProfileSerializer
 
+from tests.conftest import JWTAPIClient
+
 pytestmark = pytest.mark.django_db
 
 
@@ -76,7 +78,7 @@ def inactive_user(db, test_password):
 
 @pytest.fixture
 def auth_client(test_user):
-    client = APIClient()
+    client = JWTAPIClient()
     client.force_authenticate(user=test_user)
     return client
 
@@ -599,6 +601,25 @@ class TestChangeEmailView:
         assert cache.get(f"email_change_{test_user.id}") is not None
         assert AuditLog.objects.filter(user=test_user, action='EMAIL_CHANGE_REQUESTED').exists()
 
+    def test_change_email_request_stores_only_keyed_digest(self, auth_client, test_user):
+        """The email-change OTP is never stored in plaintext in the cache."""
+        from unittest.mock import patch
+        from authentication.utils import hash_verification_code
+
+        with patch('authentication.views.send_email_change_code', return_value=True) as send_code:
+            response = auth_client.post(
+                reverse('change-email'),
+                {'new_email': 'digest@example.com', 'password': 'testpass123'},
+                format='json',
+            )
+
+        assert response.status_code == 200
+        otp = send_code.call_args.args[1]
+        stored = cache.get(f"email_change_code_{test_user.id}")
+        assert stored == hash_verification_code(test_user.id, otp)
+        assert stored != otp
+        assert len(stored) == 64
+
     def test_change_email_request_duplicate(self, auth_client, test_user):
         """New email already in use -> 400."""
         User.objects.create_user(username='other', email='existing@example.com', password='pass')
@@ -610,9 +631,9 @@ class TestChangeEmailView:
 
     def test_change_email_confirm_success(self, auth_client, test_user):
         """Confirm email change with valid code."""
-        from authentication.utils import generate_verification_code
+        from authentication.utils import generate_verification_code, hash_verification_code
         code = generate_verification_code()
-        cache.set(f"email_change_code_{test_user.id}", code, timeout=600)
+        cache.set(f"email_change_code_{test_user.id}", hash_verification_code(test_user.id, code), timeout=600)
         cache.set(f"email_change_{test_user.id}", {'new_email': 'new@example.com', 'requested_at': timezone.now().isoformat()})
         url = reverse('change-email')
         data = {'code': code}
@@ -954,14 +975,17 @@ class TestDeleteAccountView:
 
 class TestCancelDeletionView:
 
-    def test_cancel_deletion_success(self, auth_client, test_user):
-        """Cancel pending deletion restores account."""
+    def test_cancel_deletion_success(self, api_client, test_user):
+        """A pending, inactive account can cancel using its password."""
         test_user.is_active = False
         test_user.deletion_requested_at = timezone.now()
         test_user.deletion_scheduled_for = timezone.now() + timedelta(days=30)
         test_user.save()
-        url = reverse('cancel-deletion')
-        response = auth_client.post(url)
+        response = api_client.post(
+            reverse('cancel-deletion'),
+            {'email': test_user.email, 'password': 'testpass123'},
+            format='json',
+        )
         assert response.status_code == 200
         test_user.refresh_from_db()
         assert test_user.is_active is True
@@ -969,9 +993,27 @@ class TestCancelDeletionView:
         assert test_user.deletion_scheduled_for is None
         assert AuditLog.objects.filter(user=test_user, action='ACCOUNT_DELETION_CANCELLED').exists()
 
-    def test_cancel_deletion_no_pending(self, auth_client):
-        """No pending deletion returns 400."""
-        url = reverse('cancel-deletion')
-        response = auth_client.post(url)
-        assert response.status_code == 400
+    def test_cancel_deletion_rejects_wrong_password(self, api_client, test_user):
+        test_user.is_active = False
+        test_user.deletion_requested_at = timezone.now()
+        test_user.deletion_scheduled_for = timezone.now() + timedelta(days=30)
+        test_user.save()
+        response = api_client.post(
+            reverse('cancel-deletion'),
+            {'email': test_user.email, 'password': 'wrong-password'},
+            format='json',
+        )
+        assert response.status_code == 401
+        test_user.refresh_from_db()
+        assert test_user.is_active is False
+        assert test_user.deletion_requested_at is not None
+
+    def test_cancel_deletion_no_pending(self, api_client, test_user, test_password):
+        """Valid credentials for an account without pending deletion return 400."""
+        response = api_client.post(
+            reverse('cancel-deletion'),
+            {'email': test_user.email, 'password': test_password},
+            format='json',
+        )
+        assert response.status_code == 400, response.json()
         assert 'No pending deletion request' in response.json()['error']

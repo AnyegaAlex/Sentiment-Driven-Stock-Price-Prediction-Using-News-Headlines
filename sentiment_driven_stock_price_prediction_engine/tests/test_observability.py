@@ -24,6 +24,7 @@ from django.urls import reverse
 from django.core.cache import cache
 from django.test import override_settings
 from rest_framework.test import APIClient
+from tests.conftest import JWTAPIClient
 
 from authentication.models import User, AuditLog, SymbolUsage
 from tests.factories import UserFactory
@@ -157,7 +158,7 @@ class TestRequestLoggingMiddleware:
 
     def test_request_logging_contains_basic_info(self, api_client, caplog):
         import logging
-        caplog.set_level(logging.INFO, logger="authentication")  # or the logger used in middleware
+        caplog.set_level(logging.INFO, logger='authentication.middleware')  # or the logger used in middleware
         url = reverse("login")
         api_client.get(url)
         
@@ -169,7 +170,7 @@ class TestRequestLoggingMiddleware:
         assert "/api/v1/auth/login/" in record.getMessage()
 
     def test_request_logging_includes_user_for_authenticated_requests(self, api_client, user, caplog):
-        caplog.set_level(logging.INFO, logger='authentication')
+        caplog.set_level(logging.INFO, logger='authentication.middleware')
         api_client.force_authenticate(user=user)
         url = reverse("profile")
         response = api_client.get(url)
@@ -196,14 +197,10 @@ class TestRequestLoggingMiddleware:
         from authentication.models import UserAPIKey
         key_obj, raw_key = UserAPIKey.create_key(user, "Test Key")
         url = reverse("stock-analysis") + "?symbol=AAPL"
-        with patch("stocks.opinion_generator.generate_stock_opinion") as mock_opinion, \
-             patch("stocks.views.get_technical_indicators") as mock_tech, \
-             patch("stocks.views.get_sentiment_summary") as mock_sent, \
-             patch("stocks.views.get_lstm_predictor") as mock_lstm:
-            mock_opinion.return_value = {"company": "Apple", "analysis": {"recommendation": "BUY"}}
+        with patch("stocks.views.get_technical_indicators") as mock_tech, \
+             patch("stocks.views.get_sentiment_summary") as mock_sent:
             mock_tech.return_value = {"current_price": 100}
             mock_sent.return_value = {"overall": "Bullish", "score": 0.5}
-            mock_lstm.return_value.predict.return_value = {"prediction": "UP", "confidence": 80, "success": True}
             response = api_client.get(url, HTTP_X_API_KEY=raw_key)
         assert response.status_code == 200
 
@@ -235,14 +232,10 @@ class TestSymbolUsage:
         usage, created = SymbolUsage.objects.get_or_create(user=user, symbol=symbol, defaults={"count": 0})
         initial_count = usage.count
         url = reverse("stock-analysis")
-        with patch("stocks.opinion_generator.generate_stock_opinion") as mock_opinion, \
-             patch("stocks.views.get_technical_indicators") as mock_tech, \
-             patch("stocks.views.get_sentiment_summary") as mock_sent, \
-             patch("stocks.views.get_lstm_predictor") as mock_lstm:
-            mock_opinion.return_value = {"company": "Apple", "analysis": {"recommendation": "BUY"}}
+        with patch("stocks.views.get_technical_indicators") as mock_tech, \
+             patch("stocks.views.get_sentiment_summary") as mock_sent:
             mock_tech.return_value = {"current_price": 100}
             mock_sent.return_value = {"overall": "Bullish", "score": 0.5}
-            mock_lstm.return_value.predict.return_value = {"prediction": "UP", "confidence": 80, "success": True}
             response = api_client.get(url, {"symbol": symbol})
         assert response.status_code == 200
         usage.refresh_from_db()
@@ -251,14 +244,10 @@ class TestSymbolUsage:
     def test_symbol_usage_caches_for_anonymous(self, api_client):
         symbol = "AAPL"
         url = reverse("stock-analysis")
-        with patch("stocks.opinion_generator.generate_stock_opinion") as mock_opinion, \
-             patch("stocks.views.get_technical_indicators") as mock_tech, \
-             patch("stocks.views.get_sentiment_summary") as mock_sent, \
-             patch("stocks.views.get_lstm_predictor") as mock_lstm:
-            mock_opinion.return_value = {"company": "Apple", "analysis": {"recommendation": "BUY"}}
+        with patch("stocks.views.get_technical_indicators") as mock_tech, \
+             patch("stocks.views.get_sentiment_summary") as mock_sent:
             mock_tech.return_value = {"current_price": 100}
             mock_sent.return_value = {"overall": "Bullish", "score": 0.5}
-            mock_lstm.return_value.predict.return_value = {"prediction": "UP", "confidence": 80, "success": True}
             response = api_client.get(url, {"symbol": symbol})
         assert response.status_code == 200
 
@@ -304,7 +293,7 @@ class TestUsageStats:
 
 class TestErrorLogging:
     def test_404_logs_warning(self, api_client, caplog):
-        caplog.set_level(logging.WARNING, logger='authentication')
+        caplog.set_level(logging.WARNING, logger='authentication.middleware')
         url = "/api/v1/auth/nonexistent/"
         response = api_client.get(url)
         assert response.status_code == 404
@@ -326,8 +315,8 @@ class TestErrorLogging:
         assert found, f"404 not logged: {log_output[:500]}..."
 
     def test_500_logs_error(self, api_client, caplog, user):
-        caplog.set_level(logging.ERROR, logger='authentication')
-        client = APIClient(raise_request_exception=False)
+        caplog.set_level(logging.ERROR, logger='authentication.middleware')
+        client = JWTAPIClient(raise_request_exception=False)
         client.force_authenticate(user=user)
         url = reverse("profile")
         with patch("authentication.views.ProfileView.get_object", side_effect=Exception("Test error")):

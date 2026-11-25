@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.core.cache import cache
 from django.utils import timezone
 from rest_framework import status
-from django.test import Client
+from django.test import Client, override_settings
 
 from tests.factories import ProcessedNewsFactory
 from news.models import ProcessedNews, SymbolSearchCache
@@ -317,6 +317,7 @@ class TestSymbolSearch:
         assert data["data"] == cached_results
 
     @patch("news.views.requests.get")
+    @override_settings(NEWS_PUBLIC_ACCESS=True)
     def test_symbol_search_finnhub_success(self, mock_get, api_client):
         """Finnhub returns results and they are cached."""
         query = "AAPL"
@@ -342,6 +343,7 @@ class TestSymbolSearch:
         assert cache_obj.results == data["data"]
 
     @patch("news.views.requests.get")
+    @override_settings(NEWS_PUBLIC_ACCESS=True)
     def test_symbol_search_finnhub_fails_fallback_alpha_vantage(self, mock_get, api_client):
         """If Finnhub fails, fallback to Alpha Vantage."""
         query = "AAPL"
@@ -372,6 +374,7 @@ class TestSymbolSearch:
         assert data["data"][0]["symbol"] == "AAPL"
 
     @patch("news.views.requests.get")
+    @override_settings(NEWS_PUBLIC_ACCESS=True)
     def test_symbol_search_finnhub_alpha_fallback_to_rapidapi(self, mock_get, api_client):
         """If Finnhub and Alpha return nothing, try RapidAPI."""
         query = "AAPL"
@@ -410,6 +413,7 @@ class TestSymbolSearch:
         symbols = [item["symbol"] for item in data["data"]]
         assert "AAPL" in symbols
 
+    @override_settings(NEWS_PUBLIC_ACCESS=True)
     def test_symbol_search_cache_expired(self, api_client):
         """Expired cache is ignored and fresh search is performed."""
         query = "AAPL"
@@ -430,6 +434,7 @@ class TestSymbolSearch:
             data = response.json()
             assert data["data"][0]["name"] == "Apple Inc."
 
+    @override_settings(NEWS_PUBLIC_ACCESS=True)
     def test_symbol_search_caches_results(self, api_client, mock_requests_get):
         """Results are cached after successful fetch."""
         mock_resp = MagicMock(status_code=200, json=MagicMock(return_value={
@@ -539,6 +544,7 @@ class TestFetchAndSaveNews:
 # Edge cases & Unicode handling
 # ============================================================================
 
+@override_settings(NEWS_PUBLIC_ACCESS=True)
 def test_get_news_handles_unicode_symbol(api_client):
     """Symbol with unicode should be normalized (uppercase)."""
     symbol = "AAPL"

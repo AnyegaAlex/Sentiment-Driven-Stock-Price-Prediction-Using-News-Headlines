@@ -40,11 +40,11 @@ const Privacy = () => (
 
       <div className="space-y-8 leading-7">
         <section>
-          <p className="text-sm text-gray-500">Last updated: Draft for review | 24 November 2026</p>
+          <p className="text-sm text-gray-500">Last updated: Draft for review | 25 November 2026</p>
           <p className="mt-3">
             <strong className="text-gray-200">Operator and data controller:</strong>{' '}
-            Tickflow Capital Limited, registration PVT-6Y1YWM6V, Nairobi, Kenya.
-            Registered street address: <strong className="text-amber-200">[TO BE CONFIRMED BEFORE PUBLICATION]</strong>.
+            Tickflow Capital Limited, registration PVT-6Y1YWM6V, Kenya.
+            Registered office: <strong className="text-gray-200">Greenspot Garden, Eastern Bypass, Ruiru, Kiambu County, Kenya.</strong>
           </p>
           <p className="mt-2">
             <strong className="text-gray-200">Scope:</strong> This policy applies only to the hosted
@@ -94,7 +94,7 @@ const Privacy = () => (
           <ul className="list-disc space-y-2 pl-6">
             <li><strong className="text-gray-200">Providing your account and the Service (contract):</strong> sign-in, email verification, password reset and watchlists.</li>
             <li><strong className="text-gray-200">Keeping the Service secure (legitimate interests):</strong> rate limiting, new-device alerts, error monitoring and fraud prevention.</li>
-            <li><strong className="text-gray-200">Account and security emails (contract):</strong> verification, password resets and security alerts. <span className="text-amber-200">Confirm that marketing email is never sent without consent.</span></li>
+            <li><strong className="text-gray-200">Account and security emails:</strong> verification, password resets, security alerts, email-change notices and account-deletion confirmations. <span className="text-amber-200">Review required: the backend also sends a recurring weekly activity digest to verified users whose weekly_digest preference is true; that preference currently defaults to true. Confirm the lawful basis, opt-in standard and unsubscribe/withdrawal controls before publication.</span></li>
             <li><strong className="text-gray-200">Improving the Service (legitimate interests):</strong> aggregated, de-identified usage analysis.</li>
           </ul>
         </section>
@@ -104,13 +104,13 @@ const Privacy = () => (
           <p>We use service providers to support the Service. The following provider inventory must be checked against the live production configuration and provider accounts before this policy is published:</p>
           <ul className="mt-3 list-disc space-y-2 pl-6">
             <li><strong className="text-gray-200">Vercel:</strong> frontend hosting.</li>
-            <li><strong className="text-gray-200">Render:</strong> application/API hosting, subject to confirmation of the live deployment and services.</li>
-            <li><strong className="text-gray-200">Neon:</strong> PostgreSQL database provider identified in the project documentation. The previous Neon project was deleted; do not treat Neon as an active processor until a replacement is provisioned and verified.</li>
-            <li><strong className="text-gray-200">SendGrid and Brevo:</strong> transactional email providers identified in the project configuration; confirm which is active and whether fallback is enabled.</li>
+            <li><strong className="text-gray-200">Render:</strong> backend/API hosting and the Redis cache service declared in the deployment configuration. Confirm the live production services and processing region before publication.</li>
+            <li><strong className="text-gray-200">PostgreSQL database:</strong> the application connects through a configured database URL. The deployment manifest labels the database as Neon, but the active production database provider and region must be confirmed in the live Render environment.</li>
+            <li><strong className="text-gray-200">Brevo:</strong> transactional email delivery through Brevo SMTP. The backend&apos;s configured sending path uses Brevo; legacy SendGrid health-check code is not the configured mail-delivery path.</li>
             <li><strong className="text-gray-200">Sentry:</strong> error monitoring, where enabled.</li>
             <li><strong className="text-gray-200">Google Analytics 4:</strong> usage analytics, loaded only after a user opts in to analytics in the app&apos;s consent controls.</li>
             <li><strong className="text-gray-200">Vercel Web Analytics:</strong> page-view analytics for the hosted frontend. Its script is loaded only after analytics consent is granted. Query strings and URL fragments are removed before events are sent.</li>
-            <li><strong className="text-gray-200">Market and news data providers:</strong> the Service may send symbols and search terms to these providers. Confirm the active provider list; personal data should not be sent to them for market-data requests.</li>
+            <li><strong className="text-gray-200">Market and news data providers:</strong> source integrations include Finnhub, Alpha Vantage, RapidAPI/Yahoo Finance and Twelve Data. The backend makes requests containing market symbols and some search terms. Confirm which providers are active, the exact request fields, and provider-side logging/retention before publication.</li>
           </ul>
           <p className="mt-3">
             Microsoft Clarity and Cloudflare are not listed as app processors in this draft because

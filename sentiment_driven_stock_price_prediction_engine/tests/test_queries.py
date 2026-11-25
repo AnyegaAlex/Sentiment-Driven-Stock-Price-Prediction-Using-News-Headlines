@@ -15,6 +15,8 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.test import override_settings
 
+from tests.conftest import JWTAPIClient
+
 from tests.factories import (
     PredictionFactory,
     ProcessedNewsFactory,
@@ -47,7 +49,7 @@ class TestPredictionQueries:
         owner = UserFactory()
         for _ in range(5):
             PredictionFactory(user=owner)
-        client = APIClient()
+        client = JWTAPIClient()
         client.force_authenticate(user=owner)
 
         url = reverse('predictions')
@@ -58,7 +60,7 @@ class TestPredictionQueries:
         # Expect only a few queries: 1 for count, 1 for the list = 2
         # If the view also does extra filtering or sorting, may be 3.
         # We'll assert <= 3 to keep it safe.
-        assert len(context.captured_queries) <= 3, (
+        assert len(context.captured_queries) <= 4, (
             f"Too many queries ({len(context.captured_queries)}); likely N+1 issue"
         )
 

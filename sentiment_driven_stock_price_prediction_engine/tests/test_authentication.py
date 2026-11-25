@@ -640,12 +640,15 @@ class TestAccountDeletion:
         assert user.deletion_requested_at is not None
         assert user.deletion_scheduled_for is not None
 
-    def test_delete_account_cancel(self, auth_client, deletion_pending_user):
-        """Cancel deletion should reactivate account."""
-        api_client = auth_client
-        api_client.force_authenticate(user=deletion_pending_user)
-        url = reverse("cancel-deletion")
-        response = api_client.post(url)
+    def test_delete_account_cancel(self, api_client, deletion_pending_user):
+        """A pending deletion can be cancelled with the account password."""
+        deletion_pending_user.set_password('testpass123')
+        deletion_pending_user.save(update_fields=['password'])
+        response = api_client.post(
+            reverse("cancel-deletion"),
+            {'email': deletion_pending_user.email, 'password': 'testpass123'},
+            format='json',
+        )
         assert response.status_code == status.HTTP_200_OK
         deletion_pending_user.refresh_from_db()
         assert deletion_pending_user.is_active is True

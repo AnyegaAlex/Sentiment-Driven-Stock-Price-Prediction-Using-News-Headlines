@@ -122,12 +122,10 @@ class TestPrunePredictionsCommand:
 # ============================================================================
 
 class TestRefreshStockCacheCommand:
-    @patch('stocks.views.get_technical_indicators')
-    @patch('stocks.views.get_fallback_analysis')
+    @patch('stocks.management.commands.refresh_stock_cache.build_technical_payload')
     @patch('django.core.cache.cache.set')
-    def test_refresh_stock_cache_success(self, mock_cache_set, mock_analysis, mock_tech):
-        mock_analysis.return_value = {"data": "test"}
-        mock_tech.return_value = {"current_price": 100}
+    def test_refresh_stock_cache_success(self, mock_cache_set, mock_payload):
+        mock_payload.return_value = {"current_price": 100}
 
         out = io.StringIO()
         call_command('refresh_stock_cache', stdout=out)
@@ -136,26 +134,22 @@ class TestRefreshStockCacheCommand:
         assert "cached successfully" in output
         assert mock_cache_set.call_count >= 1
 
-    @patch('stocks.views.get_technical_indicators')
-    @patch('stocks.views.get_fallback_analysis')
+    @patch('stocks.management.commands.refresh_stock_cache.build_technical_payload')
     @patch('django.core.cache.cache.get')
-    def test_refresh_stock_cache_force(self, mock_cache_get, mock_analysis, mock_tech):
+    def test_refresh_stock_cache_force(self, mock_cache_get, mock_payload):
         mock_cache_get.return_value = {"cached": "data"}
-        mock_analysis.return_value = {"data": "test"}
-        mock_tech.return_value = {"current_price": 100}
+        mock_payload.return_value = {"current_price": 100}
 
         with patch('django.core.cache.cache.set') as mock_set:
             call_command('refresh_stock_cache', '--force', stdout=io.StringIO())
             assert mock_set.call_count > 0
 
     def test_refresh_stock_cache_custom_symbols(self):
-        with patch('stocks.views.get_technical_indicators') as mock_tech, \
-             patch('stocks.views.get_fallback_analysis') as mock_analysis, \
+        with patch('stocks.management.commands.refresh_stock_cache.build_technical_payload', return_value={"current_price": 100}) as mock_payload, \
              patch('django.core.cache.cache.set') as mock_set:
-            mock_analysis.return_value = {"data": "test"}
-            mock_tech.return_value = {"current_price": 100}
             call_command('refresh_stock_cache', '--symbols', 'AAPL', 'MSFT', stdout=io.StringIO())
-            assert mock_set.call_count >= 4
+            assert mock_payload.call_count == 2
+            assert mock_set.call_count == 2
 
 
 # ============================================================================
