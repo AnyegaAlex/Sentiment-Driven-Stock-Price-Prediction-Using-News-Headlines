@@ -23,6 +23,8 @@ from authentication.models import User
 from stocks.models import Prediction, Subscription
 import stocks.views
 
+from tests.factories import authenticate_api_client
+
 pytestmark = pytest.mark.django_db
 
 GATES_OPEN = dict(PRICE_DATA_PUBLIC_ACCESS=True, NEWS_PUBLIC_ACCESS=True)
@@ -45,7 +47,7 @@ def authenticated_user():
 @pytest.fixture
 def auth_client(authenticated_user):
     client = APIClient()
-    client.force_authenticate(user=authenticated_user)
+    authenticate_api_client(client, authenticated_user)
     return client
 
 

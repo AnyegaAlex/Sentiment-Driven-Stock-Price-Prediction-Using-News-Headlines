@@ -186,7 +186,12 @@ if database_url:
             )
         }
 else:
-    # Fallback to SQLite for local development
+    # SQLite is a local-development fallback only. Never let a production
+    # deployment silently boot against an empty local database.
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "DATABASE_URL must be configured when DEBUG is False."
+        )
     default_db = 'sqlite:///' + str(BASE_DIR / 'db.sqlite3')
     DATABASES = {
         'default': dj_database_url.config(
@@ -290,28 +295,30 @@ SIMPLE_JWT = {
 }
 
 # ---------------------------------------------------------------------------
-# Email (SendGrid SMTP)
+# Email: Brevo SMTP is primary; SendGrid Web API is optional fallback.
 # ---------------------------------------------------------------------------
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "smtp-relay.brevo.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = "c49d83001@smtp-brevo.com"  # Brevo SMTP login
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+EMAIL_HOST_USER = os.getenv("BREVO_SMTP_LOGIN", "c49d83001@smtp-brevo.com")
 EMAIL_HOST_PASSWORD = os.getenv("BREVO_SMTP_KEY")
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "info@tickflowcapital.com")
 DEFAULT_FROM_NAME = os.getenv("DEFAULT_FROM_NAME", "Tickflow Sentiment")
-
-# Audit (item 1): bound the SMTP fallback. Without this, SMTP uses
-# timeout=None, and Render free blocks port 587 — each connect waits ~127s.
 EMAIL_TIMEOUT = 10
 
-# If no password, fallback to console (with warning)
+# A production deployment without its primary mail credentials must fail at
+# startup instead of silently logging verification/reset emails to stdout.
 if not EMAIL_HOST_PASSWORD:
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.warning("BREVO_SMTP_KEY not set – using console email backend for development.")
-    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    if DEBUG:
+        import logging
+        logging.getLogger(__name__).warning(
+            "BREVO_SMTP_KEY is not set; outbound email is unavailable in this local environment."
+        )
+    else:
+        raise ImproperlyConfigured("BREVO_SMTP_KEY must be configured in production.")
+
 CONTACT_EMAIL = os.getenv('CONTACT_EMAIL', 'info@tickflowcapital.com')
 # ---------------------------------------------------------------------------
 # CORS (Cross-Origin Resource Sharing)

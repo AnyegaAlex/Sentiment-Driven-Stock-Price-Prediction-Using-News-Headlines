@@ -25,6 +25,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from tests.factories import (
+    authenticate_api_client,
     UserFactory,
     PredictionFactory,
     SubscriptionFactory,
@@ -52,7 +53,7 @@ def api_client():
 def auth_client(user):
     """Authenticated DRF client. The API authenticates with JWT, so force_authenticate is used."""
     client = APIClient()
-    client.force_authenticate(user=user)
+    authenticate_api_client(client, user)
     return client
 
 

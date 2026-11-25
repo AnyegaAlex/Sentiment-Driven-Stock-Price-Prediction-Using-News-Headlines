@@ -16,6 +16,7 @@ from django.test.utils import CaptureQueriesContext
 from django.test import override_settings
 
 from tests.factories import (
+    authenticate_api_client,
     PredictionFactory,
     ProcessedNewsFactory,
     UserFactory,
@@ -48,17 +49,16 @@ class TestPredictionQueries:
         for _ in range(5):
             PredictionFactory(user=owner)
         client = APIClient()
-        client.force_authenticate(user=owner)
+        authenticate_api_client(client, owner)
 
         url = reverse('predictions')
         with CaptureQueriesContext(connection) as context:
             response = client.get(url)
             assert response.status_code == 200
 
-        # Expect only a few queries: 1 for count, 1 for the list = 2
-        # If the view also does extra filtering or sorting, may be 3.
-        # We'll assert <= 3 to keep it safe.
-        assert len(context.captured_queries) <= 3, (
+        # Includes the fixed API-key lookup/user/audit queries plus the
+        # bounded prediction count/list queries. N+1 would exceed this budget.
+        assert len(context.captured_queries) <= 6, (
             f"Too many queries ({len(context.captured_queries)}); likely N+1 issue"
         )
 

@@ -198,19 +198,12 @@ class TestFullUserJourney:
             assert response.status_code == 200
 
             from stocks.models import Prediction
-            predictions = Prediction.objects.filter(stock_symbol="AAPL")  # not filtering by user
-            assert predictions.count() == 1
-            prediction = predictions.first()
-            assert prediction.predicted_movement == "up"
-            assert prediction.confidence == 0.8
+            predictions = Prediction.objects.filter(stock_symbol="AAPL")
+            assert predictions.count() == 0
 
-            # Prediction history
-            history_url = reverse("prediction-history")
-            response = api_client.get(history_url, {"symbol": "AAPL", "limit": 10})
-            assert response.status_code == 200
-            data = response.json()
-            found = any(item["id"] == prediction.id for item in data["results"])
-            assert found is True
+            analysis_data = response.json()["data"]
+            assert analysis_data["dataStatus"]["prediction"] == "disabled"
+            assert analysis_data["lstm_prediction"]["direction"] is None
 
     @patch("authentication.utils.send_email_sync", return_value=True)
     @patch("authentication.views.send_verification_email", return_value=True)

@@ -14,6 +14,7 @@ All external dependencies (torch, transformers, cache) are mocked.
 """
 
 import pytest
+import torch
 import time
 from unittest.mock import patch, MagicMock
 from django.core.cache import cache
@@ -34,6 +35,11 @@ from news.utils import (
 )
 
 pytestmark = pytest.mark.django_db
+
+
+class MockBatchEncoding(dict):
+    def to(self, device):
+        return self
 
 
 # ============================================================================
@@ -288,20 +294,15 @@ class TestAnalyzeSentiment:
                 with patch('news.utils.load_tokenizer', return_value=mock_tokenizer):
                     with patch('news.utils.load_model', return_value=mock_model):
                         # Mock tokenizer and model outputs
-                        mock_tokenizer.return_value = {"input_ids": [[1]]}
+                        mock_tokenizer.return_value = MockBatchEncoding(input_ids=[[1]])
                         mock_model.return_value = MagicMock()
                         mock_model.return_value.logits = MagicMock()
                         # Simulate softmax output: positive with 0.9
                         with patch('torch.nn.functional.softmax') as mock_softmax:
                             mock_softmax.return_value = torch.tensor([[0.1, 0.9]])
-                            # Mock torch.max
                             with patch('torch.max') as mock_max:
-                                mock_max.return_value = (torch.tensor(0.9), torch.tensor(1))
-                                result = analyze_sentiment("Great product!")
-                                assert result['label'] == 'positive'  # id2label[1] = positive? Actually our mapping: 0=negative,1=neutral,2=positive. We set idx=1 -> 'neutral'? Wait: Our mock_model.config.id2label = {0: "negative", 1: "neutral", 2: "positive"}. If we set idx=1, label would be 'neutral'. Let's adjust idx=2 for positive.
-                                # We'll control idx by mocking torch.max to return 2.
-                                mock_max.return_value = (torch.tensor(0.9), torch.tensor(2))
-                                result = analyze_sentiment("Great product!")
+                                mock_max.return_value = (torch.tensor([0.9]), torch.tensor([2]))
+                                result = analyze_sentiment("This is a genuinely great product for everyday use!")
                                 assert result['label'] == 'positive'
 
     def test_analyze_sentiment_model_not_ready_returns_neutral_and_records_failure(self):
@@ -326,14 +327,14 @@ class TestAnalyzeSentiment:
             with patch('news.utils.ensure_model_ready', return_value=True):
                 with patch('news.utils.load_tokenizer') as mock_tokenizer:
                     mock_tokenizer.return_value = MagicMock()
-                    mock_tokenizer.return_value.return_value = {"input_ids": [[1]]}
+                    mock_tokenizer.return_value.return_value = MockBatchEncoding(input_ids=[[1]])
                     with patch('news.utils.load_model') as mock_model:
                         mock_model.return_value = MagicMock()
                         # Simulate OOM
                         mock_model.return_value.side_effect = torch.cuda.OutOfMemoryError
                         with patch.object(_sentiment_circuit, 'record_failure') as mock_fail:
                             with patch('torch.cuda.empty_cache') as mock_empty:
-                                result = analyze_sentiment("long text")
+                                result = analyze_sentiment("this text is long enough for model inference")
                                 assert result == {'label': 'neutral', 'score': 0.0}
                                 mock_fail.assert_called_once()
                                 mock_empty.assert_called_once()
@@ -343,7 +344,7 @@ class TestAnalyzeSentiment:
             with patch('news.utils.ensure_model_ready', return_value=True):
                 with patch('news.utils.load_tokenizer', side_effect=Exception("Fail")):
                     with patch.object(_sentiment_circuit, 'record_failure') as mock_fail:
-                        result = analyze_sentiment("long text")
+                        result = analyze_sentiment("this text is long enough for model inference")
                         assert result == {'label': 'neutral', 'score': 0.0}
                         mock_fail.assert_called_once()
 
@@ -376,14 +377,17 @@ class TestAnalyzeBatch:
             with patch('news.utils.ensure_model_ready', return_value=True):
                 with patch('news.utils.load_tokenizer') as mock_tokenizer:
                     mock_tokenizer.return_value = MagicMock()
-                    mock_tokenizer.return_value.return_value = {"input_ids": [[1,2,3]]}
+                    mock_tokenizer.return_value.return_value = MockBatchEncoding(input_ids=[[1, 2, 3]])
                     with patch('news.utils.load_model') as mock_model:
                         mock_model.return_value = MagicMock()
+                        mock_model.return_value.config.id2label = {
+                            0: "negative", 1: "neutral", 2: "positive"
+                        }
                         mock_model.return_value.return_value.logits = MagicMock()
                         with patch('torch.nn.functional.softmax') as mock_softmax:
                             mock_softmax.return_value = torch.tensor([[0.1, 0.9]])
                             with patch('torch.max') as mock_max:
-                                mock_max.return_value = (torch.tensor(0.9), torch.tensor(2))
+                                mock_max.return_value = (torch.tensor([0.9]), torch.tensor([2]))
                                 result = analyze_batch(texts)
                                 # Should have 2 results: first neutral, second positive
                                 assert len(result) == 2
@@ -391,27 +395,24 @@ class TestAnalyzeBatch:
                                 assert result[1]['label'] == 'positive'
 
     def test_analyze_batch_oom_falls_back_to_single(self):
-        texts = ["long text 1", "long text 2"]
+        texts = ["This is a sufficiently long batch input one", "This is a sufficiently long batch input two"]
+        tokenizer = MagicMock()
+        tokenizer.return_value = MockBatchEncoding(input_ids=[[1, 2, 3]])
+        model = MagicMock()
+        model.side_effect = torch.cuda.OutOfMemoryError()
+
         with patch('news.utils._get_cached_result', return_value=None):
             with patch('news.utils.ensure_model_ready', return_value=True):
-                with patch('news.utils.load_tokenizer') as mock_tokenizer:
-                    mock_tokenizer.return_value = MagicMock()
-                    mock_tokenizer.return_value.return_value = {"input_ids": [[1,2,3]]}
-                    with patch('news.utils.load_model') as mock_model:
-                        # Simulate OOM on batch, then single works
-                        mock_model.return_value = MagicMock()
-                        # First call to model in batch raises OOM
-                        mock_model.return_value.side_effect = [torch.cuda.OutOfMemoryError, MagicMock()]
-                        # Then single analysis will call load_model again, we need to handle that.
-                        # We'll patch analyze_sentiment to return positive for single
+                with patch('news.utils.load_tokenizer', return_value=tokenizer):
+                    with patch('news.utils.load_model', return_value=model):
                         with patch('news.utils.analyze_sentiment') as mock_single:
                             mock_single.return_value = {'label': 'positive', 'score': 0.9}
                             result = analyze_batch(texts)
-                            assert len(result) == 2
-                            assert result[0]['label'] == 'positive'
-                            assert result[1]['label'] == 'positive'
-                            # verify analyze_sentiment was called twice (once per text)
-                            assert mock_single.call_count == 2
+
+        assert len(result) == 2
+        assert result[0]['label'] == 'positive'
+        assert result[1]['label'] == 'positive'
+        assert mock_single.call_count == 2
 
     def test_analyze_batch_exception_returns_neutral_for_batch(self):
         texts = ["long text 1"]
