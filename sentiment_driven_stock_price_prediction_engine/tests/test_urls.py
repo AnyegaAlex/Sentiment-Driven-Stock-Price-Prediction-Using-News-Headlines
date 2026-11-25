@@ -36,7 +36,6 @@ class TestURLResolution:
             # Authentication
             ("register", {}, "/api/v1/auth/register/"),
             ("login", {}, "/api/v1/auth/login/"),
-            ("token_obtain_pair", {}, "/api/v1/auth/token/"),
             ("token-refresh", {}, "/api/v1/auth/refresh/"),
             ("verify-email", {}, "/api/v1/auth/verify-email/"),
             ("resend-verification", {}, "/api/v1/auth/resend-verification/"),
@@ -153,7 +152,7 @@ class TestMethodNotAllowed:
             # Public GET-only endpoints
             ("api_client", "symbols-list", {}, ["post", "put", "patch", "delete"]),
             ("api_client", "stock-analysis", {}, ["post", "put", "patch", "delete"]),
-            ("api_client", "prediction-history", {}, ["post", "put", "patch", "delete"]),
+            ("auth_client", "prediction-history", {}, ["post", "put", "patch", "delete"]),
             ("api_client", "get-news", {}, ["put", "patch", "delete"]),
 
             # Public POST-only endpoints
@@ -310,8 +309,8 @@ class TestInvalidURLs:
             # "/admin/nonexistent/",  # Admin redirects to login; test separately
         ]
     )
-    def test_invalid_url_returns_404(self, api_client, invalid_path):
-        response = api_client.get(invalid_path)
+    def test_invalid_url_returns_404(self, auth_client, invalid_path):
+        response = auth_client.get(invalid_path)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_admin_invalid_url_redirects(self, api_client):

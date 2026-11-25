@@ -624,6 +624,10 @@ class UserPreferencesSerializer(serializers.ModelSerializer):
             'language': {'help_text': "Language code (e.g., 'en', 'fr', 'es')"},
         }
 
+    def validate_watchlist(self, value: list) -> list:
+        """Normalize symbols and remove duplicates before persistence."""
+        return validate_symbol_list(value)
+
     def validate_language(self, value: str) -> str:
         """Validate language code."""
         # Basic check for ISO 639-1 format

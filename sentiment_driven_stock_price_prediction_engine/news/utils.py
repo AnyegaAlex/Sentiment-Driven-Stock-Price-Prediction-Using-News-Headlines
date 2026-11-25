@@ -326,22 +326,33 @@ def analyze_batch(texts: List[str]) -> List[Dict[str, Any]]:
     # 3. Use a local batch size (do not mutate global config)
     batch_size = config['batch_size']
     results: List[Dict[str, Any]] = []
-    tokenizer = load_tokenizer()
-    model = load_model()
-    device = get_device()
+
+    try:
+        import torch  # lazy import, but before the OOM exception handler
+        tokenizer = load_tokenizer()
+        model = load_model()
+        device = get_device()
+        if tokenizer is None or model is None:
+            raise RuntimeError("Model or tokenizer not available")
+    except Exception as exc:
+        logger.error("Batch model initialization failed (%s)", type(exc).__name__)
+        _sentiment_circuit.record_failure()
+        return [{'label': 'neutral', 'score': 0.0} for _ in texts]
 
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
 
-        # Check each text length; if too short, return neutral directly
-        batch_results = []
-        short_text_indices = []
+        # Preallocate one neutral result per input. Long-text inference
+        # replaces the corresponding slot after successful processing.
+        batch_results = [
+            {'label': 'neutral', 'score': 0.0}
+            for _ in batch
+        ]
+        long_text_indices = []
         long_texts = []
         for idx, t in enumerate(batch):
-            if len(str(t).strip()) < config['min_text_length']:
-                batch_results.append({'label': 'neutral', 'score': 0.0})
-            else:
-                short_text_indices.append(idx)
+            if len(str(t).strip()) >= config['min_text_length']:
+                long_text_indices.append(idx)
                 long_texts.append(t)
 
         # If there are long texts, process them
@@ -355,7 +366,6 @@ def analyze_batch(texts: List[str]) -> List[Dict[str, Any]]:
                     return_tensors="pt"
                 ).to(device)
 
-                import torch  # lazy import
                 with torch.inference_mode():
                     outputs = model(**inputs)
 
@@ -369,7 +379,7 @@ def analyze_batch(texts: List[str]) -> List[Dict[str, Any]]:
                 } for score, idx in zip(scores, indices)]
 
                 # Insert back into batch_results
-                for pos, res in zip(short_text_indices, long_results):
+                for pos, res in zip(long_text_indices, long_results):
                     batch_results[pos] = res
                 _sentiment_circuit.record_success()
 

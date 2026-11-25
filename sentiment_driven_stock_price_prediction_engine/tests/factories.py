@@ -296,3 +296,9 @@ class UserPreferencesFactory(DjangoModelFactory):
     language = 'en'
     timezone = 'UTC'
     weekly_digest = True
+
+def authenticate_api_client(client, user, name="Test API Client"):
+    """Authenticate a Django/DRF test client through the real API-key middleware."""
+    _, raw_key = UserAPIKey.create_key(user, name)
+    client.credentials(HTTP_X_API_KEY=raw_key)
+    return client

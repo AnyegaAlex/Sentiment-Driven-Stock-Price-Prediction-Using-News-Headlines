@@ -29,6 +29,8 @@ from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from authentication.models import User, AuditLog, UserPreferences, UserAPIKey, SymbolUsage
 from authentication.serializers import UserProfileSerializer
 
+from tests.factories import authenticate_api_client
+
 pytestmark = pytest.mark.django_db
 
 
@@ -77,7 +79,7 @@ def inactive_user(db, test_password):
 @pytest.fixture
 def auth_client(test_user):
     client = APIClient()
-    client.force_authenticate(user=test_user)
+    authenticate_api_client(client, test_user)
     return client
 
 
@@ -673,7 +675,7 @@ class TestAPIKeyListView:
         response = auth_client.get(url)
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 2
+        assert len(data) == 3
         assert data[0]['name'] == 'Key2'  # order by created_at desc? Actually the serializer uses default ordering? We'll just check existence.
         names = [item['name'] for item in data]
         assert 'Key1' in names
@@ -735,9 +737,8 @@ class TestUsageStatsView:
     def test_usage_stats(self, auth_client, test_user):
         """GET usage stats returns 31 entries."""
         url = reverse('usage-stats')
-        # cache.get is patched globally, which would also feed DRF's throttle
-        # check an int, so throttling is bypassed explicitly for this test.
-        with bypass_throttling(), patch('stocks.views.cache.get', return_value=5):
+        # Bypass throttling; leave the shared cache available to API-key auth.
+        with bypass_throttling():
             response = auth_client.get(url)
         assert response.status_code == 200
         data = response.json()
@@ -745,7 +746,7 @@ class TestUsageStatsView:
         # The view iterates range(30, -1, -1): oldest first, today last.
         assert data[-1]['date'] == timezone.now().date().isoformat()
         assert data[0]['date'] == (timezone.now().date() - timedelta(days=30)).isoformat()
-        assert data[-1]['count'] == 0  # user has no API keys, so counts are 0
+        assert data[-1]['count'] == 1  # the authenticated request is counted
 
     def test_usage_stats_error(self, auth_client):
         """Exception in view returns 500."""
@@ -801,8 +802,8 @@ class TestActivityLogView:
         response = auth_client.get(url)
         assert response.status_code == 200
         data = response.json()
-        assert data['total'] == 10
-        assert len(data['results']) == 10
+        assert data['total'] == 11
+        assert len(data['results']) == 11  # includes the API-key authentication audit event
         assert data['limit'] == 50
         assert data['offset'] == 0
 
@@ -814,7 +815,7 @@ class TestActivityLogView:
         response = auth_client.get(url, {'limit': 5, 'offset': 5})
         assert response.status_code == 200
         data = response.json()
-        assert data['total'] == 20
+        assert data['total'] == 21
         assert len(data['results']) == 5
         assert data['limit'] == 5
         assert data['offset'] == 5
