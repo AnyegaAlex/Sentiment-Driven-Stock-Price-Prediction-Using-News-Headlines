@@ -28,10 +28,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN adduser --disabled-password --no-create-home appuser
 
 # Copy requirements first to leverage Docker cache
-COPY requirements.txt ./
+COPY requirements.txt requirements-ml.txt ./
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt \
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-ml.txt \
     && pip install --no-cache-dir gunicorn psutil \
     && rm -rf /root/.cache/pip
 
@@ -97,8 +97,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create a non‑root user (will be used in entrypoint)
 RUN adduser --disabled-password --no-create-home appuser
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt \
+COPY requirements.txt requirements-ml.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-ml.txt \
     && pip install --no-cache-dir gunicorn psutil \
     && rm -rf /root/.cache/pip
 

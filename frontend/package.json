@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "lint:ci": "node scripts/check-eslint-baseline.mjs"
   },
   "dependencies": {
     "@heroui/card": "^2.2.14",
@@ -38,6 +39,7 @@
     "@tailwindcss/postcss7-compat": "^2.2.17",
     "@tanstack/react-query": "^5.74.3",
     "@tanstack/react-query-devtools": "^5.101.2",
+    "@vercel/analytics": "^2.0.1",
     "axios": "^1.9.0",
     "chart.js": "^4.4.9",
     "class-variance-authority": "^0.7.1",

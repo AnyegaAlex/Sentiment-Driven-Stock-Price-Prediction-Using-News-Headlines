@@ -243,15 +243,19 @@ def symbol_search(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # 1. Check DB cache
-    cache_instance = SymbolSearchCache.objects.filter(query=query).first()
-    if cache_instance and cache_instance.is_valid:
-        return Response(
-            success_response(data=cache_instance.results),
-            status=status.HTTP_200_OK
-        )
-
+    # Apply the licensing gate before cache reads as well as provider calls.
+    # Cached provider results remain licensed content and must not bypass it.
     external_allowed = _news_public_allowed(request)
+
+    # 1. Check DB cache only when this requester is allowed to see provider data.
+    if external_allowed:
+        cache_instance = SymbolSearchCache.objects.filter(query=query).first()
+        if cache_instance and cache_instance.is_valid:
+            return Response(
+                success_response(data=cache_instance.results),
+                status=status.HTTP_200_OK
+            )
+
     results = []
 
     # 2. Try Finnhub (primary)

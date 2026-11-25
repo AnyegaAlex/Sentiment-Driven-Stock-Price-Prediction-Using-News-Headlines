@@ -186,7 +186,12 @@ if database_url:
             )
         }
 else:
-    # Fallback to SQLite for local development
+    # SQLite is a local-development fallback only. Never let a production
+    # deployment silently boot against an empty local database.
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "DATABASE_URL must be configured when DEBUG is False."
+        )
     default_db = 'sqlite:///' + str(BASE_DIR / 'db.sqlite3')
     DATABASES = {
         'default': dj_database_url.config(

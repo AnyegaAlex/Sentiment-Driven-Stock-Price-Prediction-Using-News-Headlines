@@ -110,6 +110,11 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
 
             return (key_obj.user, None)
 
+        except exceptions.AuthenticationFailed:
+            # Preserve the deliberate client-facing reason (invalid, inactive,
+            # expired, or rate-limited) instead of masking it as a server error.
+            raise
+
         except UserAPIKey.DoesNotExist:
             self._log_auth_attempt(None, api_key, success=False, reason='not_found')
             raise exceptions.AuthenticationFailed('Invalid API key')
@@ -179,8 +184,7 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
             try:
                 # Fetch from DB with select_related to get user in one query
                 return UserAPIKey.objects.select_related('user').get(
-                    id=cached_key_id,
-                    is_active=True
+                    id=cached_key_id
                 )
             except UserAPIKey.DoesNotExist:
                 # Cache stale – delete it
@@ -190,11 +194,12 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
         # Direct database query using hashed key
         try:
             key_obj = UserAPIKey.objects.select_related('user').get(
-                key_hash=hashed,
-                is_active=True
+                key_hash=hashed
             )
-            # Cache the result for 5 minutes (positive cache)
-            cache.set(cache_key, key_obj.id, timeout=300)
+            # Cache only active keys. Inactive keys still need to be returned
+            # here so authenticate() can report their revoked status explicitly.
+            if key_obj.is_active:
+                cache.set(cache_key, key_obj.id, timeout=300)
             return key_obj
         except UserAPIKey.DoesNotExist:
             # Optionally cache negative results for a short time to prevent brute force
@@ -228,14 +233,18 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
             return True  # Fail open if cache is down
 
     def _count_daily_usage(self, key_obj):
-        """Count one authenticated request against this key for today (read by the usage chart)."""
-        from datetime import date
-        cache_key = f"usage_daily_{key_obj.id}_{date.today().isoformat()}"
+        """Count usage without making telemetry availability an auth dependency."""
         try:
+            from datetime import date
+            cache_key = f"usage_daily_{key_obj.id}_{date.today().isoformat()}"
             cache.add(cache_key, 0, timeout=60 * 60 * 24 * 40)
             cache.incr(cache_key)
         except Exception as exc:
-            logger.warning(f"Usage counter failed for key {key_obj.id}: {exc}")
+            logger.warning(
+                "Usage counter failed for key %s (%s)",
+                key_obj.id,
+                type(exc).__name__,
+            )
 
     def _update_last_used_async(self, key_obj):
         """

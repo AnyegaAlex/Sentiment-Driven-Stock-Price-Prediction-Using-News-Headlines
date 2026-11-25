@@ -18,7 +18,7 @@ import logging
 import requests
 from typing import Optional, Dict, Any
 
-from sentiment_driven_stock_price_prediction_engine.log_safety import describe_exception, scrub_text
+from sentiment_driven_stock_price_prediction_engine.log_safety import describe_exception
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
@@ -258,16 +258,19 @@ def send_email_sync(
     retry_count: int = EMAIL_MAX_RETRIES,
     headers: Optional[Dict[str, str]] = None,
 ) -> bool:
-    """Send transactional email through Brevo's HTTPS API."""
+    """Send transactional email through Brevo's HTTPS API.
+
+    Render's free service tier cannot rely on outbound SMTP. Brevo's HTTP API
+    is therefore the production transport; local development may use Django's
+    configured console/locmem backend when no API key is present.
+    """
     if not validate_email(to_email):
-        logger.error("Invalid email address rejected")
+        logger.warning("Email dispatch skipped because the recipient address is invalid.")
         return False
 
     api_key = getattr(settings, 'BREVO_API_KEY', None)
     plain_text = plain_content or strip_html_tags(html_content)
 
-    # Local development may use Django's console/locmem backend. Production
-    # never treats console output as successful delivery.
     if not api_key:
         if settings.DEBUG:
             try:
@@ -281,9 +284,9 @@ def send_email_sync(
                     message.attach_alternative(html_content, 'text/html')
                 return message.send(fail_silently=False) == 1
             except Exception as exc:
-                logger.warning("Local console email failed (%s)", describe_exception(exc))
+                logger.warning("Local email backend failed (%s).", type(exc).__name__)
                 return False
-        logger.error("Brevo API is not configured; transactional email was not sent.")
+        logger.error("Brevo API credentials are not configured; transactional email was not sent.")
         return False
 
     payload = {
@@ -304,35 +307,34 @@ def send_email_sync(
         'api-key': api_key,
         'content-type': 'application/json',
     }
-    max_attempts = max(1, retry_count)
-    last_error = None
+    attempts = max(1, int(retry_count or 1))
 
-    for attempt in range(max_attempts):
+    for attempt in range(attempts):
         try:
-            response = requests.post(
-                settings.BREVO_API_URL,
-                headers=request_headers,
-                json=payload,
-                timeout=settings.EMAIL_TIMEOUT,
+            sent = send_mail(
+                subject=subject,
+                message=plain_text,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[to_email],
+                html_message=html_content,
+                fail_silently=False,
             )
             if response.status_code in (200, 201, 202):
-                logger.info("Brevo accepted a transactional email request.")
+                logger.info("Brevo accepted transactional email (HTTP %s).", response.status_code)
                 return True
 
-            last_error = f"HTTP {response.status_code}"
-            if response.status_code == 429 or response.status_code >= 500:
-                logger.warning("Brevo transient response on attempt %s (%s)", attempt + 1, last_error)
-            else:
-                logger.warning("Brevo rejected transactional email request (%s)", last_error)
+            logger.warning("Brevo rejected transactional email (HTTP %s).", response.status_code)
+            # A 4xx response is a permanent request/configuration failure,
+            # except 429 which is explicitly retryable. Never log the response body.
+            if 400 <= response.status_code < 500 and response.status_code != 429:
                 return False
         except requests.RequestException as exc:
-            last_error = describe_exception(exc)
-            logger.warning("Brevo API request failed on attempt %s (%s)", attempt + 1, last_error)
+            logger.warning("Brevo email request failed (%s).", type(exc).__name__)
 
-        if attempt < max_attempts - 1:
+        if attempt + 1 < attempts:
             time.sleep(EMAIL_RETRY_DELAY)
 
-    logger.error("Brevo API delivery failed after %s attempt(s): %s", max_attempts, last_error)
+    logger.error("Brevo transactional email failed after %s attempt(s).", attempts)
     return False
 
 

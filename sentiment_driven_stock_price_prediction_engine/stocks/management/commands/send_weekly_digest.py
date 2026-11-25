@@ -125,13 +125,7 @@ class Command(BaseCommand):
                         sent += 1
                     else:
                         failed += 1
-                except Exception as exc:
-                    failed += 1
-                    logger.warning(
-                        'Weekly digest send failed for user_id=%s (%s)',
-                        user.pk,
-                        type(exc).__name__,
-                    )
+                        logger.warning(f"Failed to send digest to user_id={user.id}: {e}")
 
             if not quiet:
                 if dry_run:

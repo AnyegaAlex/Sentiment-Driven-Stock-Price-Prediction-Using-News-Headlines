@@ -1,4 +1,3 @@
-import React from 'react';
 import PropTypes from 'prop-types';
 
 // Shared link classes copied verbatim from the original legal pages.

@@ -1,0 +1,75 @@
+sequenceDiagram
+  autonumber
+  actor User
+  participant SPA as React SPA
+  participant API as Django API
+  participant Gate as Price/news licensing gate
+  participant Secrets as Server environment
+  participant Providers as Provider client
+  participant Finnhub
+  participant Alpha as Alpha Vantage
+  participant Rapid as RapidAPI/Yahoo
+  participant Twelve as Twelve Data
+  participant Cache as Django cache
+  participant DB as PostgreSQL
+  participant Actions as GitHub Actions runner
+  participant HF as Local Transformers model
+  participant LSTM as LSTM predictor
+  participant Opinion as Opinion generation function
+  participant Logs as Application logs
+
+  User->>SPA: Request stock analysis for symbol
+  SPA->>API: GET /api/v1/stock-analysis/?symbol=...
+  API->>Gate: Check PRICE_DATA_PUBLIC_ACCESS
+  alt Public price access disabled
+    Gate-->>API: Disabled
+    API-->>SPA: 200 envelope with disabled/null market fields
+  else Public price access enabled
+    Gate-->>API: Allowed
+    API->>Providers: Request quote/candles
+    Providers->>Secrets: Read server-side provider credentials
+    Providers->>Finnhub: HTTPS request; key in query where configured
+    Providers->>Alpha: HTTPS fallback; key in query
+    Providers->>Rapid: HTTPS fallback; RapidAPI key in header
+    Providers->>Twelve: HTTPS fallback; key in provider parameter
+    Providers-->>API: Provider payload
+    API->>API: Parse and transform market/technical values
+    API->>Cache: Cache transformed values
+    API->>DB: Read stored predictions/context
+    API-->>SPA: Analysis response
+  end
+  API->>Logs: Request/error context; exception text may include provider detail
+
+  Actions->>Actions: Run fetch_news management command
+  Actions->>Secrets: Load workflow/provider/database environment
+  alt NEWS_INGESTION_ENABLED is false or unset
+    Actions-->>DB: No ingestion write
+  else Ingestion enabled
+    Actions->>Providers: Fetch provider news
+    Providers->>Finnhub: HTTPS news request
+    Providers->>Rapid: HTTPS news/search request
+    Providers-->>Actions: Provider articles
+    Actions->>HF: Local ProsusAI/finbert inference
+    HF-->>Actions: Sentiment labels/scores
+    Actions->>DB: Insert/update ProcessedNews
+  end
+
+  Actions->>LSTM: Run generate_predictions command
+  alt PREDICTION_GENERATION_ENABLED is false or unset
+    LSTM-->>Actions: Skip generation
+  else Generation enabled
+    LSTM->>DB: Read required input rows
+    LSTM->>LSTM: Run local model inference
+    LSTM->>DB: Persist Prediction rows
+  end
+
+  User->>SPA: Request /lstm-predict/ or /stock-opinion/
+  SPA->>API: GET prediction/opinion endpoint
+  API->>DB: Read latest Prediction row
+  DB-->>API: Stored prediction or no row
+  API-->>SPA: Stored prediction response; no inference on this request
+
+  Note over Opinion,API: generate_stock_opinion exists but no active view caller was found; StockOpinion model has no verified writer.
+  Note over Secrets,Providers: Provider keys originate from server environment. No user BYOK path was found.
+  Note over Providers,Finnhub: Provider contracts and redistribution rights are UNVERIFIED. Price/news public access defaults false.
+  Note over API,SPA: lastUpdated is request time in source, not a provider data timestamp.

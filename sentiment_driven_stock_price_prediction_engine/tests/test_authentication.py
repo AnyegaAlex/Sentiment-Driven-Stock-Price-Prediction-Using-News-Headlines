@@ -36,6 +36,7 @@ from freezegun import freeze_time
 
 from authentication.models import User, UserAPIKey, AuditLog
 from tests.factories import (
+    authenticate_api_client,
     UserFactory,
     UnverifiedUserFactory,
     InactiveUserFactory,
@@ -206,7 +207,7 @@ class TestEmailVerification:
         """Valid 6-digit code should verify email."""
         code = generate_verification_code()
         cache.set(f"email_verification_{unverified_user.id}", hash_verification_code(unverified_user.id, code), timeout=600)
-        api_client.force_authenticate(user=unverified_user)
+        authenticate_api_client(api_client, unverified_user)
         url = reverse("verify-email")
         response = api_client.post(url, {"code": code})
         assert response.status_code == status.HTTP_200_OK
@@ -215,7 +216,7 @@ class TestEmailVerification:
 
     def test_verify_email_with_invalid_code(self, api_client, unverified_user):
         """Invalid code should return 400."""
-        api_client.force_authenticate(user=unverified_user)
+        authenticate_api_client(api_client, unverified_user)
         url = reverse("verify-email")
         response = api_client.post(url, {"code": "000000"})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
