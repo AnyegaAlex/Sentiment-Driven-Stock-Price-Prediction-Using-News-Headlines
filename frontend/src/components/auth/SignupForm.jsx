@@ -117,6 +117,8 @@ PasswordStrength.propTypes = {
 export const SignupForm = ({ onSuccess, onError }) => {
   // ---- State ----
   const [form, setForm] = useState({ username: '', email: '', password: '', password2: '' });
+  // Separate, affirmative controls: Terms acceptance and Privacy Policy acknowledgement.
+  const [legal, setLegal] = useState({ terms: false, privacy: false });
   const [fieldErrors, setFieldErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [showPassword, setShowPassword] = useState(false);
@@ -155,9 +157,11 @@ export const SignupForm = ({ onSuccess, onError }) => {
       isEmailValid &&
       !isDisposableEmail &&
       passwordMeetsRequirements &&
-      passwordsMatch
+      passwordsMatch &&
+      legal.terms &&
+      legal.privacy
     );
-  }, [isUsernameValid, isEmailValid, isDisposableEmail, passwordMeetsRequirements, passwordsMatch]);
+  }, [isUsernameValid, isEmailValid, isDisposableEmail, passwordMeetsRequirements, passwordsMatch, legal.terms, legal.privacy]);
 
   // ---- Handlers ----
   const handleChange = useCallback((e) => {
@@ -168,6 +172,12 @@ export const SignupForm = ({ onSuccess, onError }) => {
     }
     if (generalError) setGeneralError('');
   }, [fieldErrors, generalError]);
+
+  const handleLegalChange = useCallback((e) => {
+    const { name, checked } = e.target;
+    setLegal((prev) => ({ ...prev, [name]: checked }));
+    if (generalError) setGeneralError('');
+  }, [generalError]);
 
   const handleBlur = useCallback((e) => {
     const { name } = e.target;
@@ -188,6 +198,8 @@ export const SignupForm = ({ onSuccess, onError }) => {
         email: form.email.trim().toLowerCase(),
         password: form.password,
         password2: form.password2,
+        acceptTerms: legal.terms,
+        acknowledgePrivacyNotice: legal.privacy,
       });
 
       if (result.success) {
@@ -453,17 +465,41 @@ export const SignupForm = ({ onSuccess, onError }) => {
         )}
       </Button>
 
-      {/* Form Footer */}
-      <p className="text-center text-sm text-gray-500">
-        By creating an account, you agree to our{' '}
-        <Link to="/terms" className="text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded">
-          Terms of Service
-        </Link>{' '}
-        and{' '}
-        <Link to="/privacy" className="text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded">
-          Privacy Policy
-        </Link>
-      </p>
+      {/* Legal: two separate controls. Neither is pre-ticked. */}
+      <div className="space-y-3 text-sm text-gray-400">
+        <label htmlFor="accept-terms" className="flex items-start gap-3 cursor-pointer">
+          <input
+            id="accept-terms"
+            name="terms"
+            type="checkbox"
+            checked={legal.terms}
+            onChange={handleLegalChange}
+            className="mt-1 h-4 w-4 rounded border-gray-600 bg-black accent-white"
+          />
+          <span>
+            I accept the{' '}
+            <Link to="/terms" className="text-gray-200 underline hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 rounded">
+              Terms of Service
+            </Link>
+          </span>
+        </label>
+        <label htmlFor="acknowledge-privacy" className="flex items-start gap-3 cursor-pointer">
+          <input
+            id="acknowledge-privacy"
+            name="privacy"
+            type="checkbox"
+            checked={legal.privacy}
+            onChange={handleLegalChange}
+            className="mt-1 h-4 w-4 rounded border-gray-600 bg-black accent-white"
+          />
+          <span>
+            I have read the{' '}
+            <Link to="/privacy" className="text-gray-200 underline hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 rounded">
+              Privacy Policy
+            </Link>
+          </span>
+        </label>
+      </div>
     </form>
   );
 };

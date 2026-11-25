@@ -6,7 +6,7 @@ Production‑ready for Render free tier:
 - Uses Redis (with fallback to LocMemCache) for caching.
 - JSON structured logging with request‑id tracking.
 - Sentry error monitoring.
-- Email via SendGrid with console fallback.
+- Transactional email via Brevo HTTPS API.
 - Security headers enforced in production.
 
 Author: Tickflow Capital
@@ -273,7 +273,7 @@ REST_FRAMEWORK = {
         'apikey': '200/minute',
     },
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'authentication.legal.LegalGatedJWTAuthentication',
         'authentication.authentication.APIKeyAuthentication',
     ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
@@ -295,29 +295,27 @@ SIMPLE_JWT = {
 }
 
 # ---------------------------------------------------------------------------
-# Email: Brevo SMTP is primary; SendGrid Web API is optional fallback.
+# Transactional email (Brevo HTTP API over HTTPS)
 # ---------------------------------------------------------------------------
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp-relay.brevo.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.getenv("BREVO_SMTP_LOGIN", "c49d83001@smtp-brevo.com")
-EMAIL_HOST_PASSWORD = os.getenv("BREVO_SMTP_KEY")
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
+BREVO_ACCOUNT_URL = "https://api.brevo.com/v3/account"
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "info@tickflowcapital.com")
-DEFAULT_FROM_NAME = os.getenv("DEFAULT_FROM_NAME", "Tickflow Sentiment")
+DEFAULT_FROM_NAME = os.getenv("DEFAULT_FROM_NAME", "Tickflow Capital")
 EMAIL_TIMEOUT = 10
+EMAIL_MAX_RETRIES = 2
+EMAIL_RETRY_DELAY = 1
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
-# A production deployment without its primary mail credentials must fail at
-# startup instead of silently logging verification/reset emails to stdout.
-if not EMAIL_HOST_PASSWORD:
+# Render Free blocks outbound SMTP ports. Production must use Brevo's HTTPS API;
+# a missing API key is a deployment configuration error, never a silent fallback.
+if not BREVO_API_KEY:
     if DEBUG:
-        import logging
         logging.getLogger(__name__).warning(
-            "BREVO_SMTP_KEY is not set; outbound email is unavailable in this local environment."
+            "BREVO_API_KEY is not set; local development uses console email."
         )
     else:
-        raise ImproperlyConfigured("BREVO_SMTP_KEY must be configured in production.")
+        raise ImproperlyConfigured("BREVO_API_KEY is required when DEBUG is false.")
 
 CONTACT_EMAIL = os.getenv('CONTACT_EMAIL', 'info@tickflowcapital.com')
 # ---------------------------------------------------------------------------
@@ -499,15 +497,16 @@ if USE_JSON_LOGS and json_formatter:
 # ---------------------------------------------------------------------------
 SENTRY_DSN = os.getenv("SENTRY_DSN", "")
 SENTRY_TRACES_SAMPLE_RATE = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
-SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.1"))
+SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0"))
 SENTRY_ENVIRONMENT = os.getenv("SENTRY_ENVIRONMENT", "production")
+SENTRY_ENABLE_IN_DEBUG = os.getenv("SENTRY_ENABLE_IN_DEBUG", "false").lower() == "true"
 SENTRY_RELEASE = os.getenv("SENTRY_RELEASE", None)
 # Audit (item 7): PII off by default. The old "true" default shipped headers
 # (Authorization bearer tokens, cookies) and user context to Sentry.
 SENTRY_SEND_PII = os.getenv("SENTRY_SEND_PII", "false").lower() == "true"
 SENTRY_ATTACH_STACKTRACE = os.getenv("SENTRY_ATTACH_STACKTRACE", "true").lower() == "true"
 SENTRY_ENABLE_TRACING = os.getenv("SENTRY_ENABLE_TRACING", "true").lower() == "true"
-SENTRY_ENABLE_PROFILING = os.getenv("SENTRY_ENABLE_PROFILING", "true").lower() == "true"
+SENTRY_ENABLE_PROFILING = os.getenv("SENTRY_ENABLE_PROFILING", "false").lower() == "true"
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 SENTRY_DEBUG = os.getenv("SENTRY_DEBUG", "False").lower() == "true"
 

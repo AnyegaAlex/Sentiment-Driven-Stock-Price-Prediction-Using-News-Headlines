@@ -6,11 +6,10 @@ import { useAuth } from '@/hooks/useAuth';
 import apiClient from '@/services/client';
 import { getActionErrorMessage } from '@/utils/errorHandler';
 import { trackEvent } from '@/utils/analytics';
-import { cn } from '@/lib/utils';
 import {
   User, Mail, Calendar, BarChart3, TrendingUp, Newspaper, Key,
-  Edit, Lock, LogOut, CheckCircle, AlertCircle, Plus, Target,
-  Shield, Award, Activity, Users, Star, AlertTriangle, Settings,
+  Edit, Lock, LogOut, CheckCircle, AlertCircle, Plus,
+  Award, Activity, Users, Star, AlertTriangle, Settings,
   Loader2,
 } from 'lucide-react';
 import {
@@ -29,24 +28,6 @@ const PERSONA_MAP = {
   analyst: 'Financial Analyst',
   student: 'Student',
 };
-const INVESTMENT_GOAL_MAP = {
-  growth: 'Growth',
-  income: 'Income',
-  value: 'Value Investing',
-  trading: 'Active Trading',
-  retirement: 'Retirement',
-};
-const RISK_TOLERANCE_MAP = {
-  conservative: 'Conservative',
-  moderate: 'Moderate',
-  aggressive: 'Aggressive',
-};
-const EXPERIENCE_MAP = {
-  beginner: 'Beginner',
-  intermediate: 'Intermediate',
-  advanced: 'Advanced',
-};
-
 const UserAvatar = ({ username }) => {
   const initials = username ? username.slice(0, 2).toUpperCase() : 'U';
   return (
@@ -158,16 +139,6 @@ const Profile = () => {
   }, [data.created_at]);
 
   const personaLabel = data.persona ? (PERSONA_MAP[data.persona] || data.persona) : null;
-  const investmentGoal = data.investment_goal
-    ? (INVESTMENT_GOAL_MAP[data.investment_goal] || data.investment_goal)
-    : null;
-  const riskTolerance = data.risk_tolerance
-    ? (RISK_TOLERANCE_MAP[data.risk_tolerance] || data.risk_tolerance)
-    : null;
-  const experienceLevel = data.experience_level
-    ? (EXPERIENCE_MAP[data.experience_level] || data.experience_level)
-    : null;
-
   const deletionDateValue = data.deletion_scheduled_for ? new Date(data.deletion_scheduled_for) : null;
   const isDeletionPending = deletionDateValue && !Number.isNaN(deletionDateValue.getTime()) && deletionDateValue > new Date();
   const deletionDate = isDeletionPending
@@ -428,34 +399,6 @@ const Profile = () => {
           )}
         </CardContent>
       </Card>
-
-      {(investmentGoal || riskTolerance || experienceLevel) && (
-        <Card className="border border-gray-800 bg-gray-900">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base text-white">
-              <Target className="h-4 w-4 text-gray-400" aria-hidden="true" />
-              Investment profile
-            </CardTitle>
-            <CardDescription className="text-gray-400">
-              The preferences used to shape your research workspace.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {investmentGoal && <PreferenceBadge label="Goal" value={investmentGoal} icon={Target} />}
-            {riskTolerance && <PreferenceBadge label="Risk tolerance" value={riskTolerance} icon={Shield} />}
-            {experienceLevel && <PreferenceBadge label="Experience" value={experienceLevel} icon={Award} />}
-            {personaLabel && <PreferenceBadge label="Persona" value={personaLabel} icon={Users} />}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate('/settings?tab=investment')}
-              className="min-h-[40px] border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white"
-            >
-              Edit investment profile
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="flex flex-wrap gap-3">
         <ActionButton icon={Edit} label="Edit profile" onClick={handleEditProfile} />

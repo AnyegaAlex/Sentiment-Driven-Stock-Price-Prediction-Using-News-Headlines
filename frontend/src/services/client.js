@@ -503,6 +503,11 @@ apiClient.interceptors.response.use(
       });
     }
 
+    // Existing users who have not accepted the current legal documents (GAP-03).
+    // The app-level gate listens for this and shows the acceptance screen.
+    if (status === 403 && data?.code === 'legal_acceptance_required') {
+      window.dispatchEvent(new CustomEvent('tickflow:legal-acceptance-required'));
+    }
     return Promise.reject(formatError(error));
   }
 );

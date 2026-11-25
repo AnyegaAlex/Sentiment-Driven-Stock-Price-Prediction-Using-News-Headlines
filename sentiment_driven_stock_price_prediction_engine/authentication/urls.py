@@ -20,6 +20,7 @@ All endpoints use JWT authentication where required.
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from .legal_views import LegalStatusView
 from .views import (
     # Authentication
     RegisterView,
@@ -38,6 +39,7 @@ from .views import (
 
     # Preferences & Watchlist
     UserPreferencesView,
+    WeeklyDigestUnsubscribeView,
     UserWatchlistView,
 
     # Account Deletion
@@ -59,6 +61,7 @@ urlpatterns = [
     # AUTHENTICATION
     # ========================================================================
     path('register/', RegisterView.as_view(), name='register'),
+    path('legal/', LegalStatusView.as_view(), name='legal-status'),
     path('login/', LoginView.as_view(), name='login'),
     path('refresh/', TokenRefreshView.as_view(), name='token-refresh'),
     path('verify-email/', VerifyEmailView.as_view(), name='verify-email'),
@@ -94,6 +97,7 @@ urlpatterns = [
     # PREFERENCES & WATCHLIST
     # ========================================================================
     path('preferences/', UserPreferencesView.as_view(), name='user-preferences'),
+    path('weekly-digest/unsubscribe/', WeeklyDigestUnsubscribeView.as_view(), name='weekly-digest-unsubscribe'),
     path('watchlist/', UserWatchlistView.as_view(), name='user-watchlist'),
     path('watchlist/<str:symbol>/', UserWatchlistView.as_view(), name='user-watchlist-item'),
 

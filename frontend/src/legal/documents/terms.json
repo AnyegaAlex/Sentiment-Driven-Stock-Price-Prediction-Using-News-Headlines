@@ -1,0 +1,23 @@
+{
+  "document": "terms",
+  "version": "2026-11-24",
+  "blocks": [
+    { "type": "heading", "text": "Acceptance of Terms" },
+    { "type": "paragraph", "text": "By using TickFlow Intelligence, you agree to these terms and conditions." },
+    { "type": "heading", "text": "Use of Service" },
+    { "type": "paragraph", "text": "You may use the service for personal and commercial purposes in accordance with these terms." },
+    { "type": "heading", "text": "Intellectual Property" },
+    { "type": "paragraph", "text": "All content and code in TickFlow Intelligence is open source under the MIT License." },
+    { "type": "heading", "text": "Disclaimer" },
+    { "type": "paragraph", "text": "This platform provides LSTM + FinBERT-driven financial intelligence for informational purposes only. It is not financial advice." },
+    { "type": "heading", "text": "Limitation of Liability" },
+    { "type": "paragraph", "text": "TickFlow Capital is not liable for any decisions made based on the information provided." },
+    { "type": "heading", "text": "Contact Us" },
+    {
+      "type": "paragraph_with_link",
+      "before": "For any questions, please contact us at",
+      "link": { "text": "legal@tickflow.com", "href": "mailto:legal@tickflow.com" },
+      "after": "."
+    }
+  ]
+}

@@ -13,7 +13,7 @@ const OpenSource = () => (
             The license permits use, modification, distribution and private use, subject to its terms and notice requirements.
           </p>
           <a
-            href="https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/blob/main/LICENSE"
+            href="https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/blob/master/LICENSE"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex min-h-[44px] items-center rounded-md border border-gray-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-white hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
