@@ -38,7 +38,7 @@ from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
-from .models import User, AuditLog, UserPreferences, UserAPIKey, AuditLogActions
+from .models import User, AuditLog, UserPreferences, UserAPIKey
 from .models import PrivacyNoticeAcknowledgement, TermsAcceptance
 from .legal_config import PRIVACY_NOTICE, TERMS
 from .serializers import (
@@ -1398,19 +1398,10 @@ class DeleteAccountView(APIView):
 
             # Invalidate outstanding sessions only after confirmation delivery succeeds.
             try:
-                tokens = OutstandingToken.objects.filter(user=locked_user)
-                for token in tokens:
-                    BlacklistedToken.objects.get_or_create(token=token)
-            except Exception as exc:
-                # The account is already inactive, so authentication rejects
-                # its outstanding JWTs. Keep the deletion request but record
-                # that explicit blacklist persistence needs operational review.
-                logger.warning(
-                    'Account deletion token blacklist could not be persisted for user_id=%s (%s)',
-                    locked_user.pk,
-                    type(exc).__name__,
-                )
-
+                send_account_deletion_confirmation(user, request)
+            except Exception as e:
+                logger.warning(f"Deletion confirmation email failed for user_id={user.id}: {e}")
+            
             request_context = get_request_context(request)
             AuditLog.objects.create(
                 user=locked_user,

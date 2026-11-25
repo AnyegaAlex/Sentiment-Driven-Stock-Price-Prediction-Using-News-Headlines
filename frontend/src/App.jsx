@@ -21,6 +21,7 @@ import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { MotionConfig } from 'framer-motion';
 import { trackPageView } from './utils/analytics';
 import ConsentManager from './components/consent/ConsentManager';
+import { Analytics } from '@vercel/analytics/react';
 
 // ============================================================================
 // Lazy Load Components
@@ -391,6 +392,7 @@ const App = () => {
                 {/* Mounted for every route: the gate must appear on the main app layout too. */}
                 <LegalAcceptanceGate />
                 <ConsentManager />
+                <Analytics />
               </DashboardProvider>
             </OnboardingProvider>
           </AuthSessionProvider>

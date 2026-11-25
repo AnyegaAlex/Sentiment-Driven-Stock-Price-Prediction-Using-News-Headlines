@@ -48,8 +48,6 @@ SENSITIVE_KEYS = frozenset({
     "apikey", "api_key", "api-key", "x-api-key", "secret",
     "authorization", "cookie", "set-cookie",
     "email", "username", "new_email", "old_email", "new_username", "old_username",
-    "ip", "ip_address", "ipaddress", "remote_addr", "remote-address",
-    "x-forwarded-for", "x-real-ip", "user_agent", "user-agent", "user_id",
 })
 
 _MAX_DEPTH = 25

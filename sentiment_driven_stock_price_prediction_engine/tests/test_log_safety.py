@@ -109,13 +109,11 @@ def test_scrub_event_or_drop_returns_none_when_scrubbing_fails(monkeypatch):
 
 def test_connection_error_description_removes_token():
     with pytest.raises(requests.RequestException) as info:
-        # Bypass the autouse requests.get mock; this test needs a real connection error.
-        with requests.Session() as session:
-            session.get(
-                "http://127.0.0.1:9/api/v1/quote",
-                params={"symbol": "TEST", "token": SYNTHETIC_TOKEN},
-                timeout=2,
-            )
+        requests.get(
+            "http://127.0.0.1:9/api/v1/quote",
+            params={"symbol": "TEST", "token": SYNTHETIC_TOKEN},
+            timeout=2,
+        )
     # Confirm the unredacted exception really does carry the token.
     assert SYNTHETIC_TOKEN in str(info.value)
     described = describe_exception(info.value)
@@ -139,8 +137,7 @@ def test_http_error_description_keeps_status_and_removes_token():
     try:
         url = f"http://127.0.0.1:{server.server_port}/query?symbol=TEST&apikey={SYNTHETIC_TOKEN}"
         with pytest.raises(requests.HTTPError) as info:
-            with requests.Session() as session:
-                session.get(url, timeout=2).raise_for_status()
+            requests.get(url, timeout=2).raise_for_status()
         described = describe_exception(info.value)
         assert SYNTHETIC_TOKEN not in described
         assert "status=429" in described
@@ -196,12 +193,11 @@ def test_real_sentry_event_is_scrubbed_and_init_accepts_setting():
     )
     try:
         try:
-            with requests.Session() as session:
-                session.get(
-                    "http://127.0.0.1:9/api/v1/quote",
-                    params={"symbol": "TEST", "token": SYNTHETIC_TOKEN},
-                    timeout=2,
-                )
+            requests.get(
+                "http://127.0.0.1:9/api/v1/quote",
+                params={"symbol": "TEST", "token": SYNTHETIC_TOKEN},
+                timeout=2,
+            )
         except requests.RequestException as exc:
             sentry_sdk.set_user({"id": "1"})
             sentry_sdk.add_breadcrumb(message=f"contacted {SYNTHETIC_EMAIL}", category="test")

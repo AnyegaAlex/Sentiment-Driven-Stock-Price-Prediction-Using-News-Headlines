@@ -1,157 +1,212 @@
-# Contributing to Tickflow Capital Intelligence
+# Contributing to Tickflow Intelligence
 
-Thank you for considering a contribution. Bug reports, focused improvements, documentation corrections and tests are welcome.
+Thank you for considering a contribution to Tickflow Intelligence. Bug reports, documentation improvements, tests, and code contributions are welcome.
 
-## 1. Before contributing: intellectual property
+Before contributing, please read the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-Tickflow Capital Limited intends to maintain this repository as a company-owned open-source project.
+## Before you start
 
-**Do not submit a contribution for merging until the Company has provided and approved its Contributor Intellectual Property Assignment and the contributor has signed it.** Any statutory recordal required by Kenyan law must also be completed before the contribution is represented as company-owned.
+1. Check the [open issues](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues) to see whether the work is already being discussed.
+2. For a significant change, open an issue first so the proposed approach can be discussed before implementation.
+3. Do not include credentials, API keys, private user data, production database contents, or generated secrets in commits or issue reports.
 
-The current repository licence is MIT and currently names an individual copyright holder. The transfer of existing project rights to the Company is being documented separately. Do not change the LICENSE notice or claim that company ownership is complete until the assignment and KECOBO recordal are complete.
+## Repository layout
 
-The Company intends to continue distributing accepted project code under the MIT License. Existing valid MIT licences granted to the public will be respected. The MIT licence does not grant rights to Tickflow Capital trademarks, third-party market data, provider SDKs or materials excluded from that licence.
+```text
+.
+├── frontend/                                      # React and Vite application
+├── sentiment_driven_stock_price_prediction_engine/ # Django REST API and backend tests
+├── docs/                                          # Project documentation
+├── .github/                                       # Issue templates, PR template, workflows
+├── CODE_OF_CONDUCT.md
+├── CONTRIBUTING.md
+└── README.md
+```
 
-The contributor assignment template is in docs/legal/CONTRIBUTOR_IP_ASSIGNMENT_TEMPLATE.md. It is a draft and must be approved by Kenyan counsel before use.
+## Set up a development environment
 
 ## 2. Find or propose an issue
 
-- Review existing issues: https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues
-- Use labels such as good-first-issue, help-wanted, bug or enhancement where appropriate.
-- For substantial changes, open an issue first so maintainers can agree on scope.
-- Do not post secrets, customer data, personal data or confidential information in a public issue.
+- Git
+- Python 3.12 or a version supported by the backend dependencies
+- Node.js 20 or later and npm
+- PostgreSQL for a local database
+- Redis only if you are working on functionality that uses it
 
-## 3. Development setup
+### 1. Fork and clone
 
-### Backend
+Fork the repository on GitHub, then clone your fork:
 
-~~~bash
+```bash
+git clone https://github.com/YOUR_GITHUB_USERNAME/Tickflow-Capital-Intelligence.git
+cd Tickflow-Capital-Intelligence
+```
+
+Keep the upstream repository available as `upstream` if you plan to sync your fork:
+
+```bash
+git remote add upstream https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence.git
+```
+
+### 2. Set up the backend
+
+The Django project and its `manage.py` file are inside `sentiment_driven_stock_price_prediction_engine/`.
+
+```bash
 cd sentiment_driven_stock_price_prediction_engine
 python -m venv .venv
+
+# macOS / Linux
 source .venv/bin/activate
+
+# Windows PowerShell
+# .venv\Scripts\Activate.ps1
+
+python -m pip install --upgrade pip
 pip install -r requirements.txt
+pip install -r requirements-test.txt  # needed for the backend test suite
+cp .env.example .env
+```
+
+Edit `.env` with local development values. Do not commit this file or use production credentials. Configure a reachable PostgreSQL database and any external API credentials required by the feature you are testing.
+
+Apply migrations and start Django:
+
+```bash
 python manage.py migrate
 python manage.py runserver
-~~~
+```
 
-Use a local development environment file. Never copy production credentials into a local file committed to Git.
+The API will normally be available at `http://127.0.0.1:8000/`.
 
-### Frontend
+### 3. Set up the frontend
 
-~~~bash
+In a second terminal, from the repository root:
+
+```bash
 cd frontend
 npm install
+```
+
+Create or update `.env.development` with the local API configuration required by the frontend. Do not commit local environment files or secrets.
+
+Start the Vite development server:
+
+```bash
 npm run dev
-~~~
+```
 
-### Docker
+The frontend will normally be available at `http://localhost:5173/`.
 
-~~~bash
-docker-compose up --build
-docker-compose exec web python manage.py migrate
-~~~
+## Make a change
 
-## 4. Branching and coding standards
+Create a focused branch from the repository's default branch (`master`):
 
-Create a focused branch:
+```bash
+git checkout master
+git pull upstream master
+git checkout -b feature/short-description
+```
 
-~~~bash
-git checkout -b feature/your-feature-name
-# or
-git checkout -b fix/your-bug-fix
-~~~
+Use `fix/short-description` for bug fixes and `docs/short-description` for documentation-only changes.
 
-- Python: follow PEP 8 and the project's existing conventions.
-- JavaScript/React: follow the configured ESLint rules and existing component patterns.
-- Keep changes focused and avoid unrelated formatting churn.
-- Do not log passwords, API keys, tokens, email verification codes or unnecessary personal data.
-- Use structured logging and avoid interpolating untrusted or sensitive values into log messages.
-- Document new environment variables in the relevant example/configuration file without including real values.
-- Do not add third-party code, fonts, images, datasets or models without recording provenance and licence compatibility.
-- Disclose generated code, external assistance, employer/client ownership or other restrictions that could affect the rights being assigned.
+Keep changes focused. Avoid unrelated formatting, generated files, dependency upgrades, or changes to model behaviour in a contribution that does not require them.
 
-## 5. Commit messages
+## Coding guidelines
 
-Use Conventional Commits:
+- Follow the existing conventions and architecture in the affected area.
+- Python: follow PEP 8 and the project's existing Django patterns.
+- JavaScript and React: follow the existing component patterns and ESLint configuration.
+- Keep API contracts and authentication behaviour backward-compatible unless a breaking change is explicitly proposed and documented.
+- Handle errors in a way that gives users a clear, actionable message without exposing secrets or internal details.
+- Add or update tests for changed behaviour.
+- Update relevant documentation when setup, configuration, API behaviour, or user workflows change.
+- Do not commit `.env` files, credentials, local databases, build output, coverage output, or personal data.
 
-~~~text
-<type>(<scope>): <description>
-~~~
+## Run tests and checks
 
-Common types:
-
-- feat: new feature
-- fix: bug fix
-- docs: documentation
-- style: formatting only
-- refactor: code restructuring
-- test: tests
-- chore: maintenance
-
-Example:
-
-~~~text
-feat(api): add stock comparison endpoint
-~~~
-
-## 6. Tests and validation
-
-Run the relevant tests before opening a pull request.
+Run the checks relevant to the files you changed before opening a pull request.
 
 ### Backend
 
-~~~bash
+From the backend directory:
+
+```bash
 cd sentiment_driven_stock_price_prediction_engine
-python -m pytest
-python manage.py check
-python manage.py makemigrations --check --dry-run
-~~~
+pytest
+```
+
+If a change affects Django behaviour that is not covered by the pytest suite, also run the relevant Django tests:
+
+```bash
+python manage.py test
+```
 
 ### Frontend
 
-~~~bash
+From the frontend directory:
+
+```bash
 cd frontend
 npm test -- --run
 npm run build
 npm run lint
-~~~
+```
 
-Add tests for behavior changes. A pull request should not claim a check passed unless it was actually run.
+The lint command checks the frontend project and may report pre-existing issues outside the files changed by your contribution. Report those separately rather than suppressing unrelated rules.
 
-## 7. Pull request requirements
+### Documentation
 
-- Keep one logical change per pull request.
-- Explain the problem, implementation and any operational impact.
-- Include tests for changed behavior.
-- Update documentation and example environment variables where needed.
-- Link related issues.
-- Identify database migrations and any deployment steps.
-- Disclose third-party dependencies and licence implications.
-- Obtain maintainer review and address requested changes.
-- Do not merge until the required contributor IP agreement is signed and recorded.
+Check that Markdown code fences are balanced, local links point to existing files, and command examples use the repository's current paths and scripts.
 
-## 8. Useful commands
+## Commit messages
 
-~~~bash
-# Backend
-python manage.py runserver
-python manage.py shell
-python manage.py migrate
-python -m pytest
+Use clear, descriptive commit messages. Conventional Commit prefixes are encouraged:
 
-# Frontend
-npm run dev
-npm run build
-npm run lint
-npm test -- --run
+```text
+feat(frontend): add watchlist filters
+fix(api): handle expired API keys
+docs: clarify local setup
+ test(frontend): cover consent preferences
+refactor(auth): simplify token refresh handling
+chore(deps): update development tooling
+```
 
-# Docker
-docker-compose up --build
-docker-compose exec web python manage.py migrate
-~~~
+Do not include a leading space in the commit type. Keep each commit focused on one logical change.
 
-## 9. Getting help and recognition
+## Open a pull request
 
-Use GitHub issues for bugs and feature requests. For sensitive security or ownership matters, contact the maintainers privately rather than publishing details.
+1. Run the relevant tests and checks.
+2. Review your diff and remove unrelated or generated files.
+3. Push your branch to your fork:
 
-Contributors may be recognised in the README, changelog and GitHub contributors list, subject to their preferences and the project's attribution obligations.
+   ```bash
+   git push -u origin feature/short-description
+   ```
+
+4. Open a pull request against `master` in the [Tickflow Capital Intelligence repository](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/pulls).
+5. Complete the pull request template in `.github/PULL_REQUEST_TEMPLATE.md`.
+
+A useful pull request description explains:
+
+- What changed and why.
+- How the change was tested, including commands and results.
+- Any configuration or migration steps required.
+- Screenshots or recordings for visible frontend changes.
+- Related issue numbers and known limitations.
+
+Keep pull requests reviewable. One logical change per pull request is preferred. Maintainers may request revisions before merging.
+
+## Reporting bugs and requesting features
+
+- [Report a bug](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues/new?template=bug_report.md)
+- [Request a feature](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues/new?template=feature_request.md)
+- [Browse existing issues](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues)
+
+For security-sensitive reports, do not publish exploit details, credentials, or private data in a public issue. Use the repository's private security reporting channel where available.
+
+## Questions
+
+For project questions, open a GitHub issue with enough detail to reproduce the problem or understand the proposal. Please do not post API keys, passwords, tokens, or private user information.
+
+Thank you for helping improve Tickflow Intelligence.

@@ -306,33 +306,64 @@ def send_email_sync(
     }
     max_attempts = max(1, retry_count)
     last_error = None
+    sendgrid_rejected = False
 
-    for attempt in range(max_attempts):
+    for attempt in range(retry_count):
+        if not sendgrid_rejected:
+            # --- Primary: SendGrid Web API ---
+            try:
+                from sendgrid import SendGridAPIClient
+                from sendgrid.helpers.mail import Mail
+
+                message = Mail(
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to_emails=to_email,
+                    subject=subject,
+                    html_content=html_content,
+                    plain_text_content=plain_text,
+                )
+
+                # 10-second timeout ensures Render doesn't hang indefinitely if SendGrid is down
+                sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=10)
+                response = sg.send(message)
+
+                if 200 <= response.status_code < 300:
+                    logger.info(f"[SendGrid] Email sent (status: {response.status_code})")
+                    return True
+                else:
+                    last_error = scrub_text(f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}")
+                    logger.error(f"[SendGrid] Failed: {last_error}")
+                
+                    # Don't retry on 4xx errors (except 429) as they indicate a configuration issue
+                    if 400 <= response.status_code < 500 and response.status_code != 429:
+                        sendgrid_rejected = True  # skip SendGrid on later attempts; keep SMTP fallback
+
+            except ImportError:
+                logger.warning("[Email] SendGrid library not installed, falling back to SMTP.")
+            except Exception as e:
+                last_error = describe_exception(e)
+                logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {last_error}")
+
+        # --- Fallback: Django SMTP ---
         try:
-            response = requests.post(
-                settings.BREVO_API_URL,
-                headers=request_headers,
-                json=payload,
-                timeout=settings.EMAIL_TIMEOUT,
+            send_mail(
+                subject=subject,
+                message=plain_text,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[to_email],
+                html_message=html_content,
+                fail_silently=False,
             )
-            if response.status_code in (200, 201, 202):
-                logger.info("Brevo accepted a transactional email request.")
-                return True
-
-            last_error = f"HTTP {response.status_code}"
-            if response.status_code == 429 or response.status_code >= 500:
-                logger.warning("Brevo transient response on attempt %s (%s)", attempt + 1, last_error)
-            else:
-                logger.warning("Brevo rejected transactional email request (%s)", last_error)
-                return False
-        except requests.RequestException as exc:
-            last_error = describe_exception(exc)
-            logger.warning("Brevo API request failed on attempt %s (%s)", attempt + 1, last_error)
+            logger.info("[SMTP] Email sent")
+            return True
+        except Exception as e:
+            last_error = describe_exception(e)
+            logger.error(f"[SMTP] Fallback failed: {last_error}")
 
         if attempt < max_attempts - 1:
             time.sleep(EMAIL_RETRY_DELAY)
 
-    logger.error("Brevo API delivery failed after %s attempt(s): %s", max_attempts, last_error)
+    logger.error(f"[Email] Failed after {retry_count} attempts. Last error: {last_error}")
     return False
 
 

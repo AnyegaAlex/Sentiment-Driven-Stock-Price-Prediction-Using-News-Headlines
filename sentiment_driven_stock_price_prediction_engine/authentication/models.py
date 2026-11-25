@@ -642,9 +642,8 @@ class SymbolUsage(models.Model):
 
 # ----- Legal acknowledgements (GAP-03) -----
 # Terms acceptance and Privacy Policy acknowledgement are recorded separately.
-# user is SET_NULL so minimal acceptance evidence survives account deletion
-# without a direct account link. Its lawful basis and retention period must
-# be documented in the approved privacy notice.
+# user is SET_NULL so records survive account deletion for evidence; the
+# retention basis is to be settled under GAP-04 before deletion is finalised.
 
 class TermsAcceptance(models.Model):
     """Affirmative acceptance of a specific Terms of Service version."""
