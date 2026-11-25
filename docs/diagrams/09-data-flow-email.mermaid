@@ -1,0 +1,28 @@
+sequenceDiagram
+  autonumber
+  actor User
+  participant View as Django view
+  participant Helper as send_email_sync
+  participant Template as Email template
+  participant SG as SendGrid API
+  participant Brevo as Brevo SMTP
+  participant Console as Django console backend
+  participant Logs as Application logs
+
+  User->>View: Register / verify / reset / delete
+  View->>Template: Build recipient and message/link
+  Template-->>Helper: Rendered subject/body
+  Helper->>SG: Construct SendGrid client with timeout=10
+  Note over Helper,SG: Installed SDK constructor rejects this timeout keyword; TypeError is caught.
+  alt BREVO_SMTP_KEY configured
+    Helper->>Brevo: SMTP send; EMAIL_TIMEOUT=10s
+    Brevo-->>Helper: SMTP result
+  else BREVO_SMTP_KEY absent
+    Helper->>Console: Write email to console backend
+    Console-->>Helper: Local console output, not recipient delivery
+  end
+  Helper->>Logs: Log recipient/provider result or exception text
+  Helper-->>View: Return helper result
+  View-->>User: HTTP response
+
+  Note over View,Brevo: Synchronous request-path send; no durable outbox, worker, bounce webhook or delivery ledger found.

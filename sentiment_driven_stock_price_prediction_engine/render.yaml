@@ -29,9 +29,13 @@ services:
       - key: CONTACT_EMAIL
         value: "info@tickflowcapital.com"
 
-      # Email (SendGrid)
+      # Email: Brevo is primary; SendGrid is optional fallback.
+      - key: BREVO_SMTP_KEY
+        sync: false  # Brevo SMTP key; set in Render dashboard
+      - key: BREVO_SMTP_LOGIN
+        value: "c49d83001@smtp-brevo.com"
       - key: SENDGRID_API_KEY
-        sync: false  # Set manually in Render dashboard
+        sync: false  # Optional fallback; set only if enabled
       - key: DEFAULT_FROM_EMAIL
         value: "info@tickflowcapital.com"
 

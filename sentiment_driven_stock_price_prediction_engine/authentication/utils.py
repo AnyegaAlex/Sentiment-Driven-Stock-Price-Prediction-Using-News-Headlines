@@ -2,11 +2,9 @@
 Utility functions for authentication: email sending, token generation,
 verification, and response formatting.
 
-Production-Ready Refactor:
-- Removed asynchronous threading (which gets killed by Render/serverless platforms).
-- Switched to synchronous SendGrid API calls with strict timeouts.
-- Added atomic rate limiting using cache.incr().
-- Added extensive logging for failure diagnostics.
+Email delivery uses Brevo SMTP as the primary provider and SendGrid Web API
+as an optional fallback. Provider failures are logged without exposing recipient
+addresses, credentials, or provider response bodies.
 """
 
 import re
@@ -15,6 +13,7 @@ import secrets
 import hmac
 import hashlib
 import logging
+import requests
 from typing import Optional, Dict, Any
 
 from django.conf import settings
@@ -216,57 +215,55 @@ def verify_password_reset_token(uid: str, token: str) -> Optional[User]:
 # CORE EMAIL SENDING (SYNCHRONOUS)
 # ============================================================================
 
+def _send_via_sendgrid(subject: str, to_email: str, html_content: str, plain_text: str) -> bool:
+    """Send through SendGrid only as a fallback after Brevo SMTP fails."""
+    api_key = getattr(settings, "SENDGRID_API_KEY", None)
+    if not api_key:
+        logger.info("SendGrid fallback is not configured.")
+        return False
+
+    payload = {
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "from": {"email": settings.DEFAULT_FROM_EMAIL},
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": plain_text},
+            {"type": "text/html", "value": html_content},
+        ],
+    }
+    try:
+        response = requests.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=(3, 10),
+        )
+        if response.status_code == 202:
+            logger.info("SendGrid accepted fallback email (HTTP 202).")
+            return True
+        logger.warning("SendGrid fallback rejected email (HTTP %s).", response.status_code)
+    except requests.RequestException as exc:
+        logger.warning("SendGrid fallback request failed (%s).", type(exc).__name__)
+    return False
+
+
 def send_email_sync(subject: str, to_email: str, html_content: str, plain_content: Optional[str] = None, retry_count: int = EMAIL_MAX_RETRIES) -> bool:
-    """
-    Send email synchronously using SendGrid Web API with SMTP fallback.
-    This blocks the request for ~200ms but guarantees the email is dispatched 
-    before Render can terminate the worker process.
-    """
+    """Send via Brevo SMTP first, then optional SendGrid API fallback."""
     if not validate_email(to_email):
-        logger.error(f"Invalid email address: {to_email}")
+        logger.warning("Email dispatch skipped because the recipient address is invalid.")
         return False
 
     plain_text = plain_content or strip_html_tags(html_content)
-    last_error = None
+    attempts = max(1, retry_count)
 
-    for attempt in range(retry_count):
-        # --- Primary: SendGrid Web API ---
+    for attempt in range(attempts):
+        # Primary provider: Brevo SMTP. Django's SMTP backend uses the
+        # configured 10-second EMAIL_TIMEOUT and STARTTLS on port 587.
         try:
-            from sendgrid import SendGridAPIClient
-            from sendgrid.helpers.mail import Mail
-
-            message = Mail(
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to_emails=to_email,
-                subject=subject,
-                html_content=html_content,
-                plain_text_content=plain_text,
-            )
-
-            # 10-second timeout ensures Render doesn't hang indefinitely if SendGrid is down
-            sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=10)
-            response = sg.send(message)
-
-            if 200 <= response.status_code < 300:
-                logger.info(f"[SendGrid] Email sent to {to_email} (status: {response.status_code})")
-                return True
-            else:
-                last_error = f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}"
-                logger.error(f"[SendGrid] Failed for {to_email}: {last_error}")
-                
-                # Don't retry on 4xx errors (except 429) as they indicate a configuration issue
-                if 400 <= response.status_code < 500 and response.status_code != 429:
-                    break 
-
-        except ImportError:
-            logger.warning("[Email] SendGrid library not installed, falling back to SMTP.")
-        except Exception as e:
-            last_error = str(e)
-            logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {e}")
-
-        # --- Fallback: Django SMTP ---
-        try:
-            send_mail(
+            sent = send_mail(
                 subject=subject,
                 message=plain_text,
                 from_email=settings.DEFAULT_FROM_EMAIL,
@@ -274,16 +271,24 @@ def send_email_sync(subject: str, to_email: str, html_content: str, plain_conten
                 html_message=html_content,
                 fail_silently=False,
             )
-            logger.info(f"[SMTP] Email sent to {to_email}")
-            return True
-        except Exception as e:
-            last_error = str(e)
-            logger.error(f"[SMTP] Fallback failed for {to_email}: {e}")
+            if sent == 1:
+                logger.info("Brevo SMTP accepted an outbound email.")
+                return True
+            logger.warning("Brevo SMTP did not accept the outbound email.")
+        except Exception as exc:
+            # Do not log exception text: SMTP/provider exceptions can include
+            # addresses, server responses, or credential-related details.
+            logger.warning("Brevo SMTP attempt %s failed (%s).", attempt + 1, type(exc).__name__)
 
-        if attempt < retry_count - 1:
+        # Fallback provider: SendGrid. A 202 means accepted by the API, not
+        # confirmed delivery to the recipient's inbox.
+        if _send_via_sendgrid(subject, to_email, html_content, plain_text):
+            return True
+
+        if attempt + 1 < attempts:
             time.sleep(EMAIL_RETRY_DELAY)
 
-    logger.error(f"[Email] Failed after {retry_count} attempts for {to_email}. Last error: {last_error}")
+    logger.error("Email dispatch failed after %s attempt(s); both configured providers were unavailable or rejected the message.", attempts)
     return False
 
 
@@ -508,37 +513,29 @@ def send_security_alert_email(user: User, action: str, ip_address: str, user_age
 # ============================================================================
 
 def check_email_service_health() -> Dict[str, Any]:
-    """Check if SendGrid API is accessible and functioning."""
-    try:
-        from sendgrid import SendGridAPIClient
-        
-        sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=5)
-        response = sg.client._("v3").get()
-        
-        if response.status_code < 500:
-            return {
-                'available': True,
-                'status': 'healthy',
-                'provider': 'sendgrid',
-                'status_code': response.status_code,
-            }
+    """Report provider configuration without sending a test email."""
+    brevo_configured = bool(
+        getattr(settings, "EMAIL_HOST", None)
+        and getattr(settings, "EMAIL_HOST_USER", None)
+        and getattr(settings, "EMAIL_HOST_PASSWORD", None)
+    )
+    sendgrid_configured = bool(getattr(settings, "SENDGRID_API_KEY", None))
+
+    if brevo_configured:
         return {
-            'available': False,
-            'status': 'degraded',
-            'provider': 'sendgrid',
-            'status_code': response.status_code,
+            "available": True,
+            "status": "configured",
+            "provider": "brevo_smtp",
+            "fallback_configured": sendgrid_configured,
+            "fallback_provider": "sendgrid" if sendgrid_configured else None,
+            "check_type": "configuration_only",
         }
-    except ImportError:
-        return {
-            'available': True,
-            'status': 'healthy',
-            'provider': 'smtp',
-            'message': 'SendGrid not installed, using SMTP fallback',
-        }
-    except Exception as e:
-        return {
-            'available': False,
-            'status': 'unhealthy',
-            'provider': 'sendgrid',
-            'error': str(e),
-        }
+
+    return {
+        "available": False,
+        "status": "misconfigured",
+        "provider": "brevo_smtp",
+        "fallback_configured": sendgrid_configured,
+        "fallback_provider": "sendgrid" if sendgrid_configured else None,
+        "check_type": "configuration_only",
+    }
