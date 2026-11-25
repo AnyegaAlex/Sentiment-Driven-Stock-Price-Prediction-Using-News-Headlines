@@ -268,7 +268,7 @@ REST_FRAMEWORK = {
         'apikey': '200/minute',
     },
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'authentication.legal.LegalGatedJWTAuthentication',
         'authentication.authentication.APIKeyAuthentication',
     ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',

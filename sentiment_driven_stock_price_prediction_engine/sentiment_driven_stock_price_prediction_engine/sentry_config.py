@@ -29,6 +29,8 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+from .log_safety import scrub_event_or_drop, scrub_value  # noqa: E402
+
 # ============================================================================
 # CONSTANTS
 # ============================================================================
@@ -59,7 +61,7 @@ def get_sentry_config() -> Dict[str, Any]:
         'profiles_sample_rate': float(getattr(settings, 'SENTRY_PROFILES_SAMPLE_RATE', DEFAULT_PROFILES_SAMPLE_RATE)),
         'release': getattr(settings, 'SENTRY_RELEASE', DEFAULT_RELEASE),
         'debug': getattr(settings, 'SENTRY_DEBUG', False),
-        'send_default_pii': getattr(settings, 'SENTRY_SEND_PII', True),
+        'send_default_pii': getattr(settings, 'SENTRY_SEND_PII', False),
         'attach_stacktrace': getattr(settings, 'SENTRY_ATTACH_STACKTRACE', True),
         'max_breadcrumbs': getattr(settings, 'SENTRY_MAX_BREADCRUMBS', 100),
         'enable_tracing': getattr(settings, 'SENTRY_ENABLE_TRACING', True),
@@ -177,7 +179,12 @@ def before_send(event: Dict, hint: Dict) -> Optional[Dict]:
             event['request']['url']
         )
     
-    return event
+    # Scrub credentials and email addresses from the whole event. On failure the
+    # event is dropped, never sent unscrubbed.
+    scrubbed = scrub_event_or_drop(event)
+    if scrubbed is None:
+        logger.warning("Sentry event dropped: scrubber failed")
+    return scrubbed
 
 
 def before_breadcrumb(crumb: Dict, hint: Dict) -> Dict:
@@ -199,7 +206,10 @@ def before_breadcrumb(crumb: Dict, hint: Dict) -> Dict:
     if crumb.get('category') == 'http' and '/static/' in str(crumb.get('data', {})):
         return None
     
-    return crumb
+    try:
+        return scrub_value(crumb)
+    except Exception:
+        return None
 
 
 # ============================================================================
@@ -254,6 +264,7 @@ def init_sentry() -> bool:
             traces_sample_rate=config['traces_sample_rate'],
             profiles_sample_rate=config['profiles_sample_rate'],
             send_default_pii=config['send_default_pii'],
+            include_local_variables=False,
             attach_stacktrace=config['attach_stacktrace'],
             max_breadcrumbs=config['max_breadcrumbs'],
             enable_tracing=config['enable_tracing'],

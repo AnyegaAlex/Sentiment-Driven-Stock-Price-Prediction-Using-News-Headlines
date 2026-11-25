@@ -17,6 +17,8 @@ import hashlib
 import logging
 from typing import Optional, Dict, Any
 
+from sentiment_driven_stock_price_prediction_engine.log_safety import describe_exception, scrub_text
+
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.cache import cache
@@ -223,46 +225,48 @@ def send_email_sync(subject: str, to_email: str, html_content: str, plain_conten
     before Render can terminate the worker process.
     """
     if not validate_email(to_email):
-        logger.error(f"Invalid email address: {to_email}")
+        logger.error("Invalid email address rejected")
         return False
 
     plain_text = plain_content or strip_html_tags(html_content)
     last_error = None
+    sendgrid_rejected = False
 
     for attempt in range(retry_count):
-        # --- Primary: SendGrid Web API ---
-        try:
-            from sendgrid import SendGridAPIClient
-            from sendgrid.helpers.mail import Mail
+        if not sendgrid_rejected:
+            # --- Primary: SendGrid Web API ---
+            try:
+                from sendgrid import SendGridAPIClient
+                from sendgrid.helpers.mail import Mail
 
-            message = Mail(
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to_emails=to_email,
-                subject=subject,
-                html_content=html_content,
-                plain_text_content=plain_text,
-            )
+                message = Mail(
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to_emails=to_email,
+                    subject=subject,
+                    html_content=html_content,
+                    plain_text_content=plain_text,
+                )
 
-            # 10-second timeout ensures Render doesn't hang indefinitely if SendGrid is down
-            sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=10)
-            response = sg.send(message)
+                # 10-second timeout ensures Render doesn't hang indefinitely if SendGrid is down
+                sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=10)
+                response = sg.send(message)
 
-            if 200 <= response.status_code < 300:
-                logger.info(f"[SendGrid] Email sent to {to_email} (status: {response.status_code})")
-                return True
-            else:
-                last_error = f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}"
-                logger.error(f"[SendGrid] Failed for {to_email}: {last_error}")
+                if 200 <= response.status_code < 300:
+                    logger.info(f"[SendGrid] Email sent (status: {response.status_code})")
+                    return True
+                else:
+                    last_error = scrub_text(f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}")
+                    logger.error(f"[SendGrid] Failed: {last_error}")
                 
-                # Don't retry on 4xx errors (except 429) as they indicate a configuration issue
-                if 400 <= response.status_code < 500 and response.status_code != 429:
-                    break 
+                    # Don't retry on 4xx errors (except 429) as they indicate a configuration issue
+                    if 400 <= response.status_code < 500 and response.status_code != 429:
+                        sendgrid_rejected = True  # skip SendGrid on later attempts; keep SMTP fallback
 
-        except ImportError:
-            logger.warning("[Email] SendGrid library not installed, falling back to SMTP.")
-        except Exception as e:
-            last_error = str(e)
-            logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {e}")
+            except ImportError:
+                logger.warning("[Email] SendGrid library not installed, falling back to SMTP.")
+            except Exception as e:
+                last_error = describe_exception(e)
+                logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {last_error}")
 
         # --- Fallback: Django SMTP ---
         try:
@@ -274,16 +278,16 @@ def send_email_sync(subject: str, to_email: str, html_content: str, plain_conten
                 html_message=html_content,
                 fail_silently=False,
             )
-            logger.info(f"[SMTP] Email sent to {to_email}")
+            logger.info("[SMTP] Email sent")
             return True
         except Exception as e:
-            last_error = str(e)
-            logger.error(f"[SMTP] Fallback failed for {to_email}: {e}")
+            last_error = describe_exception(e)
+            logger.error(f"[SMTP] Fallback failed: {last_error}")
 
         if attempt < retry_count - 1:
             time.sleep(EMAIL_RETRY_DELAY)
 
-    logger.error(f"[Email] Failed after {retry_count} attempts for {to_email}. Last error: {last_error}")
+    logger.error(f"[Email] Failed after {retry_count} attempts. Last error: {last_error}")
     return False
 
 
@@ -330,7 +334,7 @@ def send_verification_email(user: User, request) -> bool:
         return send_email_sync(subject, user.email, html_content, plain_content)
         
     except Exception as e:
-        logger.error(f"Failed to send verification email for {user.email}: {e}", exc_info=True)
+        logger.error(f"Failed to send verification email for user_id={user.id}: {e}", exc_info=True)
         return False
 
 
@@ -372,7 +376,7 @@ The Tickflow Capital Team
         
         return send_email_sync(subject, user.email, html_content, plain_content)
     except Exception as e:
-        logger.error(f"Failed to send welcome email for {user.email}: {e}", exc_info=True)
+        logger.error(f"Failed to send welcome email for user_id={user.id}: {e}", exc_info=True)
         return False
 
 
@@ -402,7 +406,7 @@ def send_password_reset_email(user: User, request) -> bool:
         
         return send_email_sync(subject, user.email, html_content, plain_content)
     except Exception as e:
-        logger.error(f"Failed to send password reset email to {user.email}: {e}", exc_info=True)
+        logger.error(f"Failed to send password reset email for user_id={user.id}: {e}", exc_info=True)
         return False
 
 
@@ -423,7 +427,7 @@ def send_email_change_code(new_email: str, code: str) -> bool:
         
         return send_email_sync(subject, new_email, html_content, plain_content)
     except Exception as e:
-        logger.error(f"Failed to send email change code to {new_email}: {e}", exc_info=True)
+        logger.error(f"Failed to send email change code: {e}", exc_info=True)
         return False
 
 

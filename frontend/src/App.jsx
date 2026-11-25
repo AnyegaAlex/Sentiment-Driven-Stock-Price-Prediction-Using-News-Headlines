@@ -34,6 +34,7 @@ import Breadcrumbs from "./components/Breadcrumbs";
 import ErrorBoundary from "./components/ErrorBoundary";
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import LegalAcceptanceGate from "./components/legal/LegalAcceptanceGate";
 import HomeRoute from "./components/auth/HomeRoute";
 
 // Context providers
@@ -382,6 +383,8 @@ const App = () => {
             <OnboardingProvider>
               <DashboardProvider>
                 <AppContent />
+                {/* Mounted for every route: the gate must appear on the main app layout too. */}
+                <LegalAcceptanceGate />
                 <ConsentManager />
                 <Analytics />
               </DashboardProvider>

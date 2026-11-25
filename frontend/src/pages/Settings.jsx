@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
-  User, Bell, Shield, Trash2, Code, Target,
+  User, Bell, Shield, Trash2, Code,
   AlertCircle, CheckCircle 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -19,35 +19,11 @@ import NotificationsTab from '@/components/settings/NotificationsTab';
 import SecurityTab from '@/components/settings/SecurityTab';
 import AccountTab from '@/components/settings/AccountTab';
 import DeveloperTab from '@/components/settings/DeveloperTab';
-import InvestmentProfileTab from '@/components/settings/InvestmentProfileTab';
 
 
 // ============================================================
 // VALUE MAPS for backend compatibility
 // ============================================================
-const RISK_MAP = {
-  'conservative': 'conservative',
-  'moderate': 'moderate',
-  'aggressive': 'aggressive',
-  'high': 'aggressive',
-  'low': 'conservative',
-};
-
-const GOAL_MAP = {
-  'growth': 'growth',
-  'income': 'income',
-  'value': 'value',
-  'trading': 'trading',
-  'retirement': 'retirement',
-};
-
-const EXPERIENCE_MAP = {
-  'beginner': 'beginner',
-  'intermediate': 'intermediate',
-  'advanced': 'advanced',
-};
-
-
 const LANGUAGE_CODES = {
   english: 'en', spanish: 'es', french: 'fr', german: 'de', portuguese: 'pt',
   italian: 'it', japanese: 'ja', korean: 'ko', chinese: 'zh',
@@ -63,9 +39,6 @@ const toLanguageCode = (value) => {
 // Only send fields the user actually set, in the shape the backend validates.
 const buildPreferencePayload = (data = {}) => {
   const payload = {};
-  if (data.investment_goal) payload.investment_goal = GOAL_MAP[data.investment_goal] || data.investment_goal;
-  if (data.risk_tolerance) payload.risk_tolerance = RISK_MAP[data.risk_tolerance] || data.risk_tolerance;
-  if (data.experience_level) payload.experience_level = EXPERIENCE_MAP[data.experience_level] || data.experience_level;
   if (data.theme) payload.theme = data.theme;
   ['email_notifications', 'price_alerts', 'news_alerts', 'weekly_digest'].forEach((key) => {
     if (typeof data[key] === 'boolean') payload[key] = data[key];
@@ -81,7 +54,7 @@ const Settings = () => {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const requestedTab = searchParams.get('tab');
-  const validTabs = ['general', 'investment', 'notifications', 'security', 'developer', 'account'];
+  const validTabs = ['general', 'notifications', 'security', 'developer', 'account'];
   const [activeTab, setActiveTab] = useState(validTabs.includes(requestedTab) ? requestedTab : 'general');
   const [saveStatus, setSaveStatus] = useState(null);
   const queryClient = useQueryClient();
@@ -186,7 +159,6 @@ const Settings = () => {
 
   const tabs = [
     { id: 'general', label: 'General', icon: User },
-    { id: 'investment', label: 'Investment Profile', icon: Target },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'developer', label: 'Developer', icon: Code },
@@ -250,15 +222,6 @@ const Settings = () => {
             preferences={preferences} 
             onSave={handleGeneralSave}
             isSaving={saveStatus?.type === 'saving'}
-          />
-        </TabsContent>
-
-        <TabsContent value="investment" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black">
-          <InvestmentProfileTab
-            preferences={preferences}
-            onSave={handlePreferencesSave}
-            isSaving={saveStatus?.type === 'saving'}
-            saveStatus={saveStatus}
           />
         </TabsContent>
 

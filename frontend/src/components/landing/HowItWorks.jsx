@@ -19,7 +19,7 @@ const steps = [
   {
     step: '04',
     title: 'Set your preferences',
-    description: 'Choose your investment goal, risk tolerance and experience level to shape how research is presented.',
+    description: 'Every user sees the same research views. Choose a persona to pick the tools shown first.',
   },
 ];
 

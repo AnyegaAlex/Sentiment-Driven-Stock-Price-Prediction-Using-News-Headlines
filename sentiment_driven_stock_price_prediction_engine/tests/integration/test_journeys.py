@@ -31,6 +31,8 @@ def user_data():
         "email": "testuser@example.com",
         "password": "SecurePass123!",
         "password2": "SecurePass123!",
+        "accept_terms": True,
+        "acknowledge_privacy_notice": True,
         "first_name": "Test",
         "last_name": "User",
     }

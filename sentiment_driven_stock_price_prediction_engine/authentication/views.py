@@ -37,6 +37,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from .models import User, AuditLog, UserPreferences, UserAPIKey
+from .models import PrivacyNoticeAcknowledgement, TermsAcceptance
+from .legal_config import PRIVACY_NOTICE, TERMS
 from .serializers import (
     RegisterSerializer,
     LoginSerializer,
@@ -160,6 +162,13 @@ class RegisterView(generics.CreateAPIView):
             with transaction.atomic():
                 user = serializer.save()
                 UserPreferences.objects.get_or_create(user=user)
+                # Legal acceptance records, written atomically with the account (GAP-03).
+                TermsAcceptance.objects.create(
+                    user=user, version=TERMS.version, content_hash=TERMS.sha256,
+                )
+                PrivacyNoticeAcknowledgement.objects.create(
+                    user=user, version=PRIVACY_NOTICE.version, content_hash=PRIVACY_NOTICE.sha256,
+                )
                 # Audit log (does not depend on email)
                 request_context = get_request_context(self.request)
                 AuditLog.objects.create(
@@ -170,7 +179,7 @@ class RegisterView(generics.CreateAPIView):
                         'user_agent': request_context['user_agent'],
                     }
                 )
-                logger.info(f"New user registered: {user.email} (ID: {user.id})")
+                logger.info(f"New user registered: user_id={user.id}")
             
             # Send email synchronously outside transaction
             if user:
@@ -186,7 +195,7 @@ class RegisterView(generics.CreateAPIView):
                     cache.set(f"email_failed_{user.id}", True, timeout=300)
             return user
         except IntegrityError as e:
-            logger.error(f"Registration integrity error: {e}")
+            logger.error(f"Registration failed on a database constraint: {type(e).__name__}")
             raise serializers.ValidationError({'email': 'This email is already registered.'})
         except Exception as e:
             logger.error(f"Registration error: {e}", exc_info=True)
@@ -228,7 +237,7 @@ class LoginView(APIView):
                     attempts = MAX_LOGIN_ATTEMPTS + 1 # Failsafe
             
             if attempts > MAX_LOGIN_ATTEMPTS:
-                logger.warning(f"Rate limit exceeded for IP {ip}, user {username}")
+                logger.warning(f"Rate limit exceeded for IP {ip}")
                 return Response(
                     error_response(
                         message='Too many login attempts. Please try again later.',
@@ -246,7 +255,7 @@ class LoginView(APIView):
             )
             
             if not user:
-                logger.warning(f"Failed login attempt for {username} from {ip}")
+                logger.warning(f"Failed login attempt from {ip}")
                 return Response(
                     error_response(
                         message='Invalid credentials. Please check your username and password.',
@@ -315,12 +324,12 @@ class LoginView(APIView):
                     )
             except Exception as e:
                 logger.warning(
-                    f"Failed to send security alert for {user.email}: {e}",
+                    f"Failed to send security alert for user_id={user.id}: {e}",
                     exc_info=True,
                 )
             
             duration = (time.time() - start_time) * 1000
-            logger.info(f"User logged in: {user.email} (ID: {user.id}) in {duration:.2f}ms")
+            logger.info(f"User logged in: user_id={user.id} in {duration:.2f}ms")
             
             return Response(
                 success_response(
@@ -400,7 +409,7 @@ class VerifyEmailView(APIView):
             # email on every click, making the emailed link a replayable
             # passwordless login. No tokens, no email, no audit row on replay.
             if user.email_verified:
-                logger.info(f"Verification link replayed for already-verified user {user.email}")
+                logger.info(f"Verification link replayed for already-verified user_id={user.id}")
                 return Response(
                     success_response(data={
                         'already_verified': True,
@@ -423,7 +432,7 @@ class VerifyEmailView(APIView):
             try:
                 send_welcome_email(user, request)
             except Exception as e:
-                logger.warning(f"Welcome email failed for {user.email}: {e}")
+                logger.warning(f"Welcome email failed for user_id={user.id}: {e}")
             
             # Audit log
             request_context = get_request_context(request)
@@ -440,7 +449,7 @@ class VerifyEmailView(APIView):
             # Generate JWT tokens for auto-login
             refresh = RefreshToken.for_user(user)
             
-            logger.info(f"Email verified successfully for {user.email}")
+            logger.info(f"Email verified successfully for user_id={user.id}")
             
             return Response(
                 success_response(
@@ -554,7 +563,7 @@ class VerifyEmailView(APIView):
             # was unreachable by unverified users in the first place).
             refresh = RefreshToken.for_user(user)
             
-            logger.info(f"Email verified via code for {user.email}")
+            logger.info(f"Email verified via code for user_id={user.id}")
             
             return Response(
                 success_response(
@@ -723,7 +732,7 @@ class PasswordResetConfirmView(APIView):
                 user.save()
             
             AuditLog.objects.create(user=user, action='PASSWORD_RESET_COMPLETED', details={'ip': request.META.get('REMOTE_ADDR'), 'request_id': request_id})
-            logger.info(f"Password reset successful for {user.email}")
+            logger.info(f"Password reset successful for user_id={user.id}")
             
             return Response(success_response(message='Password reset successfully'), status=status.HTTP_200_OK)
             
@@ -756,7 +765,7 @@ class ProfileView(generics.RetrieveUpdateAPIView):
                 action='PROFILE_UPDATED',
                 details={'fields': list(request.data.keys()), 'ip': request_context['ip'], 'request_id': request_id}
             )
-            logger.info(f"Profile updated for {request.user.email}")
+            logger.info(f"Profile updated for user_id={request.user.id}")
             return response
         except serializers.ValidationError:
             # Field validation errors are client errors (400), not server failures.
@@ -793,7 +802,7 @@ class UpdateProfileView(generics.UpdateAPIView):
             
             serializer.save()
             AuditLog.objects.create(user=user, action='PROFILE_UPDATED', details={'fields': list(serializer.validated_data.keys())})
-            logger.info(f"Profile updated for {user.email}")
+            logger.info(f"Profile updated for user_id={user.id}")
             
         except serializers.ValidationError:
             raise
@@ -843,12 +852,12 @@ class ChangePasswordView(APIView):
                     )
             except Exception as e:
                 logger.warning(
-                    f"Failed to send security alert for {user.email}: {e}",
+                    f"Failed to send security alert for user_id={user.id}: {e}",
                     exc_info=True,
                 )
             
             AuditLog.objects.create(user=user, action='PASSWORD_CHANGED', details={'ip': request_context['ip'], 'request_id': request_id})
-            logger.info(f"Password changed for {user.email}")
+            logger.info(f"Password changed for user_id={user.id}")
             
             return Response(success_response(message='Password changed successfully'), status=status.HTTP_200_OK)
             
@@ -939,7 +948,7 @@ class ChangeEmailView(APIView):
             cache.delete(f"email_change_code_{user.id}")
             
             AuditLog.objects.create(user=user, action='EMAIL_CHANGED', details={'old_email': old_email, 'new_email': new_email, 'ip': request.META.get('REMOTE_ADDR'), 'request_id': request_id})
-            logger.info(f"Email changed from {old_email} to {new_email} for user {user.id}")
+            logger.info(f"Email changed for user_id={user.id}")
             
             return Response(success_response(message='Email updated successfully'), status=status.HTTP_200_OK)
             
@@ -987,7 +996,7 @@ class ChangeUsernameView(APIView):
                 user.save()
             
             AuditLog.objects.create(user=user, action='USERNAME_CHANGED', details={'old_username': old_username, 'new_username': new_username, 'ip': request.META.get('REMOTE_ADDR'), 'request_id': request_id})
-            logger.info(f"Username changed from {old_username} to {new_username} for user {user.id}")
+            logger.info(f"Username changed for user_id={user.id}")
             
             return Response(success_response(data={'remaining_this_year': USERNAME_CHANGE_LIMIT - user.username_change_count_year}, message='Username updated successfully'), status=status.HTTP_200_OK)
             
@@ -1294,7 +1303,7 @@ class DeleteAccountView(APIView):
             try:
                 send_account_deletion_confirmation(user, request)
             except Exception as e:
-                logger.warning(f"Deletion confirmation email failed for {user.email}: {e}")
+                logger.warning(f"Deletion confirmation email failed for user_id={user.id}: {e}")
             
             request_context = get_request_context(request)
             AuditLog.objects.create(user=user, action='ACCOUNT_DELETION_REQUESTED', details={'scheduled_for': user.deletion_scheduled_for.isoformat(), 'ip': request_context['ip'], 'request_id': request_id})

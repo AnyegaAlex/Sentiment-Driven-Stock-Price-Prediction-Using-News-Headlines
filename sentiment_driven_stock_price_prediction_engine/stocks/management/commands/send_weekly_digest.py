@@ -102,7 +102,7 @@ class Command(BaseCommand):
                         sent += 1
                     except Exception as e:
                         failed += 1
-                        logger.warning(f"Failed to send digest to {user.email}: {e}")
+                        logger.warning(f"Failed to send digest to user_id={user.id}: {e}")
 
             if not dry_run:
                 if not quiet:

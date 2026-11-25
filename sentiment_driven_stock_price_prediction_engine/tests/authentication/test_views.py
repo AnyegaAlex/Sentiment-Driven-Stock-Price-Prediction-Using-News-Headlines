@@ -124,6 +124,8 @@ class TestRegisterView:
             'email': 'new@example.com',
             'password': 'StrongPass123!',
             'password2': 'StrongPass123!',
+            'accept_terms': True,
+            'acknowledge_privacy_notice': True,
             'first_name': 'New',
             'last_name': 'User',
         }
@@ -150,6 +152,8 @@ class TestRegisterView:
             'email': 'test@example.com',  # already exists
             'password': 'StrongPass123!',
             'password2': 'StrongPass123!',
+            'accept_terms': True,
+            'acknowledge_privacy_notice': True,
         }
         with bypass_throttling():
             response = api_client.post(url, data, format='json')
@@ -167,6 +171,8 @@ class TestRegisterView:
             'email': 'new@example.com',
             'password': 'StrongPass123!',
             'password2': 'DifferentPass123!',
+            'accept_terms': True,
+            'acknowledge_privacy_notice': True,
         }
         with bypass_throttling():
             response = api_client.post(url, data, format='json')
@@ -183,6 +189,8 @@ class TestRegisterView:
                 'email': 'new2@example.com',
                 'password': 'StrongPass123!',
                 'password2': 'StrongPass123!',
+                'accept_terms': True,
+                'acknowledge_privacy_notice': True,
             }
             with bypass_throttling():
                 response = api_client.post(url, data, format='json')
