@@ -346,7 +346,7 @@ def send_email_sync(
 
         # --- Fallback: Django SMTP ---
         try:
-            send_mail(
+            sent = send_mail(
                 subject=subject,
                 message=plain_text,
                 from_email=settings.DEFAULT_FROM_EMAIL,

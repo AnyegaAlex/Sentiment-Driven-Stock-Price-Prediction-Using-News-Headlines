@@ -1,0 +1,55 @@
+flowchart TD
+  start[Request or scheduled job]
+  gate{Feature flag / credentials enabled?}
+  hosting[Cloudflare / Vercel / Render managed edge and hosting]
+  db[(PostgreSQL)]
+  redis[(Redis)]
+  market[Market-data provider]
+  news[News provider]
+  mail[SendGrid / Brevo]
+  hf[Hugging Face model load]
+  sentry[Sentry]
+  gh[GitHub Actions]
+  backup[Backup script / S3]
+  telemetry[Google Analytics / Vercel Analytics]
+  api[API response]
+  cacheFallback[LocMemCache fallback]
+  noData[Disabled / unavailable data response]
+  emailConsole[Console email output]
+  noModel[Prediction unavailable]
+  noBackup[No verified backup / restore]
+  noAlert[No alert/rollback evidence]
+
+  start --> hosting
+  hosting -->|Origin/CDN failure| noData
+  hosting -->|Request reaches app| api
+  start --> gate
+  gate -->|Flag false or credential absent| noData
+  gate -->|Enabled| db
+  db -->|Connection error| noData
+  start --> redis
+  redis -->|Not configured in live health| cacheFallback
+  cacheFallback -->|Single-process only| api
+  start --> market
+  market -->|Timeout / quota / provider error| noData
+  start --> news
+  news -->|Flag disabled or provider failure| noData
+  start --> mail
+  mail -->|SendGrid constructor TypeError| mail
+  mail -->|Brevo key absent| emailConsole
+  mail -->|SMTP failure| emailConsole
+  start --> hf
+  hf -->|Download/model error| noModel
+  start --> sentry
+  sentry -->|DSN absent / event dropped| noAlert
+  start --> gh
+  gh -->|Scheduled command no-op or workflow failure| noAlert
+  start --> backup
+  backup -->|pg_dump host/path/command issue or no schedule| noBackup
+  start --> telemetry
+  telemetry -->|Consent/blocking/provider failure| noAlert
+  noData --> api
+  noModel --> api
+  emailConsole --> api
+
+  %% No durable task queue, dead-letter queue, backup restore test or automatic deployment rollback was found.

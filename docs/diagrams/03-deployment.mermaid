@@ -1,0 +1,44 @@
+flowchart TB
+  subgraph DEV["Development"]
+    laptop[Developer workstation]
+    localenv[Local environment variables]
+    vite[Vite dev server]
+    django[Django dev server]
+    laptop -->|local process| vite
+    laptop -->|local process| django
+    localenv -->|process environment| django
+  end
+
+  subgraph SCM["Source and CI/CD"]
+    repo[GitHub public repository]
+    actions[GitHub Actions]
+    secrets[GitHub repository secrets]
+    repo -->|push to master or staging| actions
+    secrets -->|secret injection| actions
+  end
+
+  subgraph STAGE["Staging: deployment target not independently verified"]
+    stageRender[Render staging service]
+    stageDb[(Staging database: unverified)]
+  end
+
+  subgraph PROD["Production: observed topology"]
+    browser[Vercel: intelligence.tickflowcapital.com]
+    cf[Cloudflare API edge]
+    render[Render: Gunicorn API]
+    db[(PostgreSQL: vendor unverified)]
+    redis[(Redis: not configured in live health)]
+    backup[Backup target: not established]
+  end
+
+  actions -->|HTTPS deploy API| stageRender
+  stageRender -->|DATABASE_URL| stageDb
+  actions -->|HTTPS deploy API| browser
+  actions -->|HTTPS deploy API| render
+  browser -->|HTTPS API request| cf
+  cf -->|HTTPS origin| render
+  render -->|PostgreSQL TLS| db
+  render -.->|REDIS_URL absent in live probe| redis
+  render -.->|No scheduled/verified backup flow| backup
+
+  %% The deployed commit SHA, Render dashboard settings, Vercel project settings and backup target are unknown.
