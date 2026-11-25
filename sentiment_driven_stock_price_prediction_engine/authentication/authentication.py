@@ -24,6 +24,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 from .models import UserAPIKey
+from .legal import LegalAcceptanceRequired, enforce_legal_acceptance
 
 # drf-spectacular extension
 try:
@@ -92,6 +93,10 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
                 self._log_auth_attempt(key_obj.user, api_key, success=False, reason='expired')
                 raise exceptions.AuthenticationFailed('API key has expired')
 
+            # Legal gate (GAP-03): checked before usage is counted or success is logged,
+            # so denied requests are not recorded as successful authentications.
+            enforce_legal_acceptance(key_obj.user, request)
+
             # 4. Update last_used timestamp asynchronously
             self._update_last_used_async(key_obj)
             self._count_daily_usage(key_obj)
@@ -103,7 +108,6 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
             request.api_key_obj = key_obj
             request.api_key = api_key
 
-            logger.info(f"API key authentication successful: {key_obj.user.username} - {key_obj.name}")
             return (key_obj.user, None)
 
         except exceptions.AuthenticationFailed:
@@ -114,6 +118,10 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
         except UserAPIKey.DoesNotExist:
             self._log_auth_attempt(None, api_key, success=False, reason='not_found')
             raise exceptions.AuthenticationFailed('Invalid API key')
+
+        except LegalAcceptanceRequired:
+            # Must reach the client as 403 legal_acceptance_required, not a generic auth error.
+            raise
 
         except Exception as e:
             logger.error(f"API key authentication error: {e}", exc_info=True)
@@ -332,7 +340,7 @@ class CustomJWTAuthentication(JWTAuthentication):
                 if hasattr(user, 'deletion_requested_at') and user.deletion_requested_at:
                     raise InvalidToken('User account is scheduled for deletion')
 
-                logger.info(f"JWT authentication successful: {user.username} (ID: {user.id})")
+                logger.info(f"JWT authentication successful: user_id={user.id}")
                 return result
 
             return None

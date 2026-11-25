@@ -15,11 +15,17 @@ All external dependencies (email sending, cache, throttling, JWT) are mocked.
 
 import json
 import pytest
-from authentication.utils import hash_verification_code
+from authentication.utils import (
+    hash_verification_code,
+    generate_weekly_digest_unsubscribe_token,
+    generate_account_deletion_cancellation_token,
+)
 from unittest.mock import patch, MagicMock, Mock
 from datetime import datetime, timedelta
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from django.core.cache import cache
 from django.test import override_settings
 from rest_framework.test import APIClient
@@ -126,6 +132,8 @@ class TestRegisterView:
             'email': 'new@example.com',
             'password': 'StrongPass123!',
             'password2': 'StrongPass123!',
+            'accept_terms': True,
+            'acknowledge_privacy_notice': True,
             'first_name': 'New',
             'last_name': 'User',
         }
@@ -152,6 +160,8 @@ class TestRegisterView:
             'email': 'test@example.com',  # already exists
             'password': 'StrongPass123!',
             'password2': 'StrongPass123!',
+            'accept_terms': True,
+            'acknowledge_privacy_notice': True,
         }
         with bypass_throttling():
             response = api_client.post(url, data, format='json')
@@ -169,6 +179,8 @@ class TestRegisterView:
             'email': 'new@example.com',
             'password': 'StrongPass123!',
             'password2': 'DifferentPass123!',
+            'accept_terms': True,
+            'acknowledge_privacy_notice': True,
         }
         with bypass_throttling():
             response = api_client.post(url, data, format='json')
@@ -185,6 +197,8 @@ class TestRegisterView:
                 'email': 'new2@example.com',
                 'password': 'StrongPass123!',
                 'password2': 'StrongPass123!',
+                'accept_terms': True,
+                'acknowledge_privacy_notice': True,
             }
             with bypass_throttling():
                 response = api_client.post(url, data, format='json')
@@ -511,7 +525,6 @@ class TestUpdateProfileView:
 
     def test_update_profile_username_limit(self, auth_client, test_user):
         """Username change limited to 2 per year."""
-        from django.utils import timezone
         test_user.username_change_year = timezone.now().year
         test_user.username_change_count_year = 2
         test_user.save()
@@ -836,6 +849,7 @@ class TestUserPreferencesView:
         assert data['investment_goal'] == 'growth'
         assert data['risk_tolerance'] == 'moderate'
         assert data['watchlist'] == []
+        assert data['weekly_digest'] is False
         # Preferences should have been created
         assert UserPreferences.objects.filter(user=test_user).exists()
 
@@ -856,6 +870,69 @@ class TestUserPreferencesView:
         response = auth_client.patch(url, data, format='json')
         assert response.status_code == 400
         assert 'Validation failed' in response.json()['error']
+
+
+    def test_weekly_digest_opt_in_is_explicit_and_timestamped(self, auth_client, test_user):
+        response = auth_client.patch(
+            reverse('user-preferences'), {'weekly_digest': True}, format='json'
+        )
+        assert response.status_code == 200
+        preferences = UserPreferences.objects.get(user=test_user)
+        assert preferences.weekly_digest is True
+        assert preferences.weekly_digest_opted_in_at is not None
+        assert preferences.weekly_digest_unsubscribed_at is None
+        assert AuditLog.objects.filter(
+            user=test_user, action='WEEKLY_DIGEST_OPTED_IN'
+        ).exists()
+
+    def test_weekly_digest_opt_out_is_timestamped(self, auth_client, test_user):
+        preferences = UserPreferences.objects.create(
+            user=test_user,
+            weekly_digest=True,
+            weekly_digest_opted_in_at=timezone.now() - timedelta(days=1),
+        )
+        response = auth_client.patch(
+            reverse('user-preferences'), {'weekly_digest': False}, format='json'
+        )
+        assert response.status_code == 200
+        preferences.refresh_from_db()
+        assert preferences.weekly_digest is False
+        assert preferences.weekly_digest_unsubscribed_at is not None
+        assert AuditLog.objects.filter(
+            user=test_user, action='WEEKLY_DIGEST_UNSUBSCRIBED'
+        ).exists()
+
+    def test_weekly_digest_email_unsubscribe_does_not_require_login(self, test_user):
+        preferences = UserPreferences.objects.create(
+            user=test_user,
+            weekly_digest=True,
+            weekly_digest_opted_in_at=timezone.now(),
+        )
+        uid = urlsafe_base64_encode(force_bytes(test_user.pk))
+        token = generate_weekly_digest_unsubscribe_token(test_user)
+        response = APIClient().post(
+            reverse('weekly-digest-unsubscribe'),
+            {'uid': uid, 'token': token},
+            format='json',
+        )
+        assert response.status_code == 200
+        preferences.refresh_from_db()
+        assert preferences.weekly_digest is False
+        assert preferences.weekly_digest_unsubscribed_at is not None
+
+    def test_weekly_digest_unsubscribe_rejects_invalid_token(self, test_user):
+        preferences = UserPreferences.objects.create(
+            user=test_user, weekly_digest=True, weekly_digest_opted_in_at=timezone.now()
+        )
+        uid = urlsafe_base64_encode(force_bytes(test_user.pk))
+        response = APIClient().post(
+            reverse('weekly-digest-unsubscribe'),
+            {'uid': uid, 'token': '0' * 64},
+            format='json',
+        )
+        assert response.status_code == 400
+        preferences.refresh_from_db()
+        assert preferences.weekly_digest is True
 
 
 # ============================================================================
@@ -932,6 +1009,25 @@ class TestDeleteAccountView:
         assert AuditLog.objects.filter(user=test_user, action='ACCOUNT_DELETION_REQUESTED').exists()
         mock_email_send.assert_called_once()
 
+    def test_delete_account_email_failure_restores_account(self, auth_client, test_user):
+        """A failed cancellation email must not leave the account deactivated."""
+        from unittest.mock import patch
+        with patch('authentication.views.send_account_deletion_confirmation', return_value=False):
+            response = auth_client.post(
+                reverse('delete-account'),
+                {'password': 'testpass123', 'confirm': 'DELETE'},
+                format='json',
+            )
+        assert response.status_code == 503
+        assert response.json()['code'] == 'DELETION_CONFIRMATION_EMAIL_FAILED'
+        test_user.refresh_from_db()
+        assert test_user.is_active is True
+        assert test_user.deletion_requested_at is None
+        assert test_user.deletion_scheduled_for is None
+        assert not AuditLog.objects.filter(
+            user=test_user, action='ACCOUNT_DELETION_REQUESTED'
+        ).exists()
+
     def test_delete_account_invalid_password(self, auth_client):
         """Wrong password returns 400."""
         url = reverse('delete-account')
@@ -955,24 +1051,55 @@ class TestDeleteAccountView:
 
 class TestCancelDeletionView:
 
-    def test_cancel_deletion_success(self, auth_client, test_user):
-        """Cancel pending deletion restores account."""
+    def test_cancel_deletion_success_from_email_link(self, test_user):
+        """The email cancellation link works even though the account is inactive."""
         test_user.is_active = False
         test_user.deletion_requested_at = timezone.now()
         test_user.deletion_scheduled_for = timezone.now() + timedelta(days=30)
         test_user.save()
-        url = reverse('cancel-deletion')
-        response = auth_client.post(url)
+        uid = urlsafe_base64_encode(force_bytes(test_user.pk))
+        token = generate_account_deletion_cancellation_token(test_user)
+        response = APIClient().post(
+            reverse('cancel-deletion'),
+            {'uid': uid, 'token': token},
+            format='json',
+        )
         assert response.status_code == 200
         test_user.refresh_from_db()
         assert test_user.is_active is True
         assert test_user.deletion_requested_at is None
         assert test_user.deletion_scheduled_for is None
-        assert AuditLog.objects.filter(user=test_user, action='ACCOUNT_DELETION_CANCELLED').exists()
+        assert AuditLog.objects.filter(
+            user=test_user, action='ACCOUNT_DELETION_CANCELLED'
+        ).exists()
 
-    def test_cancel_deletion_no_pending(self, auth_client):
-        """No pending deletion returns 400."""
-        url = reverse('cancel-deletion')
-        response = auth_client.post(url)
+    def test_cancel_deletion_rejects_expired_grace_period(self, test_user):
+        test_user.is_active = False
+        test_user.deletion_requested_at = timezone.now() - timedelta(days=31)
+        test_user.deletion_scheduled_for = timezone.now() - timedelta(seconds=1)
+        test_user.save()
+        uid = urlsafe_base64_encode(force_bytes(test_user.pk))
+        token = generate_account_deletion_cancellation_token(test_user)
+        response = APIClient().post(
+            reverse('cancel-deletion'),
+            {'uid': uid, 'token': token},
+            format='json',
+        )
         assert response.status_code == 400
-        assert 'No pending deletion request' in response.json()['error']
+        test_user.refresh_from_db()
+        assert test_user.is_active is False
+
+    def test_cancel_deletion_rejects_invalid_token(self, test_user):
+        test_user.is_active = False
+        test_user.deletion_requested_at = timezone.now()
+        test_user.deletion_scheduled_for = timezone.now() + timedelta(days=30)
+        test_user.save()
+        uid = urlsafe_base64_encode(force_bytes(test_user.pk))
+        response = APIClient().post(
+            reverse('cancel-deletion'),
+            {'uid': uid, 'token': '0' * 64},
+            format='json',
+        )
+        assert response.status_code == 400
+        test_user.refresh_from_db()
+        assert test_user.is_active is False

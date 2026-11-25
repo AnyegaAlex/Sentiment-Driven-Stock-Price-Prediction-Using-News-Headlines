@@ -1,0 +1,39 @@
+sequenceDiagram
+  autonumber
+  actor User
+  participant SPA as React SPA
+  participant API as Django API
+  participant DB as PostgreSQL
+  participant Mail as SendGrid/Brevo/console
+
+  User->>SPA: Submit signup
+  SPA->>API: POST /api/v1/auth/register/
+  API->>DB: Validate and create User/preferences/audit
+  API->>Mail: Render and send verification email synchronously
+  Mail-->>API: Provider result or fallback result
+  API-->>SPA: Registration response; no JWT yet
+
+  User->>SPA: Submit verification code
+  SPA->>API: POST /api/v1/auth/verify-email/
+  API->>DB: Mark email verified
+  API-->>SPA: Access and refresh JWT pair
+
+  User->>SPA: Login
+  SPA->>API: POST /api/v1/auth/login/
+  API->>DB: Authenticate user
+  API-->>SPA: Access and refresh JWT pair
+
+  User->>SPA: Open protected page
+  SPA->>API: HTTPS request with Authorization: Bearer access
+  API->>DB: Resolve user and execute view
+  API-->>SPA: Protected response
+
+  SPA->>API: POST /api/v1/auth/refresh/ with refresh token
+  API->>DB: Rotate token and blacklist old token
+  API-->>SPA: New access and refresh pair
+  Note over SPA: Source client stores new access token but does not persist rotated refresh token.
+
+  SPA->>API: POST /api/v1/auth/logout/
+  API-->>SPA: 404; no backend logout route is registered
+  Note over SPA,API: Client clears local state. Server-side logout revocation is not implemented by this route.
+  Note over SPA,API: No terms/privacy acceptance gate is present in registration, login or protected request path.

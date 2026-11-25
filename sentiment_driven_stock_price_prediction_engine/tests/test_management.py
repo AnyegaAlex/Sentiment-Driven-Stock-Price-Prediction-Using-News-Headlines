@@ -278,11 +278,13 @@ class TestSendWeeklyDigestCommand:
         user1 = UserFactory(email_verified=True)
         prefs1 = user1.user_preferences
         prefs1.weekly_digest = True
+        prefs1.weekly_digest_opted_in_at = timezone.now()
         prefs1.save()
 
         user2 = UserFactory(email_verified=True)
         prefs2 = user2.user_preferences
         prefs2.weekly_digest = True
+        prefs2.weekly_digest_opted_in_at = timezone.now()
         prefs2.save()
 
         user3 = UserFactory(email_verified=True)
@@ -300,12 +302,28 @@ class TestSendWeeklyDigestCommand:
             out = io.StringIO()
             call_command('send_weekly_digest', stdout=out)
             assert mock_send.call_count == 2
-            assert "Successfully sent" in out.getvalue()
+            assert "/unsubscribe-weekly-digest?uid=" in mock_send.call_args_list[0].kwargs['html_content']
+            assert "Unsubscribe:" in mock_send.call_args_list[0].kwargs['plain_content']
+            assert "Successfully sent" in out.getvalue() or "run complete" in out.getvalue()
+
+    def test_send_weekly_digest_requires_opt_in_timestamp(self):
+        user = UserFactory(email_verified=True)
+        prefs = user.user_preferences
+        prefs.weekly_digest = True
+        prefs.weekly_digest_opted_in_at = None
+        prefs.save()
+
+        with patch('stocks.management.commands.send_weekly_digest.send_email_sync') as mock_send:
+            out = io.StringIO()
+            call_command('send_weekly_digest', stdout=out)
+            mock_send.assert_not_called()
+            assert 'No users opted in' in out.getvalue()
 
     def test_send_weekly_digest_dry_run(self):
         user = UserFactory(email_verified=True)
         prefs = user.user_preferences
         prefs.weekly_digest = True
+        prefs.weekly_digest_opted_in_at = timezone.now()
         prefs.save()
 
         with patch('stocks.management.commands.send_weekly_digest.send_email_sync') as mock_send:
@@ -318,6 +336,7 @@ class TestSendWeeklyDigestCommand:
         user = UserFactory(email_verified=True)
         prefs = user.user_preferences
         prefs.weekly_digest = True
+        prefs.weekly_digest_opted_in_at = timezone.now()
         prefs.save()
 
         with patch('stocks.management.commands.send_weekly_digest.send_email_sync') as mock_send:

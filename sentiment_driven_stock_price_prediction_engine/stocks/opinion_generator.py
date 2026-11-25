@@ -27,6 +27,7 @@ from enum import Enum
 from dataclasses import dataclass
 
 import requests
+from sentiment_driven_stock_price_prediction_engine.log_safety import describe_exception
 from pydantic import BaseModel, Field, field_validator
 from django.core.cache import cache
 from django.utils import timezone
@@ -418,7 +419,7 @@ class TechnicalAnalyzer:
             return df
 
         except Exception as e:
-            logger.warning(f"Finnhub fetch failed for {symbol}: {e}")
+            logger.warning(f"Finnhub fetch failed for {symbol}: {describe_exception(e)}")
             return pd.DataFrame()
 
     def _fetch_from_twelvedata(self, symbol: str):
@@ -462,7 +463,7 @@ class TechnicalAnalyzer:
             return df
 
         except Exception as e:
-            logger.warning(f"Twelve Data fetch failed for {symbol}: {e}")
+            logger.warning(f"Twelve Data fetch failed for {symbol}: {describe_exception(e)}")
             return pd.DataFrame()
 
     def _fetch_from_yahoo(self, symbol: str):
@@ -497,7 +498,7 @@ class TechnicalAnalyzer:
                         logger.warning(f"Rate limited for {symbol}, waiting {Config.RETRY_DELAY * 2}s...")
                         time.sleep(Config.RETRY_DELAY * 2 * (attempt + 1))
                         continue
-                    logger.warning(f"Yahoo Finance failed for {symbol}: {e}")
+                    logger.warning(f"Yahoo Finance failed for {symbol}: {describe_exception(e)}")
                     time.sleep(Config.RETRY_DELAY)
                     continue
 
@@ -537,7 +538,7 @@ class TechnicalAnalyzer:
                 return df
 
         except Exception as e:
-            logger.warning(f"Alpha Vantage failed for {symbol}: {e}")
+            logger.warning(f"Alpha Vantage failed for {symbol}: {describe_exception(e)}")
 
         return pd.DataFrame()
 
@@ -657,7 +658,7 @@ class TechnicalAnalyzer:
         except DataUnavailableError:
             raise
         except Exception as e:
-            logger.error(f"Technical analysis failed for {symbol}: {str(e)}")
+            logger.error(f"Technical analysis failed for {symbol}: {describe_exception(e)}")
             raise DataUnavailableError(symbol, "analysis failed") from e
 
     def _calculate_rsi(self, closes, window: int = 14) -> float:
@@ -783,7 +784,7 @@ class InstitutionalAnalysisEngine:
             return result
 
         except Exception as e:
-            logger.error(f"Analysis failed for {self.symbol}: {str(e)}")
+            logger.error(f"Analysis failed for {self.symbol}: {describe_exception(e)}")
             return self._error_response(str(e))
         finally:
             gc.collect()
@@ -926,7 +927,7 @@ def generate_stock_opinion(symbol: str, risk_type: str = "medium", news_text: st
         return result
 
     except ValueError as e:
-        logger.error(f"Validation error for {symbol}: {str(e)}")
+        logger.error(f"Validation error for {symbol}: {describe_exception(e)}")
         return {
             "error": str(e),
             "symbol": symbol,
@@ -934,7 +935,7 @@ def generate_stock_opinion(symbol: str, risk_type: str = "medium", news_text: st
             "status": "failed"
         }
     except Exception as e:
-        logger.error(f"Unexpected error generating opinion for {symbol}: {str(e)}")
+        logger.error(f"Unexpected error generating opinion for {symbol}: {describe_exception(e)}")
         return {
             "error": "Internal analysis error",
             "symbol": symbol,
@@ -1158,5 +1159,5 @@ def build_technical_payload(symbol: str, timeframe: str = "1d"):
             "sma_200_series": _series(closes.rolling(200).mean(), window),
         }
     except Exception as exc:
-        logger.error(f"Technical payload failed for {symbol}: {exc}")
+        logger.error(f"Technical payload failed for {symbol}: {describe_exception(exc)}")
         return None

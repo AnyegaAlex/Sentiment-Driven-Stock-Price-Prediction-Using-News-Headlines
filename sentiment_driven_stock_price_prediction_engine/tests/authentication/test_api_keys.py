@@ -11,7 +11,10 @@ from authentication.models import User, UserAPIKey
 
 @pytest.fixture
 def test_user(db):
-    return User.objects.create_user(username="testuser", email="test@example.com", password="password123")
+    user = User.objects.create_user(username="testuser", email="test@example.com", password="password123")
+    TermsAcceptance.objects.create(user=user, version=TERMS.version, content_hash=TERMS.sha256)
+    PrivacyNoticeAcknowledgement.objects.create(user=user, version=PRIVACY_NOTICE.version, content_hash=PRIVACY_NOTICE.sha256)
+    return user
 
 @pytest.mark.django_db
 class TestAPIKeys:

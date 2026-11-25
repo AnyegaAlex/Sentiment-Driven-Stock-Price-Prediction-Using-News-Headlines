@@ -165,8 +165,8 @@ def mock_finnhub():
 
 # The FIXED fixture
 @pytest.fixture(autouse=True)
-def mock_sendgrid():
-    """Mock SendGrid email sending to avoid network calls."""
+def mock_transactional_email():
+    """Mock transactional email delivery to avoid network calls in unrelated tests."""
     with patch("authentication.utils.send_email_sync") as mock_send:
         mock_send.return_value = True
         yield mock_send

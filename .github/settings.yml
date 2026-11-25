@@ -1,11 +1,28 @@
-branch_protection:
-  - name: main
-    required_reviewers: 1
-    required_checks:
-      - test
-      - build
+branches:
+  - name: master
+    protection:
+      required_pull_request_reviews:
+        required_approving_review_count: 1
+        dismiss_stale_reviews: true
+        require_code_owner_reviews: false
+      required_status_checks:
+        strict: true
+        contexts:
+          - "CI / Backend tests"
+          - "CI / Frontend checks"
+      enforce_admins: true
+      restrictions: null
+
   - name: staging
-    required_reviewers: 0
-    required_checks:
-      - test
-      - build
+    protection:
+      required_pull_request_reviews:
+        required_approving_review_count: 0
+        dismiss_stale_reviews: true
+        require_code_owner_reviews: false
+      required_status_checks:
+        strict: true
+        contexts:
+          - "CI / Backend tests"
+          - "CI / Frontend checks"
+      enforce_admins: true
+      restrictions: null

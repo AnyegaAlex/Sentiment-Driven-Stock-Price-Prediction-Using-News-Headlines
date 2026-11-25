@@ -56,6 +56,8 @@ class TestAuditLog:
             "email": "audit@example.com",
             "password": "SecurePass123!",
             "password2": "SecurePass123!",
+            "accept_terms": True,
+            "acknowledge_privacy_notice": True,
             "first_name": "Audit",
             "last_name": "User",
         }

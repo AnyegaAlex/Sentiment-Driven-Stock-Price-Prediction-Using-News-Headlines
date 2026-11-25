@@ -1,0 +1,136 @@
+name: Verify Render Deployment
+description: Verify a CI-approved commit is live on a Render service, triggering it only when auto-deploy is off.
+inputs:
+  api-key:
+    description: Render API key
+    required: true
+  service-id:
+    description: Render service ID
+    required: true
+  commit-sha:
+    description: Commit SHA approved by CI
+    required: true
+  timeout-seconds:
+    description: Maximum seconds to wait for the deployment
+    required: false
+    default: "1800"
+
+runs:
+  using: composite
+  steps:
+    - name: Wait for the approved commit to become live
+      shell: bash
+      env:
+        RENDER_API_KEY: ${{ inputs.api-key }}
+        RENDER_SERVICE_ID: ${{ inputs.service-id }}
+        COMMIT_SHA: ${{ inputs.commit-sha }}
+        TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+      run: |
+        set -euo pipefail
+
+        response_file="$(mktemp)"
+        trap 'rm -f "$response_file"' EXIT
+
+        http_status="$(curl --silent --show-error \
+          --output "$response_file" \
+          --write-out '%{http_code}' \
+          --url "https://api.render.com/v1/services/${RENDER_SERVICE_ID}" \
+          --header "Authorization: Bearer ${RENDER_API_KEY}" \
+          --header 'Accept: application/json')"
+
+        if [[ "$http_status" != "200" ]]; then
+          echo "::error::Could not read Render service configuration (HTTP $http_status)."
+          jq -c . "$response_file" 2>/dev/null || cat "$response_file"
+          exit 1
+        fi
+
+        auto_deploy="$(jq -r '.autoDeployTrigger // (if .autoDeploy == "yes" then "commit" elif .autoDeploy == "no" then "off" else "unknown" end)' "$response_file")"
+        echo "Render auto-deploy mode: $auto_deploy"
+
+        case "$auto_deploy" in
+          off)
+            echo "Render auto-deploy is off; triggering this exact CI-approved commit."
+            http_status="$(curl --silent --show-error \
+              --output "$response_file" \
+              --write-out '%{http_code}' \
+              --request POST \
+              --url "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+              --header "Authorization: Bearer ${RENDER_API_KEY}" \
+              --header 'Accept: application/json' \
+              --header 'Content-Type: application/json' \
+              --data "$(jq -cn --arg commit "$COMMIT_SHA" '{commitId: $commit}')")"
+
+            if [[ "$http_status" != "201" && "$http_status" != "202" ]]; then
+              echo "::error::Render deploy request failed (HTTP $http_status)."
+              jq -c . "$response_file" 2>/dev/null || cat "$response_file"
+              exit 1
+            fi
+            ;;
+          checksPass)
+            echo "::error::Set Render Auto-Deploy to 'Off'. This workflow deploys after CI completes and then verifies the deploy; using Render's 'After CI Checks Pass' mode can create a circular check dependency."
+            exit 1
+            ;;
+          commit)
+            echo "::error::Render is set to deploy on every commit. Set Auto-Deploy to 'Off' so this workflow deploys only after CI succeeds."
+            exit 1
+            ;;
+          *)
+            echo "::error::Render returned an unknown auto-deploy mode: $auto_deploy."
+            exit 1
+            ;;
+        esac
+
+        deadline=$((SECONDS + TIMEOUT_SECONDS))
+        while (( SECONDS < deadline )); do
+          http_status="$(curl --silent --show-error \
+            --output "$response_file" \
+            --write-out '%{http_code}' \
+            --get \
+            --url "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+            --data-urlencode 'limit=20' \
+            --header "Authorization: Bearer ${RENDER_API_KEY}" \
+            --header 'Accept: application/json')"
+
+          if [[ "$http_status" != "200" ]]; then
+            echo "::error::Could not retrieve Render deploy history (HTTP $http_status)."
+            jq -c . "$response_file" 2>/dev/null || cat "$response_file"
+            exit 1
+          fi
+
+          deployment="$(jq -c --arg sha "$COMMIT_SHA" '
+            [.[]? | .deploy | select(.commit.id == $sha)]
+            | sort_by(.createdAt)
+            | last // empty
+          ' "$response_file")"
+
+          if [[ -z "$deployment" ]]; then
+            echo "No Render deployment found for commit $COMMIT_SHA yet."
+            sleep 15
+            continue
+          fi
+
+          status="$(jq -er '.status' <<<"$deployment")"
+          deploy_id="$(jq -r '.id' <<<"$deployment")"
+          echo "Render deployment $deploy_id status: $status"
+
+          case "$status" in
+            live)
+              echo "Render deployment is live."
+              exit 0
+              ;;
+            build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
+              echo "::error::Render deployment ended with status: $status."
+              exit 1
+              ;;
+            created|queued|build_in_progress|update_in_progress|pre_deploy_in_progress)
+              sleep 15
+              ;;
+            *)
+              echo "::error::Render returned an unrecognised deploy status: $status."
+              exit 1
+              ;;
+          esac
+        done
+
+        echo "::error::Timed out waiting for the Render deployment to become live."
+        exit 1

@@ -29,6 +29,8 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+from .log_safety import scrub_event_or_drop, scrub_value  # noqa: E402
+
 # ============================================================================
 # CONSTANTS
 # ============================================================================
@@ -36,7 +38,7 @@ logger = logging.getLogger(__name__)
 # Default values
 DEFAULT_ENVIRONMENT = 'production'
 DEFAULT_TRACES_SAMPLE_RATE = 0.1  # 10% of transactions
-DEFAULT_PROFILES_SAMPLE_RATE = 0.1  # 10% of profiles
+DEFAULT_PROFILES_SAMPLE_RATE = 0.0  # Profiling is opt-in
 DEFAULT_RELEASE = None
 APP_VERSION = getattr(settings, 'APP_VERSION', '1.0.0')
 
@@ -56,14 +58,18 @@ def get_sentry_config() -> Dict[str, Any]:
         'dsn': getattr(settings, 'SENTRY_DSN', None),
         'environment': getattr(settings, 'SENTRY_ENVIRONMENT', DEFAULT_ENVIRONMENT),
         'traces_sample_rate': float(getattr(settings, 'SENTRY_TRACES_SAMPLE_RATE', DEFAULT_TRACES_SAMPLE_RATE)),
-        'profiles_sample_rate': float(getattr(settings, 'SENTRY_PROFILES_SAMPLE_RATE', DEFAULT_PROFILES_SAMPLE_RATE)),
+        'profiles_sample_rate': (
+            float(getattr(settings, 'SENTRY_PROFILES_SAMPLE_RATE', DEFAULT_PROFILES_SAMPLE_RATE))
+            if getattr(settings, 'SENTRY_ENABLE_PROFILING', False)
+            else 0.0
+        ),
         'release': getattr(settings, 'SENTRY_RELEASE', DEFAULT_RELEASE),
         'debug': getattr(settings, 'SENTRY_DEBUG', False),
-        'send_default_pii': getattr(settings, 'SENTRY_SEND_PII', True),
+        'send_default_pii': getattr(settings, 'SENTRY_SEND_PII', False),
         'attach_stacktrace': getattr(settings, 'SENTRY_ATTACH_STACKTRACE', True),
         'max_breadcrumbs': getattr(settings, 'SENTRY_MAX_BREADCRUMBS', 100),
         'enable_tracing': getattr(settings, 'SENTRY_ENABLE_TRACING', True),
-        'enable_profiling': getattr(settings, 'SENTRY_ENABLE_PROFILING', True),
+        'enable_profiling': getattr(settings, 'SENTRY_ENABLE_PROFILING', False),
     }
 
 
@@ -76,10 +82,13 @@ def is_sentry_enabled() -> bool:
     """
     dsn = getattr(settings, 'SENTRY_DSN', None)
     
-    # Disable in test environment
+    # Never send test-runner or local DEBUG events to the production project by
+    # default. Local capture requires an explicit opt-in and a development DSN.
     if getattr(settings, 'TESTING', False):
         return False
-    
+    if getattr(settings, 'DEBUG', False) and not getattr(settings, 'SENTRY_ENABLE_IN_DEBUG', False):
+        return False
+
     # Disable if DSN is not set
     if not dsn:
         return False
@@ -94,20 +103,15 @@ def get_environment() -> str:
     Returns:
         str: Environment name
     """
-    env = getattr(settings, 'SENTRY_ENVIRONMENT', DEFAULT_ENVIRONMENT)
-    
-    # Auto-detect environment if not set
-    if not env or env == DEFAULT_ENVIRONMENT:
-        if getattr(settings, 'DEBUG', False):
-            return 'development'
-        elif 'RENDER' in os.environ:
-            return 'render'
-        elif 'HEROKU' in os.environ:
-            return 'heroku'
-        elif 'AWS_EXECUTION_ENV' in os.environ:
-            return 'aws'
-    
-    return env
+    # Respect an explicitly configured environment. Do not relabel production
+    # as "render" or "aws" merely because of its hosting provider.
+    configured = os.environ.get('SENTRY_ENVIRONMENT')
+    if configured:
+        return configured
+
+    if getattr(settings, 'DEBUG', False):
+        return 'development'
+    return DEFAULT_ENVIRONMENT
 
 
 def get_release() -> Optional[str]:
@@ -161,23 +165,24 @@ def before_send(event: Dict, hint: Dict) -> Optional[Dict]:
         if '/sentry-debug/' in url or '/debug/' in url:
             return None
     
-    # Remove sensitive data from URLs
-    if 'request' in event and 'url' in event['request']:
-        import re
-        # Remove API keys from URLs
-        event['request']['url'] = re.sub(
-            r'(?<=[?&])api_key=[^&]+',
-            'api_key=[REDACTED]',
-            event['request']['url']
-        )
-        # Remove tokens from URLs
-        event['request']['url'] = re.sub(
-            r'(?<=[?&])token=[^&]+',
-            'token=[REDACTED]',
-            event['request']['url']
-        )
+    # Query strings and fragments can contain reset links, verification codes,
+    # email addresses and credentials. Keep only the request origin and path.
+    if 'request' in event and isinstance(event['request'].get('url'), str):
+        from urllib.parse import urlsplit, urlunsplit
+        try:
+            parts = urlsplit(event['request']['url'])
+            event['request']['url'] = urlunsplit(
+                (parts.scheme, parts.netloc, parts.path, '', '')
+            )
+        except ValueError:
+            event['request']['url'] = event['request']['url'].split('?', 1)[0].split('#', 1)[0]
     
-    return event
+    # Scrub credentials and email addresses from the whole event. On failure the
+    # event is dropped, never sent unscrubbed.
+    scrubbed = scrub_event_or_drop(event)
+    if scrubbed is None:
+        logger.warning("Sentry event dropped: scrubber failed")
+    return scrubbed
 
 
 def before_breadcrumb(crumb: Dict, hint: Dict) -> Dict:
@@ -199,7 +204,10 @@ def before_breadcrumb(crumb: Dict, hint: Dict) -> Dict:
     if crumb.get('category') == 'http' and '/static/' in str(crumb.get('data', {})):
         return None
     
-    return crumb
+    try:
+        return scrub_value(crumb)
+    except Exception:
+        return None
 
 
 # ============================================================================
@@ -254,6 +262,7 @@ def init_sentry() -> bool:
             traces_sample_rate=config['traces_sample_rate'],
             profiles_sample_rate=config['profiles_sample_rate'],
             send_default_pii=config['send_default_pii'],
+            include_local_variables=False,
             attach_stacktrace=config['attach_stacktrace'],
             max_breadcrumbs=config['max_breadcrumbs'],
             enable_tracing=config['enable_tracing'],
@@ -360,13 +369,10 @@ def set_user_context(user):
         return
     
     try:
-        sentry_sdk.set_user({
-            'id': str(user.id),
-            'username': getattr(user, 'username', None),
-            'email': getattr(user, 'email', None),
-            'tier': getattr(user, 'tier', None),
-            'persona': getattr(user, 'persona', None),
-        })
+        # Do not attach account identifiers or profile attributes to Sentry.
+        # send_default_pii is controlled separately, but this helper never
+        # adds user IDs, email, usernames, persona or risk-related attributes.
+        sentry_sdk.set_user(None)
     except Exception as e:
         logger.warning(f"Failed to set user context: {e}")
 
@@ -379,11 +385,13 @@ def set_request_context(request):
         request: Django request object
     """
     try:
+        # Keep request context useful without collecting IP or device identifiers.
+        resolver_match = getattr(request, 'resolver_match', None)
         sentry_sdk.set_context('request', {
             'method': request.method,
-            'path': request.path,
-            'ip': request.META.get('REMOTE_ADDR'),
-            'user_agent': request.META.get('HTTP_USER_AGENT'),
+            # Use the route template, not the concrete path, which may contain
+            # account IDs, email addresses, reset tokens or verification codes.
+            'route': getattr(resolver_match, 'route', None),
         })
     except Exception as e:
         logger.warning(f"Failed to set request context: {e}")

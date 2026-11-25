@@ -240,13 +240,15 @@ export const AuthService = {
    * @param {string} params.password2
    * @returns {Promise<{ success: boolean, user?: Object, error?: string, code?: number, details?: Object }>}
    */
-  async register({ username, email, password, password2 }) {
+  async register({ username, email, password, password2, acceptTerms, acknowledgePrivacyNotice }) {
     try {
       const response = await apiClient.post('/auth/register/', {
         username: username.trim(),
         email: email.trim().toLowerCase(),
         password,
         password2,
+        accept_terms: acceptTerms === true,
+        acknowledge_privacy_notice: acknowledgePrivacyNotice === true,
       });
 
       const payload = extract(response);
