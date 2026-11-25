@@ -33,6 +33,12 @@ def clear_cache():
 
 
 @pytest.fixture(autouse=True)
+def in_memory_email_backend(settings):
+    """Never send real email from tests, including when production uses SMTP."""
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+
+
+@pytest.fixture(autouse=True)
 def plain_static_storage(settings):
     """
     Tests do not run collectstatic, so the production manifest storage has no entries
@@ -53,9 +59,10 @@ def api_client():
 
 @pytest.fixture
 def auth_client(api_client, user):
-    """Return an authenticated API client."""
-    api_client.force_authenticate(user=user)
-    return api_client
+    """Return a client authenticated through the application's API-key path."""
+    from tests.factories import authenticate_api_client
+
+    return authenticate_api_client(api_client, user, name="Pytest API Client")
 
 
 @pytest.fixture
