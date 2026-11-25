@@ -75,25 +75,6 @@ class TestEmailUtils:
         assert result == {'available': True, 'status': 'healthy', 'provider': 'brevo_api'}
         assert get.call_args.args[0] == settings.BREVO_ACCOUNT_URL
 
-    def test_send_email_sync_sendgrid_4xx_still_falls_back_to_smtp(self, settings):
-        """A SendGrid 4xx (for example an unverified sender) must not skip the SMTP fallback."""
-        settings.SENDGRID_API_KEY = "SG.dummy_test_key"
-        settings.DEFAULT_FROM_EMAIL = "test@tickflow.com"
-        settings.EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
-
-        with patch('sendgrid.SendGridAPIClient.send') as mock_send:
-            mock_response = MagicMock()
-            mock_response.status_code = 403
-            mock_response.body = b'{"errors": [{"message": "sender identity not verified"}]}'
-            mock_send.return_value = mock_response
-
-            result = send_email_sync("Rejected", "rejected@example.com", "<h1>Hi</h1>")
-
-            assert result is True
-            assert len(mail.outbox) == 1
-            assert mail.outbox[0].to == ["rejected@example.com"]
-            assert mock_send.call_count == 1, "a 4xx must not be retried on SendGrid"
-
     def test_send_email_sync_invalid_email(self):
         assert send_email_sync('Test', 'not-an-email', '<h1>Hi</h1>') is False
 

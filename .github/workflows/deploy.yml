@@ -1,56 +1,171 @@
-# .github/workflows/deploy.yml
-# Deploy Tickflow Intelligence - CI/CD Pipeline
-# Backend: Render (Django), Frontend: Vercel (React)
-# Monitoring: Sentry (error tracking)
-
 name: Deploy Tickflow Sentiment
 
 on:
-  push:
-    branches: [master, staging]
-  pull_request:
-    branches: [master]
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - master
+      - staging
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
 
 jobs:
   deploy-staging:
     name: Deploy to Staging
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'staging'
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/staging'
-    
+    timeout-minutes: 35
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Deploy to Render (Staging)
-        uses: johnbeynon/render-deploy-action@v0.0.8
+      - name: Check out deployment action
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          service-id: ${{ secrets.RENDER_STAGING_SERVICE_ID }}
+          persist-credentials: false
+
+      - name: Validate staging deployment credentials
+        shell: bash
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_STAGING_SERVICE_ID }}
+        run: |
+          set -euo pipefail
+          : "${RENDER_API_KEY:?Missing GitHub Actions secret RENDER_API_KEY}"
+          : "${RENDER_SERVICE_ID:?Missing GitHub Actions secret RENDER_STAGING_SERVICE_ID}"
+
+      - name: Verify Render staging deployment
+        uses: ./.github/actions/render-deploy
+        with:
           api-key: ${{ secrets.RENDER_API_KEY }}
-          wait-for-success: true
+          service-id: ${{ secrets.RENDER_STAGING_SERVICE_ID }}
+          commit-sha: ${{ github.event.workflow_run.head_sha }}
 
   deploy-production:
     name: Deploy to Production
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'master'
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
-    
+    timeout-minutes: 60
+    environment: production
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Deploy backend to Render
-        uses: johnbeynon/render-deploy-action@v0.0.8
+      - name: Check out deployment action
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          service-id: ${{ secrets.RENDER_PRODUCTION_SERVICE_ID }}
-          api-key: ${{ secrets.RENDER_API_KEY }}
-          wait-for-success: true
-      
-      - name: Deploy frontend to Vercel
+          persist-credentials: false
+
+      - name: Validate production deployment credentials
+        shell: bash
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_PRODUCTION_SERVICE_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID || 'team_Utlh28zYWtXDjnSOGZVoQpzb' }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || 'prj_Y4FfgXHUnOMMJqeHHNFz3R0U58e4' }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: |
-          cd frontend
-          npm install -g vercel
-          vercel --prod --token ${{ secrets.VERCEL_TOKEN }}
-      
-      - name: Notify Sentry of release
+          set -euo pipefail
+          : "${RENDER_API_KEY:?Missing GitHub Actions secret RENDER_API_KEY}"
+          : "${RENDER_SERVICE_ID:?Missing GitHub Actions secret RENDER_PRODUCTION_SERVICE_ID}"
+          : "${VERCEL_TOKEN:?Missing GitHub Actions secret VERCEL_TOKEN}"
+          : "${VERCEL_ORG_ID:?Missing GitHub Actions variable VERCEL_ORG_ID}"
+          : "${VERCEL_PROJECT_ID:?Missing GitHub Actions variable VERCEL_PROJECT_ID}"
+          : "${SENTRY_AUTH_TOKEN:?Missing GitHub Actions secret SENTRY_AUTH_TOKEN}"
+          : "${SENTRY_ORG:?Missing GitHub Actions secret SENTRY_ORG}"
+          : "${SENTRY_PROJECT:?Missing GitHub Actions secret SENTRY_PROJECT}"
+
+      - name: Verify Render production deployment
+        uses: ./.github/actions/render-deploy
+        with:
+          api-key: ${{ secrets.RENDER_API_KEY }}
+          service-id: ${{ secrets.RENDER_PRODUCTION_SERVICE_ID }}
+          commit-sha: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Verify Vercel production deployment for this commit
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID || 'team_Utlh28zYWtXDjnSOGZVoQpzb' }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || 'prj_Y4FfgXHUnOMMJqeHHNFz3R0U58e4' }}
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          deadline=$((SECONDS + 1200))
+
+          while (( SECONDS < deadline )); do
+            http_status="$(curl --silent --show-error \
+              --output "$response_file" \
+              --write-out '%{http_code}' \
+              --get \
+              --url 'https://api.vercel.com/v6/deployments' \
+              --data-urlencode "projectId=${VERCEL_PROJECT_ID}" \
+              --data-urlencode "teamId=${VERCEL_ORG_ID}" \
+              --data-urlencode 'target=production' \
+              --data-urlencode "sha=${COMMIT_SHA}" \
+              --data-urlencode 'limit=10' \
+              --header "Authorization: Bearer ${VERCEL_TOKEN}" \
+              --header 'Accept: application/json')"
+
+            if [[ "$http_status" != "200" ]]; then
+              echo "::error::Could not retrieve Vercel deployment status (HTTP $http_status)."
+              jq -c . "$response_file" 2>/dev/null || cat "$response_file"
+              exit 1
+            fi
+
+            deployment="$(jq -c --arg sha "$COMMIT_SHA" '
+              [.deployments[]? | select(.meta.githubCommitSha == $sha)]
+              | sort_by(.created)
+              | last // empty
+            ' "$response_file")"
+
+            if [[ -z "$deployment" ]]; then
+              echo "No Vercel production deployment found for commit $COMMIT_SHA yet."
+              sleep 15
+              continue
+            fi
+
+            state="$(jq -er '.state' <<<"$deployment")"
+            deployment_url="$(jq -r '.url // empty' <<<"$deployment")"
+            echo "Vercel deployment state: $state"
+
+            case "$state" in
+              READY)
+                echo "Vercel production deployment is ready: https://${deployment_url}"
+                exit 0
+                ;;
+              ERROR|CANCELED|BLOCKED)
+                echo "::error::Vercel deployment for commit $COMMIT_SHA ended with state: $state."
+                exit 1
+                ;;
+              BUILDING|INITIALIZING|QUEUED)
+                sleep 15
+                ;;
+              *)
+                echo "::error::Vercel returned an unrecognised deployment state: $state."
+                exit 1
+                ;;
+            esac
+          done
+
+          echo "::error::Timed out waiting for the Vercel production deployment to become ready."
+          exit 1
+
+      - name: Create Sentry release
         uses: getsentry/action-release@v1
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -58,4 +173,4 @@ jobs:
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         with:
           environment: production
-          version: ${{ github.sha }}
+          version: ${{ github.event.workflow_run.head_sha }}

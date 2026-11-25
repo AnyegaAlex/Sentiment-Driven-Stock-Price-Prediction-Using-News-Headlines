@@ -14,6 +14,8 @@ from django.urls import reverse
 from stocks.lstm_predictor import _lstm_unavailable
 from stocks.models import Prediction
 
+from tests.factories import authenticate_api_client
+
 pytestmark = pytest.mark.django_db
 
 
@@ -88,9 +90,9 @@ class TestPredictionAuthorization:
     @override_settings(PRICE_DATA_PUBLIC_ACCESS=True)
     def test_history_cache_is_per_user(self, api_client, user, foreign_user):
         make_pred(user=foreign_user, headline="foreign-private")
-        api_client.force_authenticate(user=foreign_user)
+        authenticate_api_client(api_client, foreign_user)
         api_client.get(reverse("prediction-history"))  # warms cache for foreign_user
-        api_client.force_authenticate(user=user)
+        authenticate_api_client(api_client, user)
         r = api_client.get(reverse("prediction-history"))
         assert "foreign-private" not in str(r.json())
 
@@ -102,14 +104,14 @@ class TestPredictionAuthorization:
     @override_settings(PRICE_DATA_PUBLIC_ACCESS=True)
     def test_shap_404_for_other_users_prediction(self, api_client, user, foreign_user):
         pred = make_pred(user=foreign_user)
-        api_client.force_authenticate(user=user)
+        authenticate_api_client(api_client, user)
         r = api_client.get(reverse("shap", args=[pred.id]))
         assert r.status_code == 404
 
     @override_settings(PRICE_DATA_PUBLIC_ACCESS=True)
     def test_shap_owner_can_read_own_prediction(self, api_client, foreign_user):
         pred = make_pred(user=foreign_user)
-        api_client.force_authenticate(user=foreign_user)
+        authenticate_api_client(api_client, foreign_user)
         r = api_client.get(reverse("shap", args=[pred.id]))
         assert r.status_code == 200
 
@@ -176,7 +178,7 @@ class TestPriceDataGate:
 
     @override_settings(PRICE_DATA_PUBLIC_ACCESS=False)
     def test_staff_still_reaches_technicals_when_gate_closed(self, api_client, admin_user):
-        api_client.force_authenticate(user=admin_user)
+        authenticate_api_client(api_client, admin_user)
         with patch("stocks.views.get_technical_indicators", return_value={"current_price": 1.0}) as get_tech:
             r = api_client.get(reverse("technical-indicators"), {"symbol": "AAPL"})
         assert r.status_code == 200
@@ -253,12 +255,12 @@ class TestDerivedOutputGate:
 
     def test_shap_blocked_for_non_staff_owner_when_price_closed(self, api_client, foreign_user):
         pred = make_pred(user=foreign_user)
-        api_client.force_authenticate(user=foreign_user)
+        authenticate_api_client(api_client, foreign_user)
         assert api_client.get(reverse("shap", args=[pred.id])).status_code == 503
 
     def test_staff_bypass_is_served_when_price_closed(self, api_client, admin_user):
         make_pred(user=None, predicted_movement="up")
-        api_client.force_authenticate(user=admin_user)
+        authenticate_api_client(api_client, admin_user)
         r = api_client.get(reverse("lstm-predict"), {"symbol": "AAPL"})
         assert r.status_code == 200
 

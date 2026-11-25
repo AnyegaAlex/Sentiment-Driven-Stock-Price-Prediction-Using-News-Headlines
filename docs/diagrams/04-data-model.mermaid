@@ -1,0 +1,175 @@
+erDiagram
+  AUTHENTICATION_USER ||--|| USER_PREFERENCES : has
+  AUTHENTICATION_USER ||--o{ USER_API_KEY : owns
+  AUTHENTICATION_USER o|--o{ AUDIT_LOG : generates
+  AUTHENTICATION_USER o|--o{ SYMBOL_USAGE : records
+  AUTHENTICATION_USER o|--o{ PREDICTION : may_own
+  AUTHENTICATION_USER ||--o{ OUTSTANDING_TOKEN : receives
+  OUTSTANDING_TOKEN ||--o| BLACKLISTED_TOKEN : may_be_blacklisted
+  AUTHENTICATION_USER ||--o{ DJANGO_ADMIN_LOG : performs
+  AUTHENTICATION_USER o{--o{ AUTH_GROUP : member_of
+  AUTHENTICATION_USER o{--o{ AUTH_PERMISSION : has_user_permission
+  AUTH_GROUP o{--o{ AUTH_PERMISSION : grants
+  DJANGO_CONTENT_TYPE ||--o{ AUTH_PERMISSION : describes
+  DJANGO_CONTENT_TYPE o|--o{ DJANGO_ADMIN_LOG : logs_object_type
+
+  AUTHENTICATION_USER {
+    bigint id PK
+    varchar username
+    varchar email
+    varchar password
+    boolean is_active
+    boolean email_verified
+    datetime deletion_scheduled_for
+    varchar api_key "deprecated plaintext field"
+  }
+  USER_PREFERENCES {
+    bigint id PK
+    bigint user_id FK
+    varchar investment_goal
+    varchar risk_tolerance
+    varchar experience_level
+    json watchlist
+    boolean email_notifications
+    boolean price_alerts
+    boolean news_alerts
+    boolean weekly_digest
+    varchar theme
+    varchar language
+    varchar timezone
+  }
+  USER_API_KEY {
+    bigint id PK
+    bigint user_id FK
+    char64 key_hash UK
+    varchar name
+    boolean is_active
+    datetime expires_at
+    datetime last_used
+  }
+  AUDIT_LOG {
+    bigint id PK
+    bigint user_id FK nullable
+    varchar action
+    json details
+    datetime timestamp
+  }
+  SYMBOL_USAGE {
+    bigint id PK
+    bigint user_id FK nullable
+    varchar symbol
+    integer count
+    datetime last_updated
+  }
+  PREDICTION {
+    bigint id PK
+    bigint user_id FK nullable
+    date date
+    varchar stock_symbol
+    varchar predicted_movement
+    decimal confidence
+    varchar source
+    boolean is_correct nullable
+  }
+  OUTSTANDING_TOKEN {
+    bigint id PK
+    bigint user_id FK
+    text token
+  }
+  BLACKLISTED_TOKEN {
+    bigint id PK
+    bigint token_id FK unique
+    datetime blacklisted_at
+  }
+  PROCESSED_NEWS {
+    bigint id PK
+    varchar symbol
+    text title
+    char64 title_hash
+    varchar url
+    varchar provider
+    varchar source_name
+    varchar sentiment
+    decimal sentiment_score
+    datetime published_at
+  }
+  SYMBOL_SEARCH_CACHE {
+    bigint id PK
+    varchar query
+    json results
+    datetime expires_at
+  }
+  STOCK_SYMBOL {
+    bigint id PK
+    varchar symbol UK
+    boolean is_active
+    datetime last_processed
+  }
+  STOCK_OPINION {
+    bigint id PK
+    varchar symbol
+    varchar action
+    varchar horizon
+    float technical_confidence
+    float sentiment_confidence
+    float composite_confidence
+    text explanation
+    json factors
+    json risk_metrics
+  }
+  MODEL_PERFORMANCE_SNAPSHOT {
+    bigint id PK
+    date date
+    varchar symbol nullable
+    integer total_predictions
+    integer correct_predictions
+    float accuracy
+    float precision
+    float recall
+    float f1_score
+    boolean drift_detected
+  }
+  SUBSCRIPTION {
+    bigint id PK
+    varchar email UK
+    boolean is_active
+    datetime subscribed_at
+  }
+  DJANGO_SESSION {
+    varchar session_key PK
+    text session_data
+    datetime expire_date
+  }
+  AUTH_GROUP {
+    bigint id PK
+    varchar name UK
+  }
+  AUTH_PERMISSION {
+    bigint id PK
+    bigint content_type_id FK
+    varchar codename
+    varchar name
+  }
+  DJANGO_CONTENT_TYPE {
+    bigint id PK
+    varchar app_label
+    varchar model
+  }
+  DJANGO_ADMIN_LOG {
+    bigint id PK
+    bigint user_id FK
+    bigint content_type_id FK nullable
+    text object_id
+    varchar object_repr
+    text change_message
+  }
+
+  %% Application models: authentication.User (table authentication_user), UserPreferences, UserAPIKey, AuditLog, SymbolUsage;
+  %% news.ProcessedNews, SymbolSearchCache, StockSymbol; stocks.StockOpinion, Prediction, ModelPerformanceSnapshot, Subscription.
+  %% Framework models: auth.Group, auth.Permission, contenttypes.ContentType, admin.LogEntry, sessions.Session,
+  %% SimpleJWT OutstandingToken and BlacklistedToken. Automatic M2M join tables are not drawn separately.
+  %% PII: user/email/password hashes, preferences, API-key hashes, audit metadata, usage, subscription email, sessions and tokens.
+  %% Retention: ProcessedNews prune defaults to 14 days and is scheduled; audit/session/key cleanup is not scheduled.
+  %% User deletion has no final-delete worker. SymbolSearchCache expiry is 30 minutes but no dedicated cleanup job was found.
+  %% No LegalAcceptance, ConsentRecord, ProviderCredential, Payment, EmailOutbox, PipelineRun, Backup, DataExport,
+  %% Webhook or job/dead-letter model found. Ticker relationships are values, not confirmed FKs to STOCK_SYMBOL.

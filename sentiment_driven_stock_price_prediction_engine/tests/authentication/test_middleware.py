@@ -3,6 +3,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 from authentication.models import User, UserAPIKey
+from authentication.middleware import APIKeyMiddleware
 
 @pytest.fixture
 def api_client():
@@ -44,8 +45,11 @@ class TestAPIKeyMiddleware:
         assert response.json()['code'] == 'AUTH_INVALID_API_KEY'
 
     def test_path_traversal_security_bypass(self, api_client):
-        """Ensure appending paths to public paths doesn't bypass auth."""
-        response = api_client.get('/api/v1/auth/login/../profile/')
-        # Django normalizes paths, but if a route like /api/v1/auth/login-bypass/ existed:
-        response = api_client.get('/api/v1/auth/login-bypass/')
-        assert response.status_code == 401
+        """Public login paths must not make sibling or nested paths public."""
+        middleware = APIKeyMiddleware(lambda request: None)
+        assert middleware._is_public_path('/api/v1/auth/login/')
+        assert not middleware._is_public_path('/api/v1/auth/profile/')
+        assert not middleware._is_public_path('/api/v1/auth/login-bypass/')
+        assert not middleware._is_public_path('/api/v1/auth/login/extra/')
+        assert middleware._is_public_path('/')
+        assert middleware._is_public_path('/stocks/stock-analysis/')

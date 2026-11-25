@@ -110,6 +110,10 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
 
             return (key_obj.user, None)
 
+        except exceptions.AuthenticationFailed:
+            # Preserve intentional authentication failures and their client-safe reason.
+            raise
+
         except UserAPIKey.DoesNotExist:
             self._log_auth_attempt(None, api_key, success=False, reason='not_found')
             raise exceptions.AuthenticationFailed('Invalid API key')
@@ -179,8 +183,7 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
             try:
                 # Fetch from DB with select_related to get user in one query
                 return UserAPIKey.objects.select_related('user').get(
-                    id=cached_key_id,
-                    is_active=True
+                    id=cached_key_id
                 )
             except UserAPIKey.DoesNotExist:
                 # Cache stale – delete it
@@ -190,11 +193,12 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
         # Direct database query using hashed key
         try:
             key_obj = UserAPIKey.objects.select_related('user').get(
-                key_hash=hashed,
-                is_active=True
+                key_hash=hashed
             )
-            # Cache the result for 5 minutes (positive cache)
-            cache.set(cache_key, key_obj.id, timeout=300)
+            # Cache active keys only. Inactive keys must still be returned so
+            # authenticate() can report revocation explicitly.
+            if key_obj.is_active:
+                cache.set(cache_key, key_obj.id, timeout=300)
             return key_obj
         except UserAPIKey.DoesNotExist:
             # Optionally cache negative results for a short time to prevent brute force

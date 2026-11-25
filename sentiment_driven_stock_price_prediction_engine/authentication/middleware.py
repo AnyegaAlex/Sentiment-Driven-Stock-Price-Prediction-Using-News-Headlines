@@ -14,6 +14,7 @@ import hashlib
 import logging
 from django.conf import settings
 from django.http import JsonResponse
+from django.urls import Resolver404, resolve
 from django.core.cache import cache
 from django.utils import timezone
 from rest_framework.settings import api_settings
@@ -51,13 +52,35 @@ PUBLIC_PATHS = [
     '/api/v1/auth/password-reset/confirm/',
     '/api/v1/auth/refresh/',
 
-    # Public Data (Read-only)
+    # Public data endpoints (both versioned and legacy route mounts).
+    # Price/news licensing gates inside the views still control the data served.
     '/api/v1/stock-analysis/',
     '/api/v1/technical-indicators/',
     '/api/v1/sentiment-analysis/',
     '/api/v1/lstm-predict/',
     '/api/v1/symbols/',
+    '/api/v1/stocks/symbols/',
     '/api/v1/subscribe/',
+    '/stocks/stock-analysis/',
+    '/stocks/technical-indicators/',
+    '/stocks/sentiment-analysis/',
+    '/stocks/lstm-predict/',
+    '/stocks/symbols/',
+    '/stocks/stocks/symbols/',
+    '/stocks/subscribe/',
+    '/api/v1/stock-opinion/',
+    '/stocks/stock-opinion/',
+    '/api/v1/performance/',
+    '/stocks/performance/',
+    # Retired cron endpoint intentionally returns HTTP 410 to every caller.
+    '/api/v1/cron/resolve-predictions/',
+    '/stocks/cron/resolve-predictions/',
+
+    # Read-only licensed-news routes. The view-level NEWS_PUBLIC_ACCESS gate
+    # remains authoritative for provider-sourced content.
+    '/api/v1/news/get-news/',
+    '/api/v1/news/symbol-search/',
+    '/api/v1/news/analyzed/',
 ]
 
 DEPRECATED_PATHS = [
@@ -94,20 +117,29 @@ class APIKeyMiddleware:
             # JWT failed – continue to public paths check or API key check
             pass
 
-        # 2. Skip public paths if JWT failed
-        if self._is_public_path(request.path):
-            return self.get_response(request)
-
-        # 3. Check API key (X-API-Key header)
+        # 2. Check API key (X-API-Key header). Public endpoints may be used
+        # without a key, but a supplied key is still validated and attached to
+        # the request so usage tracking and audit context remain accurate.
         api_key = request.headers.get('X-API-Key')
-        
+
         # Also check Authorization: Bearer <key> if it starts with 'ts_'
         if not api_key:
             auth_header = request.headers.get('Authorization', '')
             if auth_header.startswith('Bearer ts_'):
                 api_key = auth_header[7:].strip()
 
+        if not api_key and self._is_public_path(request.path):
+            return self.get_response(request)
+
         if not api_key:
+            # Authentication applies to existing protected routes. Unknown
+            # paths should continue through Django's resolver and return 404,
+            # rather than being obscured as authentication failures.
+            try:
+                resolve(request.path_info)
+            except Resolver404:
+                return self.get_response(request)
+
             return JsonResponse(
                 error_response(
                     message='API key required. Please provide X-API-Key header.',
@@ -144,14 +176,23 @@ class APIKeyMiddleware:
         return response
 
     def _is_public_path(self, path):
+        """Check exact public routes and explicitly public subtrees.
+
+        Most entries are individual endpoints and must match exactly. Only
+        admin and API documentation are intentionally public subtrees.
+        The root path "/" must never act as a prefix for all application routes.
         """
-        Check if the path is in the public whitelist.
-        Uses strict matching to prevent bypasses like `/login-bypass/`.
-        """
-        for p in PUBLIC_PATHS:
-            if path == p or path.startswith(f"{p.rstrip('/')}/"):
-                return True
-        return False
+        normalized_path = path if path == '/' or path.endswith('/') else f"{path}/"
+        if normalized_path in PUBLIC_PATHS:
+            return True
+
+        public_prefixes = (
+            '/admin/',
+            '/api/docs/',
+            '/api/schema/',
+            '/api/v1/health/',
+        )
+        return any(normalized_path.startswith(prefix) for prefix in public_prefixes)
 
     def _validate_api_key(self, raw_key):
         """
