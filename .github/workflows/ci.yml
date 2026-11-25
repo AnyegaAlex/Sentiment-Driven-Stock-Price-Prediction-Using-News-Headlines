@@ -37,14 +37,13 @@ jobs:
           cache: pip
           cache-dependency-path: |
             sentiment_driven_stock_price_prediction_engine/requirements.txt
-            sentiment_driven_stock_price_prediction_engine/requirements-ml.txt
             sentiment_driven_stock_price_prediction_engine/requirements-test.txt
 
       - name: Install backend dependencies
         working-directory: sentiment_driven_stock_price_prediction_engine
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-ml.txt
+          pip install -r requirements.txt
           pip install -r requirements-test.txt
 
       - name: Run Django system checks

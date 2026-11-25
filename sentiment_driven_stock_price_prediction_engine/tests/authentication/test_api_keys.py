@@ -7,8 +7,7 @@ from datetime import timedelta
 from rest_framework.test import APIRequestFactory
 from rest_framework.exceptions import AuthenticationFailed
 from authentication.authentication import APIKeyAuthentication
-from authentication.models import User, UserAPIKey, TermsAcceptance, PrivacyNoticeAcknowledgement
-from authentication.legal_config import TERMS, PRIVACY_NOTICE
+from authentication.models import User, UserAPIKey
 
 @pytest.fixture
 def test_user(db):

@@ -311,11 +311,13 @@ def send_email_sync(
 
     for attempt in range(attempts):
         try:
-            response = requests.post(
-                settings.BREVO_API_URL,
-                headers=request_headers,
-                json=payload,
-                timeout=settings.EMAIL_TIMEOUT,
+            sent = send_mail(
+                subject=subject,
+                message=plain_text,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[to_email],
+                html_message=html_content,
+                fail_silently=False,
             )
             if response.status_code in (200, 201, 202):
                 logger.info("Brevo accepted transactional email (HTTP %s).", response.status_code)
