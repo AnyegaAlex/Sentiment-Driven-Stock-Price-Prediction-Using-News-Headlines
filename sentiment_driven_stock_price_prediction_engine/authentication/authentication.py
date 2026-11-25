@@ -194,8 +194,7 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
         # Direct database query using hashed key
         try:
             key_obj = UserAPIKey.objects.select_related('user').get(
-                key_hash=hashed,
-                is_active=True
+                key_hash=hashed
             )
             # Cache only active keys. Inactive keys still need to be returned
             # here so authenticate() can report their revoked status explicitly.

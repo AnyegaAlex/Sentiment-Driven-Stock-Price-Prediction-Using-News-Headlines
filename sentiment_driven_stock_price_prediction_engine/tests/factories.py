@@ -14,7 +14,11 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from faker import Faker
 
-from authentication.models import User, UserAPIKey, UserPreferences, AuditLog
+from authentication.models import (
+    User, UserAPIKey, UserPreferences, AuditLog,
+    TermsAcceptance, PrivacyNoticeAcknowledgement,
+)
+from authentication.legal_config import TERMS, PRIVACY_NOTICE
 from stocks.models import Prediction, Subscription, ModelPerformanceSnapshot
 from news.models import ProcessedNews, SymbolSearchCache
 

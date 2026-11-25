@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import apiClient from '@/services/client';
 import { Button } from '@/components/ui/button';

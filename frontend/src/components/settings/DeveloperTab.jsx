@@ -520,7 +520,7 @@ const ApiExplorer = ({ apiKey, onApiKeyChange }) => {
                 </>
               )}
             </Button>
-            {!activeKey && (
+            {!apiKey?.trim() && (
               <span className="text-xs text-gray-500">
                 Generate an API key first
               </span>

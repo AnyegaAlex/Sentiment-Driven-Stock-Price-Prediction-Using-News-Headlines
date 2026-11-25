@@ -1,7 +1,5 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Radar } from 'lucide-react';
-import LegalDocumentBody from '@/components/legal/LegalDocumentBody';
-import termsDocument from '@/legal/documents/terms.json';
 
 const DraftNotice = () => (
   <aside
@@ -41,11 +39,11 @@ const Terms = () => (
 
       <div className="space-y-8 leading-7">
         <section>
-          <p className="text-sm text-gray-500">Last updated: Draft for review | 24 November 2026</p>
+          <p className="text-sm text-gray-500">Last updated: Draft for review | 25 November 2026</p>
           <p className="mt-3">
             <strong className="text-gray-200">Provider:</strong> Tickflow Capital Limited,
             registration PVT-6Y1YWM6V, Nairobi, Kenya.
-            Registered street address: <strong className="text-amber-200">[TO BE CONFIRMED BEFORE PUBLICATION]</strong>.
+            Registered office: <strong className="text-gray-200">Greenspot Garden, Eastern Bypass, Ruiru, Kiambu County, Kenya.</strong>
           </p>
           <p className="mt-2">
             These Terms apply to the hosted TickFlow Intelligence app at{' '}
@@ -59,8 +57,10 @@ const Terms = () => (
         <section>
           <h2 className="mb-3 text-xl font-semibold text-white">1. Acceptance</h2>
           <p>
-            By creating an account or using the Service, you agree to these Terms and to the Privacy
-            Policy. If you do not agree, do not use the Service.
+            By creating an account, you agree to these Terms. The Privacy Policy is a notice that
+            explains how personal data is handled; acknowledging that notice does not, by itself,
+            constitute consent to every processing activity. Where consent is required, we will
+            request it separately. If you do not agree to these Terms, do not use the Service.
           </p>
         </section>
 
@@ -184,7 +184,7 @@ const Terms = () => (
           <p>
             Legal enquiries: <a className="underline hover:text-white" href="mailto:legal@tickflowcapital.com">legal@tickflowcapital.com</a>.
           </p>
-          <p className="mt-2 text-amber-200">[Confirm this mailbox is monitored and insert the registered street address before publication.]</p>
+          <p className="mt-2 text-amber-200">[Confirm this legal mailbox is monitored before publication.]</p>
         </section>
       </div>
     </div>
