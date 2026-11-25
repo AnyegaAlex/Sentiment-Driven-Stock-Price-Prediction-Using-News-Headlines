@@ -38,28 +38,19 @@ const renderDashboard = () => {
   );
 };
 
-describe('Dashboard risk profile', () => {
+describe('Dashboard analysis baseline', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
   });
 
-  it('uses and labels the saved risk profile returned by the flat preferences endpoint', async () => {
+  it('uses the same neutral baseline for every user and does not read a personal risk profile', async () => {
     apiClient.get.mockResolvedValueOnce({ risk_tolerance: 'aggressive' });
 
     renderDashboard();
 
-    expect(await screen.findByText(/Saved risk profile:/)).toBeInTheDocument();
-    expect(screen.getByText('aggressive')).toBeInTheDocument();
-    expect(screen.getByLabelText('Risk passed to analysis')).toHaveTextContent('high');
-  });
-
-  it('does not present the moderate fallback as a saved preference', async () => {
-    apiClient.get.mockResolvedValueOnce({});
-
-    renderDashboard();
-
-    expect(await screen.findByText(/No saved risk profile/i)).toBeInTheDocument();
+    expect(await screen.findByText(/same neutral baseline/i)).toBeInTheDocument();
     expect(screen.getByLabelText('Risk passed to analysis')).toHaveTextContent('medium');
+    expect(apiClient.get).not.toHaveBeenCalledWith('/auth/preferences/');
   });
 });

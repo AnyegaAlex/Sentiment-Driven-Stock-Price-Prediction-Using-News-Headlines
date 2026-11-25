@@ -2,7 +2,7 @@ const resources = [
   {
     title: 'Getting started',
     description: 'Set up the project, configure the environment and run the application.',
-    href: 'https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/blob/main/README.md',
+    href: 'https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/blob/master/README.md',
   },
   {
     title: 'API reference',
@@ -12,7 +12,7 @@ const resources = [
   {
     title: 'Technical documentation',
     description: 'Browse the repository documentation and implementation notes.',
-    href: 'https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/tree/main/docs',
+    href: 'https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/tree/master/docs',
   },
 ];
 

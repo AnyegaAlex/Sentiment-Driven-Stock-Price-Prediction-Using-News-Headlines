@@ -1,0 +1,52 @@
+flowchart TD
+  req[Incoming HTTPS request]
+  edge[Cloudflare managed edge]
+  cors[CORS middleware]
+  log[RequestLoggingMiddleware]
+  security[SecurityMiddleware]
+  white[WhiteNoise middleware]
+  sessionCommon[SessionMiddleware then CommonMiddleware]
+  csrf[CsrfViewMiddleware]
+  auth[AuthenticationMiddleware]
+  messagesFrame[MessageMiddleware then XFrameOptionsMiddleware]
+  custom[APIKeyMiddleware]
+  rateDeprec[RateLimitHeadersMiddleware then DeprecationMiddleware]
+  drf[DRF authentication]
+  perm[DRF permission check]
+  throttle[DRF throttles]
+  legal[Legal acceptance gate: absent]
+  view[View and licensing gates]
+  serializer[Serializer / validation]
+  model[(Django ORM / PostgreSQL)]
+  response[HTTP response]
+
+  req -->|HTTPS| edge
+  edge -->|HTTPS origin| cors
+  cors -->|Allowed origin| log
+  cors -->|Preflight/blocked origin short-circuit| response
+  log --> security
+  security -->|HTTPS redirect if required| response
+  security --> white
+  white --> sessionCommon
+  sessionCommon --> csrf
+  csrf -->|CSRF failure| response
+  csrf --> auth
+  auth --> messagesFrame
+  messagesFrame --> custom
+  custom -->|Protected path, missing/invalid API key: 401| response
+  custom --> rateDeprec
+  rateDeprec --> drf
+  drf -->|Authentication failure: 401| response
+  drf --> perm
+  perm -->|Permission denied: 403| response
+  perm --> throttle
+  throttle -->|Rate limit: 429| response
+  throttle --> legal
+  legal -->|No legal gate is implemented| view
+  view -->|Price/news flag disabled: 503 or disabled envelope| response
+  view --> serializer
+  serializer -->|Validation error: 400| response
+  serializer --> model
+  model -->|DB error / missing data| response
+  model --> response
+  response -->|HTTP response| req

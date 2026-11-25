@@ -9,15 +9,14 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import WelcomeStep from './WelcomeStep';
 import PersonaSelection from './PersonaSelection';
 import ProfileStep from './ProfileStep';
-import InvestmentProfileStep from './InvestmentProfileStep';
 import DashboardTour from './CompletionStep';
 import apiClient from '@/services/client';
 import { getActionErrorMessage } from '@/utils/errorHandler';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
 
-const steps = ['welcome', 'profile', 'persona', 'invest', 'tour', 'complete'];
-const stepLabels = ['Welcome', 'About You', 'Persona', 'Investing', 'Dashboard Tour', "You're Ready!"];
+const steps = ['welcome', 'profile', 'persona', 'tour', 'complete'];
+const stepLabels = ['Welcome', 'About You', 'Persona', 'Dashboard Tour', "You're Ready!"];
 
 const OnboardingContainer = () => {
   const navigate = useNavigate();
@@ -67,7 +66,7 @@ const OnboardingContainer = () => {
     
     try {
       await updateUser({ persona });
-      updateStep('invest');
+      updateStep('tour');
     } catch (err) {
       setError(getActionErrorMessage(err, 'We couldn’t save your selection. Please try again.'));
     } finally {
@@ -88,20 +87,6 @@ const OnboardingContainer = () => {
       updateStep('persona');
     } catch (err) {
       setError(getActionErrorMessage(err, 'We couldn’t save your name. Please try again.'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleInvestSave = async (profile) => {
-    setLoading(true);
-    setError(null);
-    try {
-      await apiClient.patch('/auth/preferences/', profile);
-      setOnboardingData(prev => ({ ...prev, ...profile }));
-      updateStep('tour');
-    } catch (err) {
-      setError(getActionErrorMessage(err, 'We couldn’t save your investment preferences. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -248,20 +233,6 @@ const OnboardingContainer = () => {
                 isLoading={loading}
                 error={error}
                 selectedPersona={onboardingData.persona}
-              />
-            )}
-            {step === 'invest' && (
-              <InvestmentProfileStep
-                initial={{
-                  investment_goal: onboardingData.investment_goal,
-                  risk_tolerance: onboardingData.risk_tolerance,
-                  experience_level: onboardingData.experience_level,
-                }}
-                onNext={handleInvestSave}
-                onBack={() => updateStep('persona')}
-                onSkip={() => updateStep('tour')}
-                loading={loading}
-                error={error}
               />
             )}
             {step === 'tour' && (

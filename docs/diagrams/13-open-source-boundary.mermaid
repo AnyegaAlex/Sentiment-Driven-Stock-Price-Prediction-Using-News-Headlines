@@ -1,0 +1,36 @@
+flowchart LR
+  subgraph PUBLIC["Public GitHub repository"]
+    app[Frontend and backend source]
+    config[Deployment and workflow configuration]
+    models[Committed model weights]
+    data[Committed dataset]
+    license[Root MIT LICENSE]
+    vendor[Vendored JupyterLab Plotly extension]
+  end
+
+  subgraph EXTERNAL["External / managed systems"]
+    hosting[Vercel / Render / Cloudflare]
+    database[(Production database)]
+    secrets[Provider and deployment secrets]
+    providers[Market-data and email providers]
+  end
+
+  subgraph UNKNOWN["Ownership/licensing not established"]
+    private[Private/proprietary repository: none identified]
+    dual[Dual-license declarations: none found]
+    dataRights[Model/data/provider redistribution rights: UNVERIFIED]
+  end
+
+  app -->|Root LICENSE text| license
+  models -->|No separate artifact license found| dataRights
+  data -->|No separate dataset license found| dataRights
+  vendor -->|Third-party notice review incomplete| dataRights
+  config -->|Deploy API calls| hosting
+  config -->|Environment references only| secrets
+  hosting --> database
+  secrets --> providers
+  private -.-> app
+  dual -.-> license
+
+  %% No proprietary/private source boundary or dual-license seam was identified in the audited tree.
+  %% Hosted infrastructure, credentials, brand and customer data are outside the root source license review.

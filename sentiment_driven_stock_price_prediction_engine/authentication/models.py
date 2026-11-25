@@ -113,6 +113,8 @@ class AuditLogActions:
     API_KEY_REVOKED = 'API_KEY_REVOKED'
     ACCOUNT_DELETION_REQUESTED = 'ACCOUNT_DELETION_REQUESTED'
     ACCOUNT_DELETION_CANCELLED = 'ACCOUNT_DELETION_CANCELLED'
+    WEEKLY_DIGEST_OPTED_IN = 'WEEKLY_DIGEST_OPTED_IN'
+    WEEKLY_DIGEST_UNSUBSCRIBED = 'WEEKLY_DIGEST_UNSUBSCRIBED'
     WATCHLIST_ADDED = 'WATCHLIST_ADDED'
     WATCHLIST_REMOVED = 'WATCHLIST_REMOVED'
 
@@ -350,8 +352,16 @@ class UserPreferences(models.Model):
     )
 
     weekly_digest = models.BooleanField(
-        default=True,
-        help_text="Whether to send weekly digest emails."
+        default=False,
+        help_text="Whether to send optional weekly digest emails; requires explicit opt-in."
+    )
+    weekly_digest_opted_in_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the user most recently opted in to the weekly digest."
+    )
+    weekly_digest_unsubscribed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the user most recently opted out of the weekly digest."
     )
 
     # Theme preference
@@ -629,3 +639,48 @@ class SymbolUsage(models.Model):
 #     This model is kept only for migration compatibility.
 #     """
 #     ...  # Remove this model in a future migration
+
+# ----- Legal acknowledgements (GAP-03) -----
+# Terms acceptance and Privacy Policy acknowledgement are recorded separately.
+# user is SET_NULL so records survive account deletion for evidence; the
+# retention basis is to be settled under GAP-04 before deletion is finalised.
+
+class TermsAcceptance(models.Model):
+    """Affirmative acceptance of a specific Terms of Service version."""
+    user = models.ForeignKey(
+        'User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='terms_acceptances',
+    )
+    version = models.CharField(max_length=32)
+    content_hash = models.CharField(max_length=64)
+    accepted_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'version'], name='uniq_terms_acceptance_user_version'),
+        ]
+
+    def __str__(self):
+        return f"Terms {self.version} accepted"
+
+
+class PrivacyNoticeAcknowledgement(models.Model):
+    """Record that the Privacy Policy version was presented and acknowledged.
+
+    This is not consent to any specific processing.
+    """
+    user = models.ForeignKey(
+        'User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='privacy_acknowledgements',
+    )
+    version = models.CharField(max_length=32)
+    content_hash = models.CharField(max_length=64)
+    acknowledged_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'version'], name='uniq_privacy_ack_user_version'),
+        ]
+
+    def __str__(self):
+        return f"Privacy notice {self.version} acknowledged"

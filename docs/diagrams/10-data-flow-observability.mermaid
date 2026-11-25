@@ -1,0 +1,26 @@
+sequenceDiagram
+  autonumber
+  participant Client as Browser/API client
+  participant MW as RequestLoggingMiddleware
+  participant Django as Django application
+  participant Log as Console logger
+  participant Render as Render log stream
+  participant Sentry as Sentry SDK
+  participant GA as Google Analytics
+  participant VA as Vercel Analytics
+
+  Client->>MW: HTTPS request
+  MW->>Django: Continue request
+  Django-->>MW: Response or exception
+  MW->>Log: Request ID, path, status, duration, IP/user context
+  Log->>Render: stdout/stderr stream
+
+  Django->>Sentry: Exception/event when DSN configured
+  Note over Sentry: before_send removes selected query values such as api_key/token; complete header/body scrubbing is not established.
+  Sentry-->>Django: SDK capture result
+
+  Client->>GA: Browser analytics only after consent
+  Client->>VA: Vercel Analytics component mounted unconditionally
+
+  Note over MW,Log: Logs can contain IP, user ID/username, user-agent and recipient email from email helper paths.
+  Note over Client,VA: Vercel Analytics is not gated by the local consent manager in App.jsx.

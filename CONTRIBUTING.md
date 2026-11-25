@@ -25,9 +25,7 @@ Before contributing, please read the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Set up a development environment
 
-- Check [existing issues](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues)
-- Look for labels: `good-first-issue`, `help-wanted`, `bug`, `enhancement`
-- Create a new issue if you find something not listed
+## 2. Find or propose an issue
 
 - Git
 - Python 3.12 or a version supported by the backend dependencies
