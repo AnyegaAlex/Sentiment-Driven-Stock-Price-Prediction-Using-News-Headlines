@@ -19,7 +19,7 @@ from rest_framework import status
 
 from authentication.models import User, UserAPIKey
 from stocks.models import Prediction
-from tests.factories import UserFactory, AdminUserFactory, PredictionFactory
+from tests.factories import UserFactory, AdminUserFactory, PredictionFactory, authenticate_api_client
 
 pytestmark = pytest.mark.django_db
 
@@ -164,7 +164,7 @@ class TestGroupPermissions:
         """Viewer can read but not write."""
         user = UserFactory()
         user.groups.add(viewer_group)
-        api_client.force_authenticate(user=user)
+        authenticate_api_client(api_client, user)
 
         # Can view predictions (if there's a list endpoint)
         url = reverse("prediction-history")
@@ -182,7 +182,7 @@ class TestGroupPermissions:
         """Editor can read and write."""
         user = UserFactory()
         user.groups.add(editor_group)
-        api_client.force_authenticate(user=user)
+        authenticate_api_client(api_client, user)
 
         # Can create a prediction (if endpoint exists)
         # We'll test API key creation as a generic write action.
@@ -212,7 +212,7 @@ class TestCustomPermissions:
         )
         user = UserFactory()
         user.user_permissions.add(custom_perm)
-        api_client.force_authenticate(user=user)
+        authenticate_api_client(api_client, user)
 
         # Now call a view that requires this permission (if exists).
         # If no such view exists, we'll skip this test.
@@ -222,7 +222,7 @@ class TestCustomPermissions:
     def test_user_without_custom_permission_cannot_act(self, api_client):
         """User without custom permission cannot perform the action."""
         user = UserFactory()
-        api_client.force_authenticate(user=user)
+        authenticate_api_client(api_client, user)
         # Check that the user does NOT have the permission
         assert not user.has_perm("stocks.can_approve_prediction")
 

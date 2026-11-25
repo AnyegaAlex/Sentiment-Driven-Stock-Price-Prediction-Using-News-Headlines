@@ -38,6 +38,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         retention_days = options.get('days', 90)
         dry_run = options.get('dry_run', False)
+        if retention_days < 1 or retention_days > 3650:
+            from django.core.management.base import CommandError
+            raise CommandError('--days must be between 1 and 3650')
 
         cutoff = timezone.now() - timedelta(days=retention_days)
 
@@ -56,7 +59,7 @@ class Command(BaseCommand):
             # Show sample of what would be deleted
             sample = old_logs[:10]
             for log in sample:
-                self.stdout.write(f'  - {log.user} / {log.action} / {log.timestamp}')
+                self.stdout.write(f'  - {log.action} / {log.timestamp.isoformat()}')
             if count > 10:
                 self.stdout.write(f'  ... and {count - 10} more')
             return

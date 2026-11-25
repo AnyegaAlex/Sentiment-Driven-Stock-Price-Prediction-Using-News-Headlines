@@ -14,8 +14,8 @@ import hashlib
 import logging
 from django.conf import settings
 from django.http import JsonResponse
+from django.urls import Resolver404, resolve
 from django.core.cache import cache
-from django.db.models import Q
 from django.utils import timezone
 from rest_framework.settings import api_settings
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -51,21 +51,16 @@ PUBLIC_PATHS = [
     '/api/v1/auth/password-reset/',
     '/api/v1/auth/password-reset/confirm/',
     '/api/v1/auth/refresh/',
-    '/api/v1/auth/delete-account/cancel/',
 
-    # Public Data (Read-only)
+    # Public data endpoints (both versioned and legacy route mounts).
+    # Price/news licensing gates inside the views still control the data served.
     '/api/v1/stock-analysis/',
     '/api/v1/technical-indicators/',
     '/api/v1/sentiment-analysis/',
     '/api/v1/lstm-predict/',
     '/api/v1/symbols/',
-    '/api/v1/subscribe/',
-    '/api/v1/news/',
-    '/api/v1/performance/',
-    '/api/v1/stock-opinion/',
     '/api/v1/stocks/symbols/',
-    '/api/v1/cron/resolve-predictions/',
-    # Legacy aliases retained by the root URL configuration.
+    '/api/v1/subscribe/',
     '/stocks/stock-analysis/',
     '/stocks/technical-indicators/',
     '/stocks/sentiment-analysis/',
@@ -73,9 +68,19 @@ PUBLIC_PATHS = [
     '/stocks/symbols/',
     '/stocks/stocks/symbols/',
     '/stocks/subscribe/',
+    '/api/v1/stock-opinion/',
     '/stocks/stock-opinion/',
+    '/api/v1/performance/',
     '/stocks/performance/',
+    # Retired cron endpoint intentionally returns HTTP 410 to every caller.
+    '/api/v1/cron/resolve-predictions/',
     '/stocks/cron/resolve-predictions/',
+
+    # Read-only licensed-news routes. The view-level NEWS_PUBLIC_ACCESS gate
+    # remains authoritative for provider-sourced content.
+    '/api/v1/news/get-news/',
+    '/api/v1/news/symbol-search/',
+    '/api/v1/news/analyzed/',
 ]
 
 DEPRECATED_PATHS = [
@@ -101,79 +106,93 @@ class APIKeyMiddleware:
         self.jwt_auth = JWTAuthentication()
 
     def __call__(self, request):
-        # Authentication is enforced in process_view so Django can resolve the
-        # URL first. Unknown routes must remain 404s rather than becoming 401s.
-        return self.get_response(request)
-
-    def process_view(self, request, view_func, view_args, view_kwargs):
-        # 1. Try JWT authentication before checking the public-path allowlist.
+        # 1. Try JWT authentication for ALL requests
         try:
             auth_result = self.jwt_auth.authenticate(request)
             if auth_result:
                 user, _ = auth_result
                 request.user = user
-                return None
-        except Exception:
-            # Invalid JWT credentials may still be accompanied by a valid API key.
+                return self.get_response(request)
+        except (InvalidToken, TokenError, Exception):
+            # JWT failed – continue to public paths check or API key check
             pass
 
-        # 2. Public endpoints apply their own access gates where applicable.
-        if self._is_public_path(request.path):
-            return None
-
-        # 3. Check API key (X-API-Key header or Authorization: Bearer ts_...).
+        # 2. Check API key (X-API-Key header). Public endpoints may be used
+        # without a key, but a supplied key is still validated and attached to
+        # the request so usage tracking and audit context remain accurate.
         api_key = request.headers.get('X-API-Key')
+
+        # Also check Authorization: Bearer <key> if it starts with 'ts_'
         if not api_key:
             auth_header = request.headers.get('Authorization', '')
             if auth_header.startswith('Bearer ts_'):
                 api_key = auth_header[7:].strip()
 
+        if not api_key and self._is_public_path(request.path):
+            return self.get_response(request)
+
         if not api_key:
+            # Authentication applies to existing protected routes. Unknown
+            # paths should continue through Django's resolver and return 404,
+            # rather than being obscured as authentication failures.
+            try:
+                resolve(request.path_info)
+            except Resolver404:
+                return self.get_response(request)
+
             return JsonResponse(
                 error_response(
                     message='API key required. Please provide X-API-Key header.',
                     code='AUTH_API_KEY_REQUIRED',
-                    status_code=401,
+                    status_code=401
                 ),
-                status=401,
+                status=401
             )
 
-        # 4. Validate API key using the indexed SHA-256 hash.
+        # 4. Validate API key using O(1) hashed lookup
         key_obj = self._validate_api_key(api_key)
         if not key_obj:
-            logger.warning("Invalid API key attempt: %s...", api_key[:8])
+            logger.warning(f"Invalid API key attempt: {api_key[:8]}...")
             return JsonResponse(
                 error_response(
                     message='Invalid or inactive API key.',
                     code='AUTH_INVALID_API_KEY',
-                    status_code=401,
+                    status_code=401
                 ),
-                status=401,
+                status=401
             )
 
-        # 5. Attach authenticated identity and update usage metadata.
+        # 5. Update last_used (cached, flushed on response)
         self._update_last_used(key_obj)
+
+        # 6. Set user and key on request
         request.user = key_obj.user
         request.api_key_obj = key_obj
         request.api_key = api_key
-        return None
+
+        # 7. Process request
+        response = self.get_response(request)
+
+        return response
 
     def _is_public_path(self, path):
-        """
-        Check if the path is in the public whitelist.
-        Uses strict matching to prevent bypasses like `/login-bypass/`.
-        """
-        for public_path in PUBLIC_PATHS:
-            # The root path is public only as an exact match. Treating every
-            # path as a child of "/" would silently bypass API-key checks.
-            if public_path == '/':
-                if path == '/':
-                    return True
-                continue
+        """Check exact public routes and explicitly public subtrees.
 
-            if path == public_path or path.startswith(f"{public_path.rstrip('/')}/"):
-                return True
-        return False
+        Most entries are individual endpoints and must match exactly. Only
+        admin and API documentation are intentionally public subtrees.
+        The root path "/" must never act as a prefix for all application routes.
+        """
+        normalized_path = path if path == '/' or path.endswith('/') else f"{path}/"
+        if normalized_path in PUBLIC_PATHS:
+            return True
+
+        public_prefixes = (
+            '/admin/',
+            '/api/docs/',
+            '/api/schema/',
+            '/api/v1/health/',
+        )
+        return any(normalized_path.startswith(prefix) for prefix in public_prefixes)
 
     def _validate_api_key(self, raw_key):
         """
@@ -188,15 +207,10 @@ class APIKeyMiddleware:
         cached_key_id = cache.get(cache_key)
         if cached_key_id:
             try:
-                key_obj = UserAPIKey.objects.select_related('user').get(
+                return UserAPIKey.objects.select_related('user').get(
                     id=cached_key_id,
-                    key_hash=hashed,
-                    is_active=True,
+                    is_active=True
                 )
-                if key_obj.expires_at and key_obj.expires_at <= timezone.now():
-                    cache.delete(cache_key)
-                    return None
-                return key_obj
             except UserAPIKey.DoesNotExist:
                 # Cache is stale (key was revoked/deleted)
                 cache.delete(cache_key)
@@ -206,9 +220,8 @@ class APIKeyMiddleware:
         try:
             # ✅ FIX: Changed 'hashed_key' to 'key_hash' to match models.py
             key_obj = UserAPIKey.objects.select_related('user').get(
-                Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()),
                 key_hash=hashed,
-                is_active=True,
+                is_active=True
             )
             # Cache positive result for 5 minutes
             cache.set(cache_key, key_obj.id, timeout=300)

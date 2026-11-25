@@ -122,36 +122,44 @@ class TestPrunePredictionsCommand:
 # ============================================================================
 
 class TestRefreshStockCacheCommand:
-    @patch('stocks.management.commands.refresh_stock_cache.build_technical_payload')
-    @patch('django.core.cache.cache.set')
-    def test_refresh_stock_cache_success(self, mock_cache_set, mock_payload):
-        mock_payload.return_value = {"current_price": 100}
+    def test_refresh_stock_cache_success(self):
+        with patch(
+            'stocks.management.commands.refresh_stock_cache.build_technical_payload',
+            return_value={"current_price": 100},
+        ) as build_payload, patch('django.core.cache.cache.set') as mock_cache_set:
+            out = io.StringIO()
+            call_command('refresh_stock_cache', stdout=out)
 
-        out = io.StringIO()
-        call_command('refresh_stock_cache', stdout=out)
+        assert "cached successfully" in out.getvalue()
+        assert build_payload.call_count == 8
+        assert mock_cache_set.call_count == 8
 
-        output = out.getvalue()
-        assert "cached successfully" in output
-        assert mock_cache_set.call_count >= 1
-
-    @patch('stocks.management.commands.refresh_stock_cache.build_technical_payload')
-    @patch('django.core.cache.cache.get')
-    def test_refresh_stock_cache_force(self, mock_cache_get, mock_payload):
-        mock_cache_get.return_value = {"cached": "data"}
-        mock_payload.return_value = {"current_price": 100}
-
-        with patch('django.core.cache.cache.set') as mock_set:
+    def test_refresh_stock_cache_force(self):
+        with patch(
+            'stocks.management.commands.refresh_stock_cache.build_technical_payload',
+            return_value={"current_price": 100},
+        ) as build_payload, patch(
+            'django.core.cache.cache.get',
+            return_value={"cached": "data"},
+        ), patch('django.core.cache.cache.set') as mock_cache_set:
             call_command('refresh_stock_cache', '--force', stdout=io.StringIO())
-            assert mock_set.call_count > 0
+
+        assert build_payload.call_count == 8
+        assert mock_cache_set.call_count == 8
 
     def test_refresh_stock_cache_custom_symbols(self):
-        with patch('stocks.management.commands.refresh_stock_cache.build_technical_payload', return_value={"current_price": 100}) as mock_payload, \
-             patch('django.core.cache.cache.set') as mock_set:
-            call_command('refresh_stock_cache', '--symbols', 'AAPL', 'MSFT', stdout=io.StringIO())
-            assert mock_payload.call_count == 2
-            assert mock_set.call_count == 2
+        with patch(
+            'stocks.management.commands.refresh_stock_cache.build_technical_payload',
+            return_value={"current_price": 100},
+        ) as build_payload, patch('django.core.cache.cache.set') as mock_cache_set:
+            call_command(
+                'refresh_stock_cache',
+                '--symbols', 'AAPL', 'MSFT',
+                stdout=io.StringIO(),
+            )
 
-
+        assert build_payload.call_count == 2
+        assert mock_cache_set.call_count == 2
 # ============================================================================
 # 4. UPDATE PREDICTION ACCURACY
 # ============================================================================
@@ -238,11 +246,13 @@ class TestSendWeeklyDigestCommand:
         user1 = UserFactory(email_verified=True)
         prefs1 = user1.user_preferences
         prefs1.weekly_digest = True
+        prefs1.weekly_digest_opted_in_at = timezone.now()
         prefs1.save()
 
         user2 = UserFactory(email_verified=True)
         prefs2 = user2.user_preferences
         prefs2.weekly_digest = True
+        prefs2.weekly_digest_opted_in_at = timezone.now()
         prefs2.save()
 
         user3 = UserFactory(email_verified=True)
@@ -266,6 +276,7 @@ class TestSendWeeklyDigestCommand:
         user = UserFactory(email_verified=True)
         prefs = user.user_preferences
         prefs.weekly_digest = True
+        prefs.weekly_digest_opted_in_at = timezone.now()
         prefs.save()
 
         with patch('stocks.management.commands.send_weekly_digest.send_email_sync') as mock_send:
@@ -278,6 +289,7 @@ class TestSendWeeklyDigestCommand:
         user = UserFactory(email_verified=True)
         prefs = user.user_preferences
         prefs.weekly_digest = True
+        prefs.weekly_digest_opted_in_at = timezone.now()
         prefs.save()
 
         with patch('stocks.management.commands.send_weekly_digest.send_email_sync') as mock_send:

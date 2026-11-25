@@ -1,0 +1,60 @@
+flowchart TB
+  subgraph BROWSER["TB1: Browser trust boundary"]
+    browser[Browser]
+  end
+
+  subgraph EDGE["TB2: Managed edge boundary"]
+    vercel[Vercel static SPA]
+    cloudflare[Cloudflare API edge]
+  end
+
+  subgraph APP["TB3: Render application boundary"]
+    gunicorn[Gunicorn / Django]
+    auth[authentication app]
+    stocks[stocks app]
+    news[news app]
+    health[health app]
+  end
+
+  subgraph DATA["TB4: Data boundary"]
+    postgres[(PostgreSQL)]
+    cache[(LocMemCache fallback / optional Redis)]
+    noobject[No active object store]
+  end
+
+  subgraph AUTOMATION["TB5: Automation boundary"]
+    actions[GitHub Actions scheduled workflows]
+    noworker[No active Celery worker or queue]
+  end
+
+  subgraph PROVIDERS["TB6: Third-party providers"]
+    market[Market-data APIs]
+    hf[Hugging Face Hub]
+    mail[SendGrid / Brevo SMTP]
+    sentry[Sentry]
+    ga[Google Analytics]
+    va[Vercel Analytics]
+  end
+
+  browser -->|HTTPS assets| vercel
+  browser -->|HTTPS API; bearer JWT or X-API-Key| cloudflare
+  cloudflare -->|HTTPS origin| gunicorn
+  gunicorn --> auth
+  gunicorn --> stocks
+  gunicorn --> news
+  gunicorn --> health
+  auth -->|SQL over DATABASE_URL TLS| postgres
+  stocks -->|SQL over DATABASE_URL TLS| postgres
+  news -->|SQL over DATABASE_URL TLS| postgres
+  gunicorn -.->|Redis protocol if configured| cache
+  gunicorn -->|HTTPS provider calls| market
+  gunicorn -->|HTTPS model downloads| hf
+  gunicorn -->|HTTPS API / SMTP| mail
+  gunicorn -->|HTTPS error events| sentry
+  browser -->|HTTPS after consent| ga
+  browser -->|HTTPS telemetry, unconditional component| va
+  actions -->|HTTPS workflow/API| gunicorn
+  actions --> noworker
+  gunicorn -.-> noobject
+
+  %% Managed boundaries: Vercel, Cloudflare and Render internals are not available in this repository.

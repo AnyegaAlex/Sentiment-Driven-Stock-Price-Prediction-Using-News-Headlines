@@ -16,6 +16,8 @@ from django.test import override_settings
 from django.core.exceptions import SuspiciousOperation, ImproperlyConfigured
 from django.urls import reverse
 
+from tests.factories import authenticate_api_client
+
 pytestmark = pytest.mark.django_db
 
 
@@ -54,9 +56,9 @@ class TestErrorPages:
         from django.contrib.auth import get_user_model
         User = get_user_model()
         user = User.objects.create_user(username='testuser', password='testpass')
-        from tests.conftest import JWTAPIClient
-        client = JWTAPIClient(raise_request_exception=False)
-        client.force_authenticate(user=user)
+        from rest_framework.test import APIClient
+        client = APIClient(raise_request_exception=False)
+        authenticate_api_client(client, user)
         url = reverse('profile')
         with patch('authentication.views.ProfileView.get_object', side_effect=Exception('Forced 500')):
             response = client.get(url)

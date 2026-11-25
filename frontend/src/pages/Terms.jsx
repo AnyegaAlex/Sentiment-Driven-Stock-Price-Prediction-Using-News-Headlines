@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Radar } from 'lucide-react';
+import LegalDocumentBody from '@/components/legal/LegalDocumentBody';
+import termsDocument from '@/legal/documents/terms.json';
 
 const DraftNotice = () => (
   <aside

@@ -24,9 +24,8 @@ from django.test import Client, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from tests.conftest import JWTAPIClient
-
 from tests.factories import (
+    authenticate_api_client,
     UserFactory,
     PredictionFactory,
     SubscriptionFactory,
@@ -53,8 +52,8 @@ def api_client():
 @pytest.fixture
 def auth_client(user):
     """Authenticated DRF client. The API authenticates with JWT, so force_authenticate is used."""
-    client = JWTAPIClient()
-    client.force_authenticate(user=user)
+    client = APIClient()
+    authenticate_api_client(client, user)
     return client
 
 

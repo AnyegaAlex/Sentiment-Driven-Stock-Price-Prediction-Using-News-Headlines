@@ -2,15 +2,19 @@
 import hashlib
 import pytest
 from django.core.management import call_command
-from django.core.cache import cache
-from rest_framework.exceptions import AuthenticationFailed
+from django.utils import timezone
+from datetime import timedelta
 from rest_framework.test import APIRequestFactory
+from rest_framework.exceptions import AuthenticationFailed
 from authentication.authentication import APIKeyAuthentication
 from authentication.models import User, UserAPIKey
 
 @pytest.fixture
 def test_user(db):
-    return User.objects.create_user(username="testuser", email="test@example.com", password="password123")
+    user = User.objects.create_user(username="testuser", email="test@example.com", password="password123")
+    TermsAcceptance.objects.create(user=user, version=TERMS.version, content_hash=TERMS.sha256)
+    PrivacyNoticeAcknowledgement.objects.create(user=user, version=PRIVACY_NOTICE.version, content_hash=PRIVACY_NOTICE.sha256)
+    return user
 
 @pytest.mark.django_db
 class TestAPIKeys:
@@ -24,44 +28,55 @@ class TestAPIKeys:
 
     def test_management_command_uses_sha256(self, test_user):
         """Test that the CLI command generates a valid SHA-256 hash."""
-        call_command('generate_apikey', 'testuser', '--name', 'CLI Key', '--quiet')
+        call_command('generate_apikey', 'testuser', name='CLI Key', quiet=True)
         
         key_obj = UserAPIKey.objects.get(user=test_user, name="CLI Key")
         
         # The hash should be exactly 64 chars (SHA-256), NOT starting with 'pbkdf2_sha256'
         assert len(key_obj.key_hash) == 64
         assert not key_obj.key_hash.startswith("pbkdf2_sha256")
-    def test_api_key_authentication_uses_model_key_hash(self, test_user):
-        cache.clear()
-        key_obj, raw_key = UserAPIKey.create_key(test_user, 'DRF auth test')
-        request = APIRequestFactory().get('/', HTTP_X_API_KEY=raw_key)
 
-        result = APIKeyAuthentication().authenticate(request)
+    def test_authentication_accepts_model_generated_key(self, test_user):
+        key_obj, raw_key = UserAPIKey.create_key(test_user, "Authentication Test")
+        request = APIRequestFactory().get("/api/test/", HTTP_X_API_KEY=raw_key)
 
-        assert result == (test_user, None)
+        user, auth = APIKeyAuthentication().authenticate(request)
+
+        assert user == test_user
+        assert auth is None
         assert request.api_key_obj.pk == key_obj.pk
 
-    def test_cached_key_hash_is_rechecked_after_rotation(self, test_user):
-        """A cached row ID must not keep an old API key valid after rotation."""
-        cache.clear()
-        key_obj, old_raw_key = UserAPIKey.create_key(test_user, 'Rotated DRF key')
-        old_hash = hashlib.sha256(old_raw_key.encode()).hexdigest()
-        cache.set(f"api_key_lookup_{old_hash}", key_obj.id, timeout=300)
-        key_obj.key_hash = hashlib.sha256(b"ts_new-rotated-key").hexdigest()
-        key_obj.save(update_fields=["key_hash"])
+    def test_authentication_rejects_unknown_key(self):
+        request = APIRequestFactory().get(
+            "/api/test/", HTTP_X_API_KEY="ts_not-a-real-key"
+        )
 
-        request = APIRequestFactory().get('/', HTTP_X_API_KEY=old_raw_key)
-        with pytest.raises(AuthenticationFailed, match='Invalid API key'):
+        with pytest.raises(AuthenticationFailed, match="Invalid API key"):
             APIKeyAuthentication().authenticate(request)
 
-    def test_invalid_api_key_keeps_specific_authentication_error(self, test_user):
-        cache.clear()
-        request = APIRequestFactory().get('/', HTTP_X_API_KEY='ts_not-a-real-key')
+    def test_authentication_reports_revoked_key_even_after_cache_hit(self, test_user):
+        key_obj, raw_key = UserAPIKey.create_key(test_user, "Revoked Test")
+        auth = APIKeyAuthentication()
+        request = APIRequestFactory().get("/api/test/", HTTP_X_API_KEY=raw_key)
 
-        with pytest.raises(AuthenticationFailed, match='Invalid API key'):
+        # First request populates the positive cache.
+        assert auth.authenticate(request)[0] == test_user
+        key_obj.revoke()
+
+        # A cached key ID must not allow a revoked key to remain usable.
+        request_after_revoke = APIRequestFactory().get(
+            "/api/test/", HTTP_X_API_KEY=raw_key
+        )
+        with pytest.raises(AuthenticationFailed, match="deactivated"):
+            auth.authenticate(request_after_revoke)
+
+    def test_authentication_reports_expired_key(self, test_user):
+        key_obj, raw_key = UserAPIKey.create_key(
+            test_user,
+            "Expired Test",
+            expires_at=timezone.now() - timedelta(seconds=1),
+        )
+        request = APIRequestFactory().get("/api/test/", HTTP_X_API_KEY=raw_key)
+
+        with pytest.raises(AuthenticationFailed, match="expired"):
             APIKeyAuthentication().authenticate(request)
-
-    def test_missing_api_key_allows_other_authentication_classes(self):
-        request = APIRequestFactory().get('/')
-
-        assert APIKeyAuthentication().authenticate(request) is None

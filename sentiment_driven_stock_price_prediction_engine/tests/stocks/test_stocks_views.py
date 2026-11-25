@@ -23,7 +23,7 @@ from authentication.models import User
 from stocks.models import Prediction, Subscription
 import stocks.views
 
-from tests.conftest import JWTAPIClient
+from tests.factories import authenticate_api_client
 
 pytestmark = pytest.mark.django_db
 
@@ -46,8 +46,8 @@ def authenticated_user():
 
 @pytest.fixture
 def auth_client(authenticated_user):
-    client = JWTAPIClient()
-    client.force_authenticate(user=authenticated_user)
+    client = APIClient()
+    authenticate_api_client(client, authenticated_user)
     return client
 
 

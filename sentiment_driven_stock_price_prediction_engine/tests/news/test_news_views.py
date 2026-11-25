@@ -301,6 +301,7 @@ class TestSymbolSearch:
         response = api_client.get(url)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    @override_settings(NEWS_PUBLIC_ACCESS=True)
     def test_symbol_search_db_cache_hit(self, api_client):
         """Return cached results from SymbolSearchCache if valid."""
         query = "AAPL"
@@ -315,6 +316,20 @@ class TestSymbolSearch:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["data"] == cached_results
+
+    def test_symbol_search_does_not_serve_provider_cache_when_public_access_is_disabled(self, api_client):
+        cached_results = [{"symbol": "AAPL", "name": "Licensed Provider Result", "region": "US"}]
+        SymbolSearchCache.objects.create(
+            query="AAPL",
+            results=cached_results,
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+
+        response = api_client.get(reverse("symbol-search"), {"q": "AAPL"})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["data"] != cached_results
+        assert response.json()["data"][0]["name"] == "AAPL"
 
     @patch("news.views.requests.get")
     @override_settings(NEWS_PUBLIC_ACCESS=True)
@@ -400,6 +415,7 @@ class TestSymbolSearch:
         assert data["data"][0]["symbol"] == "AAPL"
 
     @patch("news.views.requests.get")
+    @override_settings(NEWS_PUBLIC_ACCESS=True)
     def test_symbol_search_all_api_fail_static_fallback(self, mock_get, api_client):
         """If all APIs fail, return static fallback list."""
         query = "AAPL"
@@ -555,6 +571,7 @@ def test_get_news_handles_unicode_symbol(api_client):
     data = response.json()
     assert data["data"]["symbol"] == symbol
 
+@override_settings(NEWS_PUBLIC_ACCESS=True)
 def test_symbol_search_handles_unicode(api_client):
     """Query with unicode should still work."""
     with patch("news.views.requests.get") as mock_get:

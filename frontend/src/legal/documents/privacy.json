@@ -1,0 +1,24 @@
+{
+  "document": "privacy",
+  "version": "2026-11-24",
+  "blocks": [
+    { "type": "heading", "text": "Information We Collect" },
+    { "type": "paragraph", "text": "We collect information you provide when creating or managing an account, such as your username, email address, and profile details. The app also stores your investment preferences, watchlist, and API access settings. Account creation does not require payment information." },
+    { "type": "heading", "text": "How We Use Your Information" },
+    { "type": "paragraph", "text": "We use your information to provide, maintain, and improve our services, and to communicate with you." },
+    { "type": "heading", "text": "Cookies and Analytics" },
+    { "type": "paragraph", "text": "Essential browser storage supports core service functionality and security. If you allow analytics, Google Analytics may collect information about how the site is used. Analytics remains disabled until you choose to enable it. You can change your choice at any time using the privacy preferences control in the site footer." },
+    { "type": "consent_button", "label": "Manage privacy preferences", "event": "tickflow:open-consent-settings" },
+    { "type": "heading", "text": "Data Security" },
+    { "type": "paragraph", "text": "We implement appropriate technical and organizational measures to protect your personal information." },
+    { "type": "heading", "text": "Your Rights" },
+    { "type": "paragraph", "text": "You have the right to access, correct, or delete your personal information at any time." },
+    { "type": "heading", "text": "Contact Us" },
+    {
+      "type": "paragraph_with_link",
+      "before": "If you have any questions about this Privacy Policy, please contact us at",
+      "link": { "text": "privacy@tickflow.com", "href": "mailto:privacy@tickflow.com" },
+      "after": "."
+    }
+  ]
+}

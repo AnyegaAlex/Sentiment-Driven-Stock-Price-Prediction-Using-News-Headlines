@@ -131,7 +131,7 @@ class Command(BaseCommand):
 
                 logger.info(
                     f"API Key {'reactivated' if is_reactivation else 'created'} "
-                    f"via CLI for user {user.username} (ID: {user.id})"
+                    f"via CLI for user_id={user.id}"
                 )
 
             # 6. Display the key (once only — never stored in plaintext)

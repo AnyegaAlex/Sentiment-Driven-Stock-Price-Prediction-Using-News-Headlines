@@ -18,8 +18,6 @@ const PASSWORD_REQUIREMENTS = [
   { id: 'not-numeric', label: 'Not a numbers-only password', test: (p) => p.length > 0 && !/^\d+$/.test(p) },
 ];
 
-const LEGAL_ACCEPTANCE_ENABLED = import.meta.env.VITE_LEGAL_ACCEPTANCE_ENABLED === 'true';
-
 const DISPOSABLE_DOMAINS = [
   'tempmail.com', '10minutemail.com', 'guerrillamail.com',
   'throwaway.com', 'mailinator.com', 'trashmail.com',
@@ -119,6 +117,7 @@ PasswordStrength.propTypes = {
 export const SignupForm = ({ onSuccess, onError }) => {
   // ---- State ----
   const [form, setForm] = useState({ username: '', email: '', password: '', password2: '' });
+  // Separate, affirmative controls: Terms acceptance and Privacy Policy acknowledgement.
   const [legal, setLegal] = useState({ terms: false, privacy: false });
   const [fieldErrors, setFieldErrors] = useState({});
   const [touched, setTouched] = useState({});
@@ -159,7 +158,8 @@ export const SignupForm = ({ onSuccess, onError }) => {
       !isDisposableEmail &&
       passwordMeetsRequirements &&
       passwordsMatch &&
-      (!LEGAL_ACCEPTANCE_ENABLED || (legal.terms && legal.privacy))
+      legal.terms &&
+      legal.privacy
     );
   }, [isUsernameValid, isEmailValid, isDisposableEmail, passwordMeetsRequirements, passwordsMatch, legal.terms, legal.privacy]);
 
@@ -176,8 +176,8 @@ export const SignupForm = ({ onSuccess, onError }) => {
   const handleLegalChange = useCallback((e) => {
     const { name, checked } = e.target;
     setLegal((prev) => ({ ...prev, [name]: checked }));
-    setGeneralError('');
-  }, []);
+    if (generalError) setGeneralError('');
+  }, [generalError]);
 
   const handleBlur = useCallback((e) => {
     const { name } = e.target;
@@ -198,8 +198,8 @@ export const SignupForm = ({ onSuccess, onError }) => {
         email: form.email.trim().toLowerCase(),
         password: form.password,
         password2: form.password2,
-        acceptTerms: LEGAL_ACCEPTANCE_ENABLED && legal.terms,
-        acknowledgePrivacyNotice: LEGAL_ACCEPTANCE_ENABLED && legal.privacy,
+        acceptTerms: legal.terms,
+        acknowledgePrivacyNotice: legal.privacy,
       });
 
       if (result.success) {
@@ -465,24 +465,41 @@ export const SignupForm = ({ onSuccess, onError }) => {
         )}
       </Button>
 
-      {LEGAL_ACCEPTANCE_ENABLED ? (
-        <div className="space-y-3 text-sm text-gray-400">
-          <label htmlFor="accept-terms" className="flex items-start gap-3 cursor-pointer">
-            <input id="accept-terms" name="terms" type="checkbox" checked={legal.terms} onChange={handleLegalChange} disabled={loading} className="mt-1 h-4 w-4 rounded border-gray-600 bg-black accent-white" />
-            <span>I accept the <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-gray-200 underline hover:text-white">Terms of Service</Link></span>
-          </label>
-          <label htmlFor="acknowledge-privacy" className="flex items-start gap-3 cursor-pointer">
-            <input id="acknowledge-privacy" name="privacy" type="checkbox" checked={legal.privacy} onChange={handleLegalChange} disabled={loading} className="mt-1 h-4 w-4 rounded border-gray-600 bg-black accent-white" />
-            <span>I acknowledge the <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-gray-200 underline hover:text-white">Privacy Policy</Link></span>
-          </label>
-        </div>
-      ) : (
-        <p className="text-center text-sm text-gray-500">
-          By creating an account, you agree to our{' '}
-          <Link to="/terms" className="text-gray-400 hover:text-white transition-colors rounded">Terms of Service</Link>{' '}and{' '}
-          <Link to="/privacy" className="text-gray-400 hover:text-white transition-colors rounded">Privacy Policy</Link>
-        </p>
-      )}
+      {/* Legal: two separate controls. Neither is pre-ticked. */}
+      <div className="space-y-3 text-sm text-gray-400">
+        <label htmlFor="accept-terms" className="flex items-start gap-3 cursor-pointer">
+          <input
+            id="accept-terms"
+            name="terms"
+            type="checkbox"
+            checked={legal.terms}
+            onChange={handleLegalChange}
+            className="mt-1 h-4 w-4 rounded border-gray-600 bg-black accent-white"
+          />
+          <span>
+            I accept the{' '}
+            <Link to="/terms" className="text-gray-200 underline hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 rounded">
+              Terms of Service
+            </Link>
+          </span>
+        </label>
+        <label htmlFor="acknowledge-privacy" className="flex items-start gap-3 cursor-pointer">
+          <input
+            id="acknowledge-privacy"
+            name="privacy"
+            type="checkbox"
+            checked={legal.privacy}
+            onChange={handleLegalChange}
+            className="mt-1 h-4 w-4 rounded border-gray-600 bg-black accent-white"
+          />
+          <span>
+            I have read the{' '}
+            <Link to="/privacy" className="text-gray-200 underline hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 rounded">
+              Privacy Policy
+            </Link>
+          </span>
+        </label>
+      </div>
     </form>
   );
 };

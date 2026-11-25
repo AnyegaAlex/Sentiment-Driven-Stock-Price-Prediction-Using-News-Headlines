@@ -113,6 +113,8 @@ class AuditLogActions:
     API_KEY_REVOKED = 'API_KEY_REVOKED'
     ACCOUNT_DELETION_REQUESTED = 'ACCOUNT_DELETION_REQUESTED'
     ACCOUNT_DELETION_CANCELLED = 'ACCOUNT_DELETION_CANCELLED'
+    WEEKLY_DIGEST_OPTED_IN = 'WEEKLY_DIGEST_OPTED_IN'
+    WEEKLY_DIGEST_UNSUBSCRIBED = 'WEEKLY_DIGEST_UNSUBSCRIBED'
     WATCHLIST_ADDED = 'WATCHLIST_ADDED'
     WATCHLIST_REMOVED = 'WATCHLIST_REMOVED'
 
@@ -350,8 +352,16 @@ class UserPreferences(models.Model):
     )
 
     weekly_digest = models.BooleanField(
-        default=True,
-        help_text="Whether to send weekly digest emails."
+        default=False,
+        help_text="Whether to send optional weekly digest emails; requires explicit opt-in."
+    )
+    weekly_digest_opted_in_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the user most recently opted in to the weekly digest."
+    )
+    weekly_digest_unsubscribed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the user most recently opted out of the weekly digest."
     )
 
     # Theme preference
@@ -631,14 +641,14 @@ class SymbolUsage(models.Model):
 #     ...  # Remove this model in a future migration
 
 # ----- Legal acknowledgements (GAP-03) -----
-# These records are separate: accepting the Terms is not the same as
-# acknowledging receipt of the Privacy Policy. Retention after account deletion
-# remains subject to the separate GAP-04 retention decision.
+# Terms acceptance and Privacy Policy acknowledgement are recorded separately.
+# user is SET_NULL so records survive account deletion for evidence; the
+# retention basis is to be settled under GAP-04 before deletion is finalised.
 
 class TermsAcceptance(models.Model):
     """Affirmative acceptance of a specific Terms of Service version."""
     user = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, blank=True,
+        'User', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='terms_acceptances',
     )
     version = models.CharField(max_length=32)
@@ -655,12 +665,12 @@ class TermsAcceptance(models.Model):
 
 
 class PrivacyNoticeAcknowledgement(models.Model):
-    """Acknowledgement that a specific Privacy Policy version was presented.
+    """Record that the Privacy Policy version was presented and acknowledged.
 
-    This record is not consent to any particular data-processing purpose.
+    This is not consent to any specific processing.
     """
     user = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, blank=True,
+        'User', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='privacy_acknowledgements',
     )
     version = models.CharField(max_length=32)

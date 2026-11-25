@@ -1,0 +1,29 @@
+sequenceDiagram
+  autonumber
+  actor Visitor
+  participant SPA as React SPA
+  participant API as Django API
+  participant DB as PostgreSQL
+
+  Visitor->>SPA: Open Terms and Privacy routes
+  SPA-->>Visitor: Render legal text and links
+
+  Visitor->>SPA: Submit registration
+  SPA->>API: POST /api/v1/auth/register/
+  Note over SPA,API: No accepted_terms, accepted_privacy or document-version payload is required.
+  API->>DB: Create user and related records
+  Note over API,DB: No LegalAcceptance or ConsentRecord model/table is written.
+  API-->>SPA: Registration response
+
+  Visitor->>SPA: Existing user calls protected API
+  SPA->>API: Request with JWT/API key
+  Note over API: No legal-version/hash middleware or permission gate.
+  API-->>SPA: Normal endpoint auth/permission result; no legal-specific 403.
+
+  Visitor->>SPA: Create API key
+  SPA->>API: POST /api/v1/auth/api-keys/
+  API->>DB: Create key record
+  API-->>SPA: Raw key once
+
+  Note over SPA,DB: No acceptance hash comparison, legal 403, re-acceptance or rollback flow exists in audited code.
+  Note over SPA,DB: Age/date-of-birth validation was not found.

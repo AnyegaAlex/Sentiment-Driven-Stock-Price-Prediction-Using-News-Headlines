@@ -70,7 +70,10 @@ class TestChaosDatabase:
     def test_db_query_failure_returns_500(self, mock_queryset, api_client):
         """DB query error in view returns 500 (authenticated owner, price gate open)."""
         from tests.factories import UserFactory
-        api_client.force_authenticate(user=UserFactory())
+        from authentication.models import UserAPIKey
+        user = UserFactory()
+        _, raw_key = UserAPIKey.create_key(user, 'Chaos Test')
+        api_client.credentials(HTTP_X_API_KEY=raw_key)
         mock_queryset.side_effect = Exception('Query error')
         url = reverse('prediction-history')
         response = api_client.get(url)
@@ -96,6 +99,7 @@ class TestChaosExternalAPI:
             assert data['success'] is True
 
     @patch('news.views.requests.get')
+    @override_settings(NEWS_PUBLIC_ACCESS=True)
     def test_news_symbol_search_api_timeout(self, mock_get, api_client):
         """symbol_search handles timeout gracefully and returns static fallback."""
         mock_get.side_effect = requests.exceptions.Timeout
@@ -109,12 +113,16 @@ class TestChaosExternalAPI:
         assert 'AAPL' in symbols
 
     @override_settings(NEWS_PUBLIC_ACCESS=True)
-    @patch('news.views.requests.get')
-    def test_news_fetch_timeout(self, mock_get, api_client):
-        """The read-only news endpoint does not fetch provider data inline."""
-        mock_get.side_effect = requests.exceptions.Timeout
-        response = api_client.get(reverse('get-news'), {'symbol': 'AAPL'})
+    def test_get_news_is_read_only_and_uses_stored_articles(self, api_client):
+        """The request path reads stored news; ingestion belongs to the background pipeline."""
+        from tests.factories import ProcessedNewsFactory
+
+        ProcessedNewsFactory(symbol="AAPL")
+        with patch("news.views.requests.get") as mock_get:
+            response = api_client.get(reverse("get-news"), {"symbol": "AAPL"})
+
         assert response.status_code == 200
+        assert response.json()["data"]["count"] == 1
         mock_get.assert_not_called()
 
 
@@ -132,16 +140,12 @@ class TestChaosUnicode:
 
     @override_settings(PRICE_DATA_PUBLIC_ACCESS=True)
     def test_unicode_in_news_text_for_lstm(self, api_client):
-        """Unicode in news text for LSTM should not crash."""
+        """Unicode query input does not crash the read-only prediction lookup."""
         url = reverse('lstm-predict')
-        with patch('stocks.lstm_predictor.get_lstm_predictor') as mock_predictor:
-            mock_predictor.return_value.predict.return_value = {
-                'success': True, 'prediction': 'UP', 'confidence': 75.0,
-                'sentiment_score': 0.5, 'fallback': False
-            }
-            with bypass_throttling():
-                response = api_client.get(url, {'symbol': 'AAPL', 'news': '📈 股票大涨'})
-                assert response.status_code in [200, 400]
+        with bypass_throttling():
+            response = api_client.get(url, {'symbol': 'AAPL', 'news': '📈 股票大涨'})
+        assert response.status_code == 200
+        assert response.json()["data"]["success"] is False
 
     def test_emoji_in_preferences(self, auth_client, user):
         """Emoji in preferences should be saved correctly."""
@@ -205,7 +209,10 @@ class TestChaosPerformance:
         """If cache is slow to respond, request still completes (authenticated, price gate open)."""
         import time
         from tests.factories import UserFactory
-        api_client.force_authenticate(user=UserFactory())
+        from authentication.models import UserAPIKey
+        user = UserFactory()
+        _, raw_key = UserAPIKey.create_key(user, 'Chaos Cache Test')
+        api_client.credentials(HTTP_X_API_KEY=raw_key)
         def slow_cache_get(*args, **kwargs):
             time.sleep(0.2)
             # Empty list, not None: DRF throttling reads this key as a list of timestamps.

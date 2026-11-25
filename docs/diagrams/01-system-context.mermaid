@@ -1,0 +1,32 @@
+flowchart LR
+  user[User browser]
+  spa[Vercel React SPA]
+  edge[Cloudflare API edge]
+  api[Render Django API]
+  db[(PostgreSQL vendor unverified)]
+  cache[(Redis optional; live not configured)]
+  market[Market APIs: Finnhub, Alpha Vantage, RapidAPI, Twelve Data, Yahoo]
+  hf[Hugging Face Hub: model downloads]
+  email[SendGrid API / Brevo SMTP / console]
+  sentry[Sentry]
+  ga[Google Analytics 4]
+  va[Vercel Analytics]
+  gh[GitHub Actions]
+  s3[AWS S3 backup script only]
+
+  user -->|HTTPS GET/POST| spa
+  user -->|HTTPS JSON; JWT or API key| edge
+  edge -->|HTTPS origin proxy| api
+  api -->|PostgreSQL TLS via DATABASE_URL| db
+  api -.->|Redis protocol if REDIS_URL set| cache
+  api -->|HTTPS; server-side provider credentials| market
+  api -->|HTTPS model/tokenizer download| hf
+  api -->|HTTPS API or SMTP STARTTLS| email
+  api -->|HTTPS error events| sentry
+  spa -->|HTTPS events after consent| ga
+  spa -->|HTTPS telemetry; component always mounted| va
+  gh -->|HTTPS deployment API| api
+  gh -->|HTTPS deployment API| spa
+  api -.->|Manual script only; not scheduled| s3
+
+  %% No payment processor, LLM inference API, OAuth provider or webhook receiver found in the audited repository.

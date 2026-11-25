@@ -21,6 +21,7 @@ import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { MotionConfig } from 'framer-motion';
 import { trackPageView } from './utils/analytics';
 import ConsentManager from './components/consent/ConsentManager';
+import { Analytics } from '@vercel/analytics/react';
 
 // ============================================================================
 // Lazy Load Components
@@ -51,6 +52,8 @@ const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResendVerification = lazy(() => import("./pages/ResendVerification"));
+const WeeklyDigestUnsubscribe = lazy(() => import("./pages/WeeklyDigestUnsubscribe"));
+const CancelDeletion = lazy(() => import("./pages/CancelDeletion"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
@@ -130,6 +133,8 @@ const isAuthRoute = (pathname) => {
     '/reset-password',
     '/forgot-password',
     '/resend-verification',
+    '/unsubscribe-weekly-digest',
+    '/cancel-deletion',
     '/privacy',
     '/terms',
     '/onboarding',
@@ -233,6 +238,8 @@ const AppContent = () => {
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/resend-verification" element={<ResendVerification />} />
+                <Route path="/unsubscribe-weekly-digest" element={<WeeklyDigestUnsubscribe />} />
+                <Route path="/cancel-deletion" element={<CancelDeletion />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
                 <Route path="/unauthorized" element={<Unauthorized />} />
@@ -382,8 +389,10 @@ const App = () => {
             <OnboardingProvider>
               <DashboardProvider>
                 <AppContent />
+                {/* Mounted for every route: the gate must appear on the main app layout too. */}
                 <LegalAcceptanceGate />
                 <ConsentManager />
+                <Analytics />
               </DashboardProvider>
             </OnboardingProvider>
           </AuthSessionProvider>

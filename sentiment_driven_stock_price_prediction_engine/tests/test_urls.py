@@ -309,8 +309,8 @@ class TestInvalidURLs:
             # "/admin/nonexistent/",  # Admin redirects to login; test separately
         ]
     )
-    def test_invalid_url_returns_404(self, api_client, invalid_path):
-        response = api_client.get(invalid_path)
+    def test_invalid_url_returns_404(self, auth_client, invalid_path):
+        response = auth_client.get(invalid_path)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_admin_invalid_url_redirects(self, api_client):

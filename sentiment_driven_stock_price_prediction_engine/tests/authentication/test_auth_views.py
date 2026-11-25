@@ -24,7 +24,9 @@ class TestAuthViews:
             "username": "newuser",
             "email": "new@example.com",
             "password": "StrongPassword123!",
-            "password2": "StrongPassword123!"
+            "password2": "StrongPassword123!",
+            'accept_terms': True,
+            'acknowledge_privacy_notice': True
         }
         response = api_client.post('/api/v1/auth/register/', payload)
         

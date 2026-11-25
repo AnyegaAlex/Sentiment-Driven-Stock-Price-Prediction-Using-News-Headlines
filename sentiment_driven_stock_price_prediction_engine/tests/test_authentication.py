@@ -16,7 +16,7 @@ Version: 1.3.0
 """
 
 import pytest
-from authentication.utils import hash_verification_code
+from authentication.utils import hash_verification_code, generate_account_deletion_cancellation_token
 import json
 import base64
 from datetime import timedelta
@@ -26,6 +26,8 @@ from django.urls import reverse
 from django.core import mail
 from django.core.cache import cache
 from django.utils import timezone
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from django.test import override_settings
 from rest_framework import status
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
@@ -34,6 +36,7 @@ from freezegun import freeze_time
 
 from authentication.models import User, UserAPIKey, AuditLog
 from tests.factories import (
+    authenticate_api_client,
     UserFactory,
     UnverifiedUserFactory,
     InactiveUserFactory,
@@ -71,6 +74,8 @@ class TestRegistration:
             "email": "test@example.com",
             "password": "SecurePass123!",
             "password2": "SecurePass123!",
+            "accept_terms": True,
+            "acknowledge_privacy_notice": True,
         }
         with patch("authentication.views.send_verification_email", return_value=True) as mock_send:
             response = api_client.post(url, data)
@@ -90,6 +95,8 @@ class TestRegistration:
             "email": user.email,
             "password": "SecurePass123!",
             "password2": "SecurePass123!",
+            "accept_terms": True,
+            "acknowledge_privacy_notice": True,
         }
         with patch("authentication.views.send_verification_email", return_value=True):
             response = api_client.post(url, data)
@@ -105,6 +112,8 @@ class TestRegistration:
             "email": "new@example.com",
             "password": "SecurePass123!",
             "password2": "SecurePass123!",
+            "accept_terms": True,
+            "acknowledge_privacy_notice": True,
         }
         with patch("authentication.views.send_verification_email", return_value=True):
             response = api_client.post(url, data)
@@ -119,6 +128,8 @@ class TestRegistration:
             "email": "test@example.com",
             "password": "123",
             "password2": "123",
+            "accept_terms": True,
+            "acknowledge_privacy_notice": True,
         }
         response = api_client.post(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -132,6 +143,8 @@ class TestRegistration:
             "email": "test@example.com",
             "password": "SecurePass123!",
             "password2": "WrongPass123!",
+            "accept_terms": True,
+            "acknowledge_privacy_notice": True,
         }
         response = api_client.post(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -194,7 +207,7 @@ class TestEmailVerification:
         """Valid 6-digit code should verify email."""
         code = generate_verification_code()
         cache.set(f"email_verification_{unverified_user.id}", hash_verification_code(unverified_user.id, code), timeout=600)
-        api_client.force_authenticate(user=unverified_user)
+        authenticate_api_client(api_client, unverified_user)
         url = reverse("verify-email")
         response = api_client.post(url, {"code": code})
         assert response.status_code == status.HTTP_200_OK
@@ -203,7 +216,7 @@ class TestEmailVerification:
 
     def test_verify_email_with_invalid_code(self, api_client, unverified_user):
         """Invalid code should return 400."""
-        api_client.force_authenticate(user=unverified_user)
+        authenticate_api_client(api_client, unverified_user)
         url = reverse("verify-email")
         response = api_client.post(url, {"code": "000000"})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -640,15 +653,12 @@ class TestAccountDeletion:
         assert user.deletion_requested_at is not None
         assert user.deletion_scheduled_for is not None
 
-    def test_delete_account_cancel(self, api_client, deletion_pending_user):
-        """A pending deletion can be cancelled with the account password."""
-        deletion_pending_user.set_password('testpass123')
-        deletion_pending_user.save(update_fields=['password'])
-        response = api_client.post(
-            reverse("cancel-deletion"),
-            {'email': deletion_pending_user.email, 'password': 'testpass123'},
-            format='json',
-        )
+    def test_delete_account_cancel(self, auth_client, deletion_pending_user):
+        """A signed email link can cancel deletion without an authenticated session."""
+        uid = urlsafe_base64_encode(force_bytes(deletion_pending_user.pk))
+        token = generate_account_deletion_cancellation_token(deletion_pending_user)
+        url = reverse("cancel-deletion")
+        response = auth_client.post(url, {"uid": uid, "token": token}, format="json")
         assert response.status_code == status.HTTP_200_OK
         deletion_pending_user.refresh_from_db()
         assert deletion_pending_user.is_active is True

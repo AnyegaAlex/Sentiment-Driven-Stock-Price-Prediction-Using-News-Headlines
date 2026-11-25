@@ -21,7 +21,6 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .legal_views import LegalStatusView
-
 from .views import (
     # Authentication
     RegisterView,
@@ -40,6 +39,7 @@ from .views import (
 
     # Preferences & Watchlist
     UserPreferencesView,
+    WeeklyDigestUnsubscribeView,
     UserWatchlistView,
 
     # Account Deletion
@@ -97,6 +97,7 @@ urlpatterns = [
     # PREFERENCES & WATCHLIST
     # ========================================================================
     path('preferences/', UserPreferencesView.as_view(), name='user-preferences'),
+    path('weekly-digest/unsubscribe/', WeeklyDigestUnsubscribeView.as_view(), name='weekly-digest-unsubscribe'),
     path('watchlist/', UserWatchlistView.as_view(), name='user-watchlist'),
     path('watchlist/<str:symbol>/', UserWatchlistView.as_view(), name='user-watchlist-item'),
 

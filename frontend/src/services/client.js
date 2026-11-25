@@ -479,14 +479,6 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // Existing users must acknowledge the current legal documents before continuing.
-    if (status === 403 && data?.code === 'legal_acceptance_required') {
-      // Retain the signal in case an early API request finishes before the
-      // app-level dialog has mounted and subscribed to the event.
-      window.__tickflowLegalAcceptanceRequired = true;
-      window.dispatchEvent(new CustomEvent('tickflow:legal-acceptance-required'));
-    }
-
     // Rate limiting
     if (status === 429) {
       const retryAfter = parseInt(error.response.headers['retry-after'], 10) || 60;
@@ -511,6 +503,11 @@ apiClient.interceptors.response.use(
       });
     }
 
+    // Existing users who have not accepted the current legal documents (GAP-03).
+    // The app-level gate listens for this and shows the acceptance screen.
+    if (status === 403 && data?.code === 'legal_acceptance_required') {
+      window.dispatchEvent(new CustomEvent('tickflow:legal-acceptance-required'));
+    }
     return Promise.reject(formatError(error));
   }
 );

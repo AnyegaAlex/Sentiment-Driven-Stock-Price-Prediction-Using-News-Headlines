@@ -115,11 +115,17 @@ class RegisterSerializer(serializers.ModelSerializer):
         style={'input_type': 'password'},
         help_text="Confirm password"
     )
-
-    # Stage A scaffold. These become mandatory only when legal enforcement is enabled.
-    accept_terms = serializers.BooleanField(write_only=True, required=False)
-    acknowledge_privacy_notice = serializers.BooleanField(write_only=True, required=False)
     
+    # Legal acceptance (GAP-03). Versions are server-owned; clients send only flags.
+    accept_terms = serializers.BooleanField(
+        write_only=True, required=True,
+        help_text="Affirmative acceptance of the current Terms of Service",
+    )
+    acknowledge_privacy_notice = serializers.BooleanField(
+        write_only=True, required=True,
+        help_text="Acknowledgement that the current Privacy Policy was presented",
+    )
+
     # Custom email field with additional validation
     email = serializers.EmailField(
         required=True,
@@ -129,7 +135,10 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('username', 'email', 'password', 'password2', 'first_name', 'last_name', 'accept_terms', 'acknowledge_privacy_notice')
+        fields = (
+            'username', 'email', 'password', 'password2', 'first_name', 'last_name',
+            'accept_terms', 'acknowledge_privacy_notice',
+        )
         extra_kwargs = {
             'first_name': {'required': False, 'help_text': "First name (optional)"},
             'last_name': {'required': False, 'help_text': "Last name (optional)"},
@@ -145,17 +154,13 @@ class RegisterSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, attrs: Dict) -> Dict:
-        """Ensure passwords match."""
+        """Ensure passwords match and legal acknowledgements are affirmative."""
         if attrs['password'] != attrs['password2']:
             raise serializers.ValidationError({"password": "Password fields didn't match."})
-        if getattr(settings, 'LEGAL_ACCEPTANCE_ENFORCEMENT_ENABLED', False):
-            from .legal_config import legal_documents_configured
-            if not legal_documents_configured():
-                raise serializers.ValidationError({'legal': 'Legal documents are not configured for acceptance.'})
-            if attrs.get('accept_terms') is not True:
-                raise serializers.ValidationError({'accept_terms': 'You must accept the Terms of Service.'})
-            if attrs.get('acknowledge_privacy_notice') is not True:
-                raise serializers.ValidationError({'acknowledge_privacy_notice': 'You must acknowledge the Privacy Policy.'})
+        if attrs.get('accept_terms') is not True:
+            raise serializers.ValidationError({"accept_terms": "You must accept the Terms of Service."})
+        if attrs.get('acknowledge_privacy_notice') is not True:
+            raise serializers.ValidationError({"acknowledge_privacy_notice": "You must acknowledge the Privacy Policy."})
         return attrs
 
     def validate_username(self, value: str) -> str:
@@ -173,8 +178,6 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data: Dict) -> User:
         """Create user with hashed password."""
-        validated_data.pop('accept_terms', None)
-        validated_data.pop('acknowledge_privacy_notice', None)
         # Normalize email
         validated_data['email'] = validated_data['email'].lower()
         
@@ -187,7 +190,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.set_password(validated_data['password'])
         user.save()
         
-        logger.info(f"User created via registration: {user.email}")
+        logger.info(f"User created via registration: user_id={user.id}")
         return user
 
 
@@ -582,12 +585,6 @@ class DeleteAccountSerializer(serializers.Serializer):
 # USER PREFERENCES SERIALIZER
 # ============================================================================
 
-class CancelDeletionSerializer(serializers.Serializer):
-    """Credentials required to cancel deletion after JWTs have been revoked."""
-    email = serializers.EmailField()
-    password = serializers.CharField(write_only=True, trim_whitespace=False)
-
-
 class UserPreferencesSerializer(serializers.ModelSerializer):
     """
     Serializer for user investment preferences and watchlist.
@@ -626,13 +623,18 @@ class UserPreferencesSerializer(serializers.ModelSerializer):
             'price_alerts',
             'news_alerts',
             'weekly_digest',
+            'weekly_digest_opted_in_at',
+            'weekly_digest_unsubscribed_at',
             'theme',
             'language',
             'timezone',
             'created_at',
             'updated_at',
         )
-        read_only_fields = ('created_at', 'updated_at')
+        read_only_fields = (
+            'created_at', 'updated_at',
+            'weekly_digest_opted_in_at', 'weekly_digest_unsubscribed_at',
+        )
         extra_kwargs = {
             'investment_goal': {'help_text': "Investment goal: growth, income, value, trading, retirement"},
             'risk_tolerance': {'help_text': "Risk tolerance: conservative, moderate, aggressive"},
@@ -644,9 +646,9 @@ class UserPreferencesSerializer(serializers.ModelSerializer):
             'language': {'help_text': "Language code (e.g., 'en', 'fr', 'es')"},
         }
 
-    def validate_watchlist(self, value: list) -> list:
-        """Normalize symbols and remove duplicates while preserving order."""
-        return list(dict.fromkeys(symbol.upper().strip() for symbol in value))
+    def validate_watchlist(self, value: list[str]) -> list[str]:
+        """Remove duplicate symbols while preserving the user's order."""
+        return list(dict.fromkeys(value))
 
     def validate_language(self, value: str) -> str:
         """Validate language code."""

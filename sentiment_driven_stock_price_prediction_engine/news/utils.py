@@ -323,34 +323,35 @@ def analyze_batch(texts: List[str]) -> List[Dict[str, Any]]:
         _sentiment_circuit.record_failure()
         return [{'label': 'neutral', 'score': 0.0} for _ in texts]
 
-    # 3. Load inference dependencies as one guarded setup step. Keep torch in
-    # function scope so exception handlers can reliably identify CUDA OOMs.
-    import torch
-
+    # 3. Use a local batch size (do not mutate global config)
     batch_size = config['batch_size']
     results: List[Dict[str, Any]] = []
+
     try:
+        import torch  # lazy import, but before the OOM exception handler
         tokenizer = load_tokenizer()
         model = load_model()
         device = get_device()
         if tokenizer is None or model is None:
-            raise RuntimeError("Sentiment model or tokenizer is unavailable")
+            raise RuntimeError("Model or tokenizer not available")
     except Exception as exc:
-        logger.error("Batch sentiment setup failed (%s)", type(exc).__name__)
+        logger.error("Batch model initialization failed (%s)", type(exc).__name__)
         _sentiment_circuit.record_failure()
         return [{'label': 'neutral', 'score': 0.0} for _ in texts]
 
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
 
-        # Check each text length; if too short, return neutral directly
-        batch_results = [None] * len(batch)
+        # Preallocate one neutral result per input. Long-text inference
+        # replaces the corresponding slot after successful processing.
+        batch_results = [
+            {'label': 'neutral', 'score': 0.0}
+            for _ in batch
+        ]
         long_text_indices = []
         long_texts = []
         for idx, t in enumerate(batch):
-            if len(str(t).strip()) < config['min_text_length']:
-                batch_results[idx] = {'label': 'neutral', 'score': 0.0}
-            else:
+            if len(str(t).strip()) >= config['min_text_length']:
                 long_text_indices.append(idx)
                 long_texts.append(t)
 

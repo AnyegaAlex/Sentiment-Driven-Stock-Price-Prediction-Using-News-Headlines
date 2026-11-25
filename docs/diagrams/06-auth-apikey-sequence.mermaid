@@ -1,0 +1,45 @@
+sequenceDiagram
+  autonumber
+  actor User
+  participant SPA as React SPA
+  participant API as Django API
+  participant MW as APIKeyMiddleware
+  participant DRF as APIKeyAuthentication
+  participant Cache as Django cache
+  participant DB as PostgreSQL
+
+  User->>SPA: Create API key
+  SPA->>API: POST /api/v1/auth/api-keys/ with JWT
+  API->>DB: Store SHA-256 digest in UserAPIKey.key_hash
+  API-->>SPA: Return raw key once
+
+  User->>SPA: Call protected API
+  SPA->>API: HTTPS + X-API-Key
+  API->>MW: Apply path allowlist
+  MW->>Cache: Lookup key digest cache
+  alt Cache hit
+    Cache-->>MW: UserAPIKey record ID
+    MW->>DB: Load active key/user
+  else Cache miss
+    MW->>DB: Query UserAPIKey.key_hash
+    DB-->>MW: Matching key record
+    MW->>Cache: Cache key record ID for five minutes
+  end
+  MW->>DRF: Continue request with user context
+  DRF->>Cache: Check API-key auth cache
+  alt Middleware populated cache
+    Cache-->>DRF: Key record ID
+    DRF-->>API: Authenticated user
+  else Direct DRF database fallback
+    DRF->>DB: Query hashed_key field
+    DB-->>DRF: Field does not exist on UserAPIKey model
+    DRF-->>API: Authentication failure on this path
+  end
+  API-->>SPA: View response or 401
+
+  User->>SPA: Revoke key
+  SPA->>API: DELETE /api/v1/auth/api-keys/{id}/
+  API->>DB: Mark key inactive
+  API-->>SPA: Revocation response
+
+  Note over API,DB: No API-key scopes and no legal acceptance gate are implemented.

@@ -1,107 +1,89 @@
-# GAP-03 Stage B: Legal and Privacy Evidence Review
+# Stage B: Legal and privacy publication evidence review
 
-**Review date:** 25 November 2026  
-**Scope:** TickFlow Intelligence hosted application at `https://intelligence.tickflowcapital.com`  
-**Status:** Evidence review in progress. These pages are drafts, not approved legal instruments. No effective dates or canonical hashes are set.
+**Status:** Remediation in progress. Not approved for publication.
+**Review date:** 25 November 2026
+**Repository branch:** feat/stage-b-publication-blockers-gap03-2026-11-25
+**Production changes:** None. No migration, deployment, commit, push, PR or merge has been performed.
 
-## Executive result
+This register separates code evidence, account configuration evidence and legal decisions. A source-code change does not prove that the corresponding production job or provider setting is active.
 
-Stage B has established several source-backed facts and corrected two implementation/configuration inconsistencies. It is **not ready for legal acceptance enforcement or publication**. Production processor/region details, retention/deletion behavior, recurring-email consent, legal contact monitoring, company-document confirmation and counsel review remain open.
+## 1. Publication blockers
 
-## Confirmed from repository / implementation
+| Area | Current evidence | Status | Required closure evidence |
+|---|---|---|---|
+| Weekly digest | Existing default was enabled. Remediation changes the default to off, adds opt-in/unsubscribe timestamps, records preference changes, disables legacy default-on subscriptions in a migration, and adds an unsubscribe route to digest emails. | Code implemented; migration not deployed | Apply migration after approval; test the deployed settings flow and unsubscribe link; verify no legacy user is mailed without a recorded opt-in. |
+| Account deletion | Existing application scheduled deletion after 30 days but had no permanent purge worker. Remediation adds purge_scheduled_accounts; cancellation now uses a signed email link that works while the account is inactive. | Code implemented; schedule not verified | Deploy migration/code; configure and verify a daily job; inspect successful run logs and test a real deletion lifecycle. |
+| Audit logs | A 90-day cleanup command exists. Remediation adds run_retention_maintenance, which runs account purging and audit cleanup independently. User-linked audit logs are removed when the account is purged to avoid leaving IP/email details behind. Terms acceptance and Privacy Notice acknowledgement rows remain with the user foreign key set to null; these rows currently contain version, content hash and timestamp only, but their retention basis and period still need legal approval. | Code implemented; schedule not verified | Configure and verify the production schedule and a successful run. |
+| Backups | Existing script used localhost, wrote a .sql.gz file without actually compressing the dump, silently swallowed S3 upload errors and did not expire old S3 objects. Remediation adds a Django backup_db command using the configured PostgreSQL host, gzip compression, S3 expiry including object versions, and visible failures. | Code implemented; production storage and schedule unverified | Confirm Neon direct (non-pooler) backup URL, S3 bucket, region, credentials, encryption, versioning and lifecycle; run a production backup and restore test; verify schedule and logs. |
+| Database | The company has stated that the database is Neon in Singapore. render.yaml also specifies Singapore for the Render service. The actual production DATABASE_URL and Neon project settings have not been inspected. | User-provided/configuration evidence only | Verify the production Neon project, branch, region, backup/PITR settings and Render connection without exposing credentials. |
+| Render | Live Render account inspection confirms the production backend service is Tickflow-Capital-Intelligence-Backend, branch master, Singapore region, Free plan, one instance, with auto-deploy disabled. Latest live deploy is commit 6edf5820fe48913f1e0fc32695f48a075aa72e12 from 24 November 2026. Staging is also Singapore/Free and uses branch staging. The Render account contains no Postgres instance, consistent with Neon being external. Only these two web services are listed; no Cron Job service exists. The live service environment-variable values are not exposed by the connected read-only service inspection. | Pending account verification | Configure and verify one daily Cron Job for python manage.py run_daily_maintenance; no job currently exists. Verify the live service's required env-key presence and values through the Render dashboard, without copying secrets into this report. No workspace-plan upgrade is assumed. Approve the Cron Job's usage-based compute and $1/month minimum charge before creation. |
+| Vercel | The inspected production frontend deployment is READY in iad1 (US East). Production has a GA4 measurement ID, and the source loads Google Analytics only after analytics consent. Earlier environment inspection found frontend Sentry variables scoped to Preview, not Production. Sentry now shows frontend project events, so their originating deployment (Preview, older production build or another environment) remains unverified. No Vercel Analytics component is currently mounted in source. The project also contains a production SECRET_KEY variable and unused VITE_API_KEY, VITE_ALPHA_VANTAGE_KEY and VITE_RAPIDAPI_KEY entries; none are referenced by the frontend source. | Deployment region verified; production env hygiene needs review | Verify Vercel production Sentry DSN and release/environment variables; verify dashboard-level Vercel Analytics is not separately enabled; remove the unused SECRET_KEY and stale API-key variables after confirming they are not used by any build integration; rotate the backend secret if the Vercel SECRET_KEY is the same value. Confirm Vercel DPA, analytics region/retention and sub-processors. |
+| Brevo | Source remediation uses the Brevo transactional HTTP API over HTTPS, not SMTP. The Brevo API key and sender identity have not been inspected in the production account. | Code aligned; account settings pending | Verify API key is configured in Render, sender identity/domain authentication, account region, DPA, retention and suppression/unsubscribe behavior. |
+| Sentry | Read-only account inspection confirms two active projects (Django backend and React frontend), EU organisation region, Developer plan, and 30-day event retention per Sentry plan documentation. Both projects allow all domains (`*`). Organisation-level Require Data Scrubber, Require Default Scrubbers, Prevent Storing IP Addresses and Require 2FA are disabled. Existing custom scrubbing is limited to email replacement in `$message`; custom sensitive fields include email, username and selected financial-profile fields. SDK code review found explicit user/request context and development traffic paths. Stage B worktree now removes structured user identity, IP/device fields, request query strings and bodies, disables profiling by default, and disables local development reporting unless explicitly enabled with a separate DSN. | Account inspected; code fixes prepared; live settings and deployment pending | Approve enabling required/default data scrubbers and IP storage prevention; restrict frontend Allowed Domains to the verified production origin; confirm all members can comply before enforcing 2FA; verify active Render/Vercel DSNs, release/environment labels, DPA, subprocessors and deployed code. |
+| Cloudflare | Email Routing is enabled. `info@tickflowcapital.com` is active and forwards to the verified Gmail destination; no emails were received in the last 7 days. `legal@tickflowcapital.com` does not exist yet. Catch-all is disabled. The root SPF record currently authorises Cloudflare Email Routing only; Brevo DKIM/sender authentication still needs verification. DMARC is currently p=none and reports to dmarc-reports@tickflowcapital.com; mailbox ownership and report delivery have not been verified. | DNS and info@ route verified; legal@ pending | Create and test legal@ to the existing verified forwarding destination; verify delivery and assign a response owner. Keep info@ active for verification and general correspondence. Inspect Brevo's exact SPF/DKIM instructions in its authenticated domain screen before changing DNS; do not guess a DKIM selector or add a second SPF record. |
+| Legal contact | `legal@tickflowcapital.com` has not yet been set up. `info@tickflowcapital.com` exists and forwards to the verified destination. Existing legal JSON uses the incorrect tickflow.com domain. | Blocked | Create and test legal@ through Cloudflare Email Routing, designate a responsible person, and verify the existing info@ route remains operational. |
+| Intellectual property | LICENSE is MIT and currently names Anyega Alex Kamau. The repository is under the personal GitHub account AnyegaAlex. No signed company assignment or KECOBO recordal evidence has been supplied. | Blocked | Execute an economic-rights assignment; lodge it with KECOBO and obtain the certificate of recordal/Assignment Register entry; transfer repository administration to a company-controlled GitHub organisation. |
+| ODPC | Tickflow Capital Limited's data-handler registration position/certificate has not been verified. | Blocked | Confirm whether registration is required for the company's processing activities and size/sector; retain the certificate or documented exemption analysis. |
+| Registered office | Company records previously supplied state Greenspot Garden, Eastern Bypass, Ruiru, Kiambu County, Kenya. A current CR12 has not been checked in this review. | Pending documentary check | Verify the registered office and legal company name against a current CR12/company search before publishing. |
 
-| Topic | Evidence | Finding |
-|---|---|---|
-| Entity | Existing Terms/Privacy source and prior company records supplied by the owner | Tickflow Capital Limited; registration `PVT-6Y1YWM6V`. Registered office recorded as Greenspot Garden, Eastern Bypass, Ruiru, Kiambu County, Kenya. This is the address now reflected in both draft pages; reconcile against the current CR12 before publication. |
-| Product scope | `frontend/src/pages/Terms.jsx`, `Privacy.jsx` | The pages are scoped to the hosted TickFlow Intelligence app, not the corporate website or TIES. The Terms acceptance paragraph now distinguishes agreement to the Terms from acknowledgement of the Privacy Policy; a privacy-notice acknowledgement is not blanket consent to all processing. |
-| Email delivery | Django `settings.py`; `render.yaml`; `authentication/utils.py` | Configured transactional mail path is Brevo SMTP (`smtp-relay.brevo.com`) using `BREVO_SMTP_KEY`. Legacy SendGrid health-check code exists but is not the configured mail-delivery path. |
-| Frontend analytics | `ConsentManager.jsx`, `utils/analytics.js`, `App.jsx` | Google Analytics 4 is requested only after affirmative analytics preference. Vercel Analytics is conditionally mounted by `ConsentManager` after consent. An additional unconditional `<Analytics />` in `App.jsx` contradicted the draft; it has been removed. URL query strings and fragments are stripped from Vercel Analytics events. |
-| Sentry | `frontend/src/sentry.js`; backend `settings.py` and `sentry_config.py` | Frontend `sendDefaultPii` is false and request scrubbing runs in `beforeSend`. Backend `SENTRY_SEND_PII` defaults false. Actual production DSN, project settings, retention and event payloads still require account-side verification. |
-| Verification codes | `authentication/utils.py`; `authentication/views.py` | Signup email codes are keyed-hash cached with a 10-minute TTL. Email-change codes were cached in plaintext; this has been corrected to use the same keyed digest and constant-time comparison. |
-| Account deletion | `authentication/views.py` | A request deactivates the account and sets a 30-day scheduled deletion timestamp. Cancellation is supported during the grace period. No permanent deletion job was found in this repository, so the 30-day timestamp is not evidence that records are actually purged after 30 days. |
-| Audit logs | `authentication/management/commands/cleanup_audit_logs.py` | A cleanup command defaults to 90 days, but the production schedule and successful execution are not established by the repository. |
-| Backups | `scripts/backup_db.py` | The script's default 30-day cleanup applies to local backup files. It does not delete old S3 objects. Actual production backup policy and provider-managed backups are unknown. |
-| Passwords | Django custom user model and registration/change-password serializers | Passwords use Django's password-hashing API (`set_password`); no plaintext password storage was identified. |
-| Payment data | Frontend/backend source search | No Stripe, PayPal, payment-intent or checkout implementation was found in the reviewed source. Confirm against any external billing or provider account before making an absolute public claim. |
-| Source licence | Root `LICENSE` | Repository source is MIT licensed, copyright 2026 Anyega Alex Kamau. This does not establish that Tickflow Capital Limited owns the code or has a written licence/assignment to operate and sublicense it. |
+## 2. Provider and transfer inventory
 
-## Corrections made during Stage B
+| Provider | Known role | Region evidence | Contract/retention evidence |
+|---|---|---|---|
+| Neon | Production PostgreSQL (as stated by the company) | Singapore (company-provided; verify project console) | DPA, backup/PITR, retention and subprocessor list pending |
+| Render | Backend hosting | Production and staging services verified in Singapore; both are Free plan | DPA, logs retention, backup and subprocessor details pending |
+| Vercel | Frontend hosting | Production deployment iad1 (US East); no Vercel Analytics component found in source | DPA, deployment/log retention and subprocessors pending |
+| Google Analytics 4 | Website analytics, gated by the application's analytics-consent choice | Google account processing region not verified | Google data-processing terms, account retention, advertising features and subprocessors pending |
+| Brevo | Transactional email via HTTPS API | Account-specific region not verified | DPA, retention, sender authentication and subprocessors pending |
+| Sentry | Error monitoring, if production DSN is configured | Project region not verified | DPA, event retention, PII scrubbing and subprocessors pending |
+| Cloudflare | DNS and inbound Email Routing | Global service; exact processing region not verified | Email Routing terms, retention and subprocessors pending |
+| S3-compatible backup storage | Database backup objects | Bucket region not supplied | Bucket owner, region, encryption, versioning, lifecycle, DPA and access controls pending |
 
-1. Removed the unconditional Vercel Analytics component from `frontend/src/App.jsx`; `ConsentManager` is now the sole mount point and only renders it when analytics consent is true.
-2. Added consent tests to assert Vercel Analytics is absent before a choice and after rejection, and present after acceptance with the URL-scrubbing callback.
-3. Changed email-change OTP cache storage from plaintext to the existing user-bound HMAC-SHA256 digest, compared with `hmac.compare_digest`.
-4. Updated the email-change test fixture and added a regression test proving the cached value is the keyed digest, not the OTP.
-5. Corrected backend `.env.example` to document Brevo rather than SendGrid and set `SENTRY_SEND_PII=false`, matching the settings default.
-6. Replaced the registered-office placeholders in the two draft pages with the owner-supplied company-record address above. A current CR12 should still be used as the final documentary check.
-7. Updated the Privacy draft's processor inventory to distinguish Brevo from legacy SendGrid code and to avoid representing Neon as a confirmed active production database processor.
-8. Replaced the inaccurate “confirm marketing email is never sent” note with a factual reviewer warning: the weekly digest is sent to verified users with `weekly_digest=true`, and that preference currently defaults to true.
+Do not publish a generic statement that all international transfers are protected until actual recipient locations, transfer purposes, transfer records and safeguards have been documented. The ODPC's 2026 cross-border guidance requires transfer documentation and demonstrable safeguards.
 
-## Open publication blockers
+## 3. Current legal-page defects
 
-### Corporate and contact details
+The existing frontend/src/legal/documents/terms.json and privacy.json are not ready for publication:
 
-- Obtain or inspect a current CR12 / company record to confirm the registered office exactly, including any postal address if one is required in the notice.
-- Verify that `legal@tickflowcapital.com` and `privacy@tickflowcapital.com` exist, are monitored, have an assigned owner, and have a process for acknowledging and resolving requests. The source code cannot prove mailbox monitoring.
-- Confirm the public contact address and whether separate legal/privacy mailboxes should remain.
+- They use legal@tickflow.com and privacy@tickflow.com, not the intended company domain.
+- The privacy notice does not adequately identify all processors, transfer destinations, safeguards, retention periods or the mandatory/voluntary status and consequences of requested data.
+- It does not accurately distinguish essential account/security email from optional weekly digest email.
+- The terms overstate that all content and code are MIT-licensed.
+- The terms and privacy notice need the complete legal entity name and documentary confirmation of the registered office.
+- The legal pages must be reconciled with actual production provider configuration and deployed retention jobs before legal acceptance is enabled.
 
-### Product and regulatory wording
+Drafts are kept separately in this folder. The public JSON documents are deliberately not changed or versioned in this remediation pass.
 
-- Kenyan counsel must assess the actual feature set and distribution of model outputs before approving the “not investment advice / not a recommendation” language and the unlicensed-status statement. Do not rely on the draft's disclaimer as a legal conclusion.
-- Confirm the hosted app's current product description and whether any outputs could reasonably be understood as recommendations, rankings, signals or personalized advice.
-- Confirm the written IP assignment/licence between Anyega Alex Kamau and Tickflow Capital Limited. MIT licensing alone does not transfer ownership of the repository copyright.
-- Decide notice periods for material changes, suspension/termination notice and appeals, liability limits, governing law and dispute forum with Kenyan counsel.
+## 4. Kenyan compliance checkpoints
 
-### Data inventory and processors
+1. Section 29 of the Data Protection Act requires a collection notice covering the data collected, purposes, data-subject rights, recipients and safeguards, controller/processor contacts, and whether provision is voluntary or mandatory and the consequences of not providing it.
+2. Cross-border transfers require a documented recipient, justification, description of transferred data and safeguards. Maintain the transfer register and assess whether a DPIA is required.
+3. ODPC's current FAQ describes an exemption only where BOTH annual turnover/revenue is below KES 5 million AND the organisation has fewer than 10 employees, and the organisation is not processing for a listed non-exempt purpose. The listed purposes include provision of financial services and direct marketing. Confirm Tickflow's actual turnover, employee count and whether this financial-market intelligence service falls within a non-exempt financial-services category; obtain an ODPC/advocate determination and certificate or documented exemption analysis.
+4. The company should have a designated owner for privacy requests, incidents, processor reviews and retention verification.
 
-- Verify the live production database provider and region from Render's current service/environment configuration. The repository manifest contains a Neon comment, but the former Neon project was deleted and source code does not prove the currently connected database provider.
-- Verify the live Render web service and Redis deployment regions, Vercel hosting region/configuration, Brevo account/data region, and Sentry organization/project region and settings.
-- Confirm which market/news providers are actually enabled in production. Source code contains Finnhub, Alpha Vantage, RapidAPI/Yahoo Finance, Twelve Data and `yfinance` integrations; configured runtime keys and actual traffic determine which are active. The Privacy draft now names the primary API integrations but intentionally leaves activation and provider-side retention unconfirmed.
-- Inspect production Sentry event samples and backend log payloads. `sendDefaultPii=false` is not proof that custom contexts, exception messages, breadcrumbs or application logs contain no personal data.
-- Confirm whether any external analytics, customer support, CRM, fraud or billing services are connected outside the repository.
+## 5. Release controls
 
-### Email and consent
+- LEGAL_ACCEPTANCE_ENFORCEMENT_ENABLED remains disabled.
+- VITE_LEGAL_ACCEPTANCE_ENABLED remains disabled.
+- No production migration has been applied.
+- No production deployment has been made.
+- No legal document version or SHA-256 acceptance hash has been finalised.
+- Do not enable legal acceptance enforcement until the blockers above have documentary evidence and the final legal documents have been reviewed by Kenyan counsel.
 
-- Decide the lawful basis and consent standard for weekly digest emails. Current `UserPreferences.weekly_digest` defaults to true and the digest command sends engagement summaries to verified users. The current source does not demonstrate a separate explicit marketing opt-in or a clear unsubscribe link in the digest.
-- Decide whether weekly digest is optional marketing/engagement email or an essential service message. If optional, implement a genuine opt-in default, withdrawal/unsubscribe path and suppression enforcement before representing it as consent-based.
-- Verify whether price/news alerts and other notification preferences trigger emails, and ensure the policy distinguishes operational/security emails from optional communications.
+## 6. Code verification
 
-### Retention, deletion and rights handling
+- Django system check: passed, no issues.
+- Migration consistency check: passed, no model changes pending.
+- Focused backend remediation tests: 51 passed, covering weekly digest, Brevo API delivery, deletion/unsubscribe tokens, account purge, audit retention, backup upload/encryption and daily maintenance.
+- Frontend production build: passed.
+- Frontend tests: 157 passed across 35 test files.
+- git diff --check: passed.
+- The latest full backend-suite run reported 812 passed, 30 failed, 12 skipped and 21 xfailed (85.37% coverage). Remaining failures are in existing API-key middleware response contracts, news/sentiment tests, chaos tests, stock-cache management tests, observability tests and URL expectations. The log-safety tests now pass after isolating local HTTP requests from the suite-wide requests.get mock. The focused remediation suite passed 51 tests after the final deletion-email rollback and Neon direct-backup-URL changes. The complete backend suite is NOT certified green and needs a separate baseline investigation before release.
 
-- Implement and test a permanent account/data deletion workflow for accounts whose 30-day grace period expires, or change the account-deletion promise. The current code only schedules deactivation/deletion; no purge job was found.
-- Define retention by data class: account/profile/preferences, API-key metadata, usage/symbol history, audit logs, security logs, legal acceptance records, support correspondence, cache entries and backups.
-- Verify and schedule the existing 90-day audit-log cleanup if that is the intended retention period. Do not promise 90 days until the production schedule is proven.
-- Define retention and deletion for Render/Redis cache, Sentry, Vercel, Brevo and provider-side logs.
-- Define backup retention for local and remote/S3 backups. The local cleanup code does not clean S3 objects.
-- Resolve GAP-04 for Terms acceptance and Privacy acknowledgement records after account deletion. Their foreign keys use `SET_NULL`; retention must have a documented purpose, access control and period.
-- Establish the data-subject request workflow, identity checks, response ownership and statutory timelines. The page's generic promise is not evidence that the process is operational.
+## 7. Primary legal references
 
-### Security and incident response
-
-- Confirm the breach-response owner, escalation process, affected-person/regulator assessment and notification workflow against applicable Kenyan law.
-- Verify current Sentry and logging redaction in production. The backend's `SENTRY_SEND_PII` default is false, but the deployment environment may override it.
-- Verify processor contracts/data-processing terms and cross-border transfer safeguards for each active provider before listing transfer arrangements.
-
-## External corporate-site material checked
-
-The corporate site's legal/privacy pages and compliance statement are separate from the hosted-app policy and must not be silently copied into it. The corporate privacy page publicly lists Ruiru, Kiambu, Kenya, while the company-record address supplied for this review is more specific. A current CR12 remains the primary check for the registered office. The official Kenyan company-search description says a CR12 confirms the registered office address.
-
-## Release decision
-
-**Do not set `LEGAL_ACCEPTANCE_ENFORCEMENT_ENABLED=true` or `VITE_LEGAL_ACCEPTANCE_ENABLED=true`. Do not assign effective dates, versions or SHA-256 hashes yet.** The draft pages still contain unresolved legal-review notes, and the retention/email/processor decisions above materially affect what users are being asked to accept or acknowledge.
-
-## Kenyan data-protection research checkpoints (25 November 2026)
-
-This is a compliance checklist for Kenyan counsel, not a legal opinion.
-
-- **Data protection registration:** ODPC's published FAQ states that Section 18 and the 2021 Registration Regulations require public and private organisations/individuals processing personal data to register, and describes registration tiers. Obtain Tickflow Capital Limited's current ODPC data-controller registration certificate or written advice on the applicable registration position before publishing a compliance statement. Source: [ODPC FAQs](https://www.odpc.go.ke/faqs/).
-- **Collection notice:** Section 29 of the Data Protection Act requires notice, before collection where practicable, of data collection, purposes, data-subject rights, recipients/transfers and safeguards, controller/processor contacts, security measures, whether collection is legally required or voluntary, and consequences of not providing requested data. The Privacy draft needs a final field-by-field completeness check against the actual signup/profile flows. Source: [Data Protection Act, 2019, section 29](https://sheria.net/legislation/akn/ke/act/2019/24/section/29).
-- **Cross-border processing:** ODPC's 2026 cross-border guidance calls for identifying destination jurisdictions and documenting the applicable transfer basis, necessity, safeguards and written legal instrument/data-processing terms. Do not publish a generic claim that transfers are protected until each active processor's country, contract and safeguards are verified. Sources: [ODPC 2026 Cross-border Guidance](https://odpc.go.ke/wp-content/uploads/2026/09/ODPC-%E2%80%93-Guidance-Notes-for-Cross-border-Data-Transfers.pdf) and [ODPC Guidance Notes for Data Protection Policies](https://odpc.go.ke/wp-content/uploads/2026/07/ODPC-%E2%80%93-Guidance-Note-for-Data-Protection-Policies.pdf).
-- **Data-processing policy:** ODPC's 2026 guidance expects the policy to describe third-party/controller/processor relationships and cross-border safeguards. The hosted-app Privacy Policy should identify the actual processors and not rely on a generic “service providers” statement where providers are known.
-
-### Additional legal decisions to confirm
-
-- Obtain Tickflow Capital Limited's ODPC registration certificate and verify its scope/validity and whether any separate processor registration is required for the company's actual activities.
-- Map every signup/profile field to purpose, lawful basis, whether required/optional, recipient and consequence if omitted, as required for the collection notice.
-- Determine whether a Data Protection Officer is required or should be appointed based on the actual processing activities and current statutory criteria.
-- Confirm whether a DPIA is required for any high-risk processing, including profiling/automated analysis, and document the assessment where applicable.
-- For every active provider, obtain the applicable data-processing terms and confirm country/region, onward transfers, deletion/return, security, breach notice and audit terms.
+- Kenya Data Protection Act, 2019, especially sections 26, 29 and 30: https://odpc.go.ke/wp-content/uploads/2024/02/TheDataProtectionAct__No24of2019.pdf
+- ODPC Guidance Notes for Cross-border Data Transfers (2026): https://odpc.go.ke/wp-content/uploads/2026/09/ODPC-%E2%80%93-Guidance-Notes-for-Cross-border-Data-Transfers.pdf
+- ODPC registration FAQs (including the two-part threshold and non-exempt categories): https://www.odpc.go.ke/faqs/
+- Data Protection Act, 2019, section 29 duty to notify: https://odpc.go.ke/wp-content/uploads/2024/02/TheDataProtectionAct__No24of2019.pdf
+- Kenya Copyright Act, Cap. 130 (Rev. 2022), especially sections 31–33: https://copyright.go.ke/sites/default/files/downloads/CopyrightAct12of2001.pdf

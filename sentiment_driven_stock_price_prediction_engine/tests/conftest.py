@@ -12,7 +12,6 @@ import pandas as pd
 from django.core.cache import cache
 from django.urls import reverse
 from rest_framework.test import APIClient
-from rest_framework_simplejwt.tokens import RefreshToken
 from unittest.mock import patch, MagicMock
 
 from tests.factories import (
@@ -34,6 +33,12 @@ def clear_cache():
 
 
 @pytest.fixture(autouse=True)
+def in_memory_email_backend(settings):
+    """Never send real email from tests, including when production uses SMTP."""
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+
+
+@pytest.fixture(autouse=True)
 def plain_static_storage(settings):
     """
     Tests do not run collectstatic, so the production manifest storage has no entries
@@ -46,29 +51,18 @@ def plain_static_storage(settings):
     }
 
 
-class JWTAPIClient(APIClient):
-    """APIClient whose force_authenticate helper exercises production JWT auth."""
-
-    def force_authenticate(self, user=None, token=None):
-        if user is not None:
-            token = RefreshToken.for_user(user).access_token
-        if token is None:
-            self.credentials()
-        else:
-            self.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
-
-
 @pytest.fixture
 def api_client():
-    """Return an unauthenticated client with production-compatible auth helpers."""
-    return JWTAPIClient()
+    """Return an unauthenticated DRF API client."""
+    return APIClient()
 
 
 @pytest.fixture
 def auth_client(api_client, user):
-    """Return a client authenticated through the same JWT path as production."""
-    api_client.force_authenticate(user=user)
-    return api_client
+    """Return a client authenticated through the application's API-key path."""
+    from tests.factories import authenticate_api_client
+
+    return authenticate_api_client(api_client, user, name="Pytest API Client")
 
 
 @pytest.fixture
@@ -171,8 +165,8 @@ def mock_finnhub():
 
 # The FIXED fixture
 @pytest.fixture(autouse=True)
-def mock_sendgrid():
-    """Mock SendGrid email sending to avoid network calls."""
+def mock_transactional_email():
+    """Mock transactional email delivery to avoid network calls in unrelated tests."""
     with patch("authentication.utils.send_email_sync") as mock_send:
         mock_send.return_value = True
         yield mock_send

@@ -24,7 +24,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 from .models import UserAPIKey
-from .legal import enforce_legal_acceptance
+from .legal import LegalAcceptanceRequired, enforce_legal_acceptance
 
 # drf-spectacular extension
 try:
@@ -76,47 +76,56 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
                 'Too many authentication attempts. Please try again later.'
             )
 
-        # 3. Resolve the key. Keep lookup failures separate from deliberate
-        # authentication failures so specific 401 responses are not masked.
+        # 3. Validate API key using direct hashed lookup
         try:
             key_obj = self._validate_api_key(api_key)
-        except Exception:
-            logger.exception("API key lookup failed")
-            raise exceptions.AuthenticationFailed(
-                'Authentication error. Please try again.'
-            )
+            if not key_obj:
+                self._log_auth_attempt(None, api_key, success=False)
+                raise exceptions.AuthenticationFailed('Invalid API key')
 
-        if not key_obj:
+            # Check if key is active
+            if not key_obj.is_active:
+                self._log_auth_attempt(key_obj.user, api_key, success=False, reason='inactive')
+                raise exceptions.AuthenticationFailed('API key is deactivated')
+
+            # Check if key has expired
+            if key_obj.expires_at and key_obj.expires_at < timezone.now():
+                self._log_auth_attempt(key_obj.user, api_key, success=False, reason='expired')
+                raise exceptions.AuthenticationFailed('API key has expired')
+
+            # Legal gate (GAP-03): checked before usage is counted or success is logged,
+            # so denied requests are not recorded as successful authentications.
+            enforce_legal_acceptance(key_obj.user, request)
+
+            # 4. Update last_used timestamp asynchronously
+            self._update_last_used_async(key_obj)
+            self._count_daily_usage(key_obj)
+
+            # 5. Log successful authentication
+            self._log_auth_attempt(key_obj.user, api_key, success=True)
+
+            # 6. Attach key object to request for downstream use
+            request.api_key_obj = key_obj
+            request.api_key = api_key
+
+            return (key_obj.user, None)
+
+        except exceptions.AuthenticationFailed:
+            # Preserve the deliberate client-facing reason (invalid, inactive,
+            # expired, or rate-limited) instead of masking it as a server error.
+            raise
+
+        except UserAPIKey.DoesNotExist:
             self._log_auth_attempt(None, api_key, success=False, reason='not_found')
             raise exceptions.AuthenticationFailed('Invalid API key')
 
-        if not key_obj.is_active:
-            self._log_auth_attempt(key_obj.user, api_key, success=False, reason='inactive')
-            raise exceptions.AuthenticationFailed('API key is deactivated')
+        except LegalAcceptanceRequired:
+            # Must reach the client as 403 legal_acceptance_required, not a generic auth error.
+            raise
 
-        if key_obj.expires_at and key_obj.expires_at <= timezone.now():
-            self._log_auth_attempt(key_obj.user, api_key, success=False, reason='expired')
-            raise exceptions.AuthenticationFailed('API key has expired')
-
-        # Legal gate is deliberately disabled in Stage A. When enabled, it runs
-        # before usage counters or successful-authentication audit events.
-        enforce_legal_acceptance(key_obj.user, request)
-
-        # 4. Update usage metadata. These helpers handle their own best-effort
-        # failures and must not turn a valid key into a failed authentication.
-        self._update_last_used_async(key_obj)
-        self._count_daily_usage(key_obj)
-        self._log_auth_attempt(key_obj.user, api_key, success=True)
-
-        # 5. Attach key object to request for downstream use.
-        request.api_key_obj = key_obj
-        request.api_key = api_key
-        logger.info(
-            "API key authentication successful: %s - %s",
-            key_obj.user.username,
-            key_obj.name,
-        )
-        return (key_obj.user, None)
+        except Exception as e:
+            logger.error(f"API key authentication error: {e}", exc_info=True)
+            raise exceptions.AuthenticationFailed('Authentication error. Please try again.')
 
     def authenticate_header(self, request):
         """Return the WWW-Authenticate header value for 401 responses."""
@@ -175,9 +184,7 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
             try:
                 # Fetch from DB with select_related to get user in one query
                 return UserAPIKey.objects.select_related('user').get(
-                    id=cached_key_id,
-                    key_hash=hashed,
-                    is_active=True,
+                    id=cached_key_id
                 )
             except UserAPIKey.DoesNotExist:
                 # Cache stale – delete it
@@ -187,11 +194,12 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
         # Direct database query using hashed key
         try:
             key_obj = UserAPIKey.objects.select_related('user').get(
-                key_hash=hashed,
-                is_active=True,
+                key_hash=hashed
             )
-            # Cache the result for 5 minutes (positive cache)
-            cache.set(cache_key, key_obj.id, timeout=300)
+            # Cache only active keys. Inactive keys still need to be returned
+            # here so authenticate() can report their revoked status explicitly.
+            if key_obj.is_active:
+                cache.set(cache_key, key_obj.id, timeout=300)
             return key_obj
         except UserAPIKey.DoesNotExist:
             # Optionally cache negative results for a short time to prevent brute force
@@ -225,14 +233,18 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
             return True  # Fail open if cache is down
 
     def _count_daily_usage(self, key_obj):
-        """Count one authenticated request against this key for today (read by the usage chart)."""
-        from datetime import date
-        cache_key = f"usage_daily_{key_obj.id}_{date.today().isoformat()}"
+        """Count usage without making telemetry availability an auth dependency."""
         try:
+            from datetime import date
+            cache_key = f"usage_daily_{key_obj.id}_{date.today().isoformat()}"
             cache.add(cache_key, 0, timeout=60 * 60 * 24 * 40)
             cache.incr(cache_key)
         except Exception as exc:
-            logger.warning(f"Usage counter failed for key {key_obj.id}: {exc}")
+            logger.warning(
+                "Usage counter failed for key %s (%s)",
+                key_obj.id,
+                type(exc).__name__,
+            )
 
     def _update_last_used_async(self, key_obj):
         """
@@ -328,7 +340,7 @@ class CustomJWTAuthentication(JWTAuthentication):
                 if hasattr(user, 'deletion_requested_at') and user.deletion_requested_at:
                     raise InvalidToken('User account is scheduled for deletion')
 
-                logger.info(f"JWT authentication successful: {user.username} (ID: {user.id})")
+                logger.info(f"JWT authentication successful: user_id={user.id}")
                 return result
 
             return None
