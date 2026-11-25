@@ -113,6 +113,8 @@ class AuditLogActions:
     API_KEY_REVOKED = 'API_KEY_REVOKED'
     ACCOUNT_DELETION_REQUESTED = 'ACCOUNT_DELETION_REQUESTED'
     ACCOUNT_DELETION_CANCELLED = 'ACCOUNT_DELETION_CANCELLED'
+    WEEKLY_DIGEST_OPTED_IN = 'WEEKLY_DIGEST_OPTED_IN'
+    WEEKLY_DIGEST_UNSUBSCRIBED = 'WEEKLY_DIGEST_UNSUBSCRIBED'
     WATCHLIST_ADDED = 'WATCHLIST_ADDED'
     WATCHLIST_REMOVED = 'WATCHLIST_REMOVED'
 
@@ -350,8 +352,16 @@ class UserPreferences(models.Model):
     )
 
     weekly_digest = models.BooleanField(
-        default=True,
-        help_text="Whether to send weekly digest emails."
+        default=False,
+        help_text="Whether to send optional weekly digest emails; requires explicit opt-in."
+    )
+    weekly_digest_opted_in_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the user most recently opted in to the weekly digest."
+    )
+    weekly_digest_unsubscribed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the user most recently opted out of the weekly digest."
     )
 
     # Theme preference
@@ -632,8 +642,9 @@ class SymbolUsage(models.Model):
 
 # ----- Legal acknowledgements (GAP-03) -----
 # Terms acceptance and Privacy Policy acknowledgement are recorded separately.
-# user is SET_NULL so records survive account deletion for evidence; the
-# retention basis is to be settled under GAP-04 before deletion is finalised.
+# user is SET_NULL so minimal acceptance evidence survives account deletion
+# without a direct account link. Its lawful basis and retention period must
+# be documented in the approved privacy notice.
 
 class TermsAcceptance(models.Model):
     """Affirmative acceptance of a specific Terms of Service version."""

@@ -20,7 +20,7 @@ class TestAPIKeys:
 
     def test_management_command_uses_sha256(self, test_user):
         """Test that the CLI command generates a valid SHA-256 hash."""
-        call_command('generate_apikey', 'testuser', '--name="CLI Key"', '--quiet=True')
+        call_command('generate_apikey', 'testuser', name='CLI Key', quiet=True)
         
         key_obj = UserAPIKey.objects.get(user=test_user, name="CLI Key")
         

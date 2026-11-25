@@ -1,109 +1,184 @@
-"""
-Database backup script for Tickflow Intelligence.
-Creates daily backups and uploads to S3 or local storage.
-"""
+"""Database backup implementation used by the backup_db management command."""
 
+import datetime
+import gzip
+import logging
 import os
 import subprocess
-import datetime
-import logging
+from pathlib import Path
+
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
+import dj_database_url
 
 logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = 'Backup the database to S3 or local storage'
-    
+    help = 'Create a PostgreSQL backup and enforce local/S3 retention'
+
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--local',
-            action='store_true',
-            help='Save backup locally instead of S3',
-        )
-    
+        parser.add_argument('--local', action='store_true',
+                            help='Keep the backup locally and do not upload it to S3')
+        parser.add_argument('--retention-days', type=int, default=None,
+                            help='Override BACKUP_RETENTION_DAYS (default: 30)')
+
     def handle(self, *args, **options):
-        local = options.get('local', False)
-        
-        # Create backup directory
-        backup_dir = settings.BASE_DIR / 'backups'
-        backup_dir.mkdir(exist_ok=True)
-        
-        # Generate filename
-        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"tickflow_backup_{timestamp}.sql.gz"
+        retention_days = options['retention_days']
+        if retention_days is None:
+            retention_days = int(os.getenv('BACKUP_RETENTION_DAYS', '30'))
+        if retention_days < 1 or retention_days > 3650:
+            raise CommandError('--retention-days must be between 1 and 3650')
+
+        local_only = options['local']
+        bucket = os.getenv('BACKUP_S3_BUCKET', '').strip()
+        if not local_only and not bucket:
+            raise CommandError(
+                'BACKUP_S3_BUCKET is required for a cloud backup. Use --local only for an intentional local backup.'
+            )
+
+        backup_dir = Path(settings.BASE_DIR) / 'backups'
+        backup_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(backup_dir, 0o700)
+        timestamp = timezone.now().astimezone(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+        filename = f'tickflow_backup_{timestamp}.sql.gz'
         filepath = backup_dir / filename
-        
-        # Get database config
-        db_settings = settings.DATABASES['default']
-        db_name = db_settings['NAME']
-        db_user = db_settings['USER']
-        db_host = db_settings['HOST']
-        db_port = db_settings.get('PORT', 5432)
-        
-        self.stdout.write(f"Starting backup of {db_name}...")
-        
+
         try:
-            # Create backup using pg_dump
-            cmd = [
-                'pg_dump',
-                f'postgresql://{db_user}@localhost:{db_port}/{db_name}',
-                '--clean',
-                '--if-exists',
-                '--no-owner',
-                '--no-privileges',
-            ]
-            
-            with open(filepath, 'wb') as f:
-                subprocess.check_call(cmd, stdout=f)
-            
-            self.stdout.write(self.style.SUCCESS(f"Backup created: {filepath}"))
-            
-            # Upload to S3 or keep local
-            if not local:
-                self.upload_to_s3(filepath, filename)
-            
-            # Clean old backups
-            self.clean_old_backups(backup_dir)
-            
-        except Exception as e:
-            self.stderr.write(self.style.ERROR(f"Backup failed: {e}"))
+            self._create_postgres_dump(filepath)
+            self.stdout.write(f'Backup created: {filename}')
+
+            if not local_only:
+                client = self._get_s3_client()
+                prefix = os.getenv('BACKUP_S3_PREFIX', 'backups/').strip('/')
+                prefix = f'{prefix}/' if prefix else ''
+                key = f'{prefix}{filename}'
+                sse = os.getenv('BACKUP_S3_SERVER_SIDE_ENCRYPTION', 'AES256').strip()
+                if sse not in ('AES256', 'aws:kms'):
+                    raise CommandError('BACKUP_S3_SERVER_SIDE_ENCRYPTION must be AES256 or aws:kms.')
+                extra_args = {'ServerSideEncryption': sse}
+                if sse == 'aws:kms':
+                    kms_key_id = os.getenv('BACKUP_S3_KMS_KEY_ID', '').strip()
+                    if not kms_key_id:
+                        raise CommandError('BACKUP_S3_KMS_KEY_ID is required when using aws:kms.')
+                    extra_args['SSEKMSKeyId'] = kms_key_id
+                client.upload_file(str(filepath), bucket, key, ExtraArgs=extra_args)
+                logger.info('Database backup uploaded to configured object storage.')
+                self._delete_expired_s3_backups(client, bucket, prefix, retention_days)
+
+            self._delete_expired_local_backups(backup_dir, retention_days)
+            self.stdout.write(self.style.SUCCESS('Backup and retention completed.'))
+        except CommandError:
             raise
-    
-    def upload_to_s3(self, filepath, filename):
-        """Upload backup to S3."""
+        except Exception as exc:
+            logger.error('Database backup failed (%s)', type(exc).__name__, exc_info=True)
+            raise CommandError('Database backup or retention failed; inspect service logs.') from exc
+
+    def _create_postgres_dump(self, filepath: Path):
+        backup_database_url = os.getenv('BACKUP_DATABASE_URL', '').strip()
+        if backup_database_url:
+            db = dj_database_url.parse(
+                backup_database_url,
+                conn_max_age=0,
+                ssl_require=True,
+            )
+        else:
+            db = settings.DATABASES['default']
+
+        if not db.get('ENGINE', '').endswith('postgresql'):
+            raise CommandError('Database backups require PostgreSQL; the configured database is not PostgreSQL.')
+
+        host = db.get('HOST')
+        name = db.get('NAME')
+        user = db.get('USER')
+        if not host or not name or not user:
+            raise CommandError('PostgreSQL host, database name and user must be configured.')
+        if 'pooler' in str(host).lower():
+            raise CommandError(
+                'The backup connection points to a pooled PostgreSQL endpoint. '
+                'Set BACKUP_DATABASE_URL to the provider direct connection string for pg_dump.'
+            )
+
+        command = [
+            'pg_dump',
+            '--host', str(host),
+            '--port', str(db.get('PORT') or 5432),
+            '--username', str(user),
+            '--dbname', str(name),
+            '--no-owner',
+            '--no-privileges',
+            '--format=plain',
+        ]
+        env = os.environ.copy()
+        if db.get('PASSWORD'):
+            env['PGPASSWORD'] = str(db['PASSWORD'])
+        env['PGSSLMODE'] = str(db.get('OPTIONS', {}).get('sslmode', 'require'))
+        env.setdefault('PGCONNECT_TIMEOUT', '10')
+
+        try:
+            with gzip.open(filepath, 'wb') as output:
+                result = subprocess.run(
+                    command, stdout=output, stderr=subprocess.PIPE, env=env, check=False
+                )
+            if result.returncode != 0:
+                raise CommandError(
+                    f'pg_dump exited with status {result.returncode}; no usable backup was produced.'
+                )
+            os.chmod(filepath, 0o600)
+        except FileNotFoundError as exc:
+            filepath.unlink(missing_ok=True)
+            raise CommandError('pg_dump is not installed in this runtime image.') from exc
+        except Exception:
+            filepath.unlink(missing_ok=True)
+            raise
+
+    @staticmethod
+    def _get_s3_client():
         try:
             import boto3
-            from botocore.exceptions import ClientError
-            
-            s3 = boto3.client(
-                's3',
-                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+        except ImportError as exc:
+            raise CommandError('boto3 is required for S3 backups; install the declared runtime dependency.') from exc
+
+        region = os.getenv('AWS_REGION') or os.getenv('AWS_DEFAULT_REGION')
+        if not region:
+            raise CommandError('AWS_REGION must identify the backup bucket region.')
+        return boto3.client('s3', region_name=region)
+
+    def _delete_expired_s3_backups(self, client, bucket, prefix, retention_days):
+        cutoff = timezone.now() - datetime.timedelta(days=retention_days)
+        versioning = client.get_bucket_versioning(Bucket=bucket).get('Status')
+        expired = []
+
+        if versioning in ('Enabled', 'Suspended'):
+            paginator = client.get_paginator('list_object_versions')
+            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+                for item in page.get('Versions', []) + page.get('DeleteMarkers', []):
+                    if item.get('LastModified') and item['LastModified'] < cutoff:
+                        expired.append({'Key': item['Key'], 'VersionId': item['VersionId']})
+        else:
+            paginator = client.get_paginator('list_objects_v2')
+            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+                for item in page.get('Contents', []):
+                    if item.get('LastModified') and item['LastModified'] < cutoff:
+                        expired.append({'Key': item['Key']})
+
+        for offset in range(0, len(expired), 1000):
+            response = client.delete_objects(
+                Bucket=bucket,
+                Delete={'Objects': expired[offset:offset + 1000], 'Quiet': True},
             )
-            
-            bucket = os.getenv('BACKUP_S3_BUCKET')
-            if not bucket:
-                logger.warning("BACKUP_S3_BUCKET not set – skipping S3 upload")
-                return
-            
-            key = f"backups/{filename}"
-            s3.upload_file(str(filepath), bucket, key)
-            logger.info(f"Backup uploaded to S3: s3://{bucket}/{key}")
-            
-        except ImportError:
-            logger.warning("boto3 not installed – skipping S3 upload")
-        except Exception as e:
-            logger.error(f"S3 upload failed: {e}")
-    
-    def clean_old_backups(self, backup_dir):
-        """Remove backups older than retention period."""
-        retention_days = int(os.getenv('BACKUP_RETENTION_DAYS', 30))
-        cutoff = datetime.datetime.now() - datetime.timedelta(days=retention_days)
-        
-        for file in backup_dir.glob('*.sql.gz'):
-            mtime = datetime.datetime.fromtimestamp(file.stat().st_mtime)
-            if mtime < cutoff:
-                file.unlink()
-                logger.info(f"Removed old backup: {file.name}")
+            if response.get('Errors'):
+                raise CommandError('S3 reported one or more errors while expiring old backup objects.')
+
+        if expired:
+            logger.info('Expired %s backup object/version(s) from the configured S3 prefix.', len(expired))
+
+    @staticmethod
+    def _delete_expired_local_backups(backup_dir: Path, retention_days: int):
+        cutoff = timezone.now() - datetime.timedelta(days=retention_days)
+        for path in backup_dir.glob('tickflow_backup_*.sql.gz'):
+            modified = datetime.datetime.fromtimestamp(path.stat().st_mtime, tz=datetime.timezone.utc)
+            if modified < cutoff:
+                path.unlink()
+                logger.info('Expired one local database backup file.')

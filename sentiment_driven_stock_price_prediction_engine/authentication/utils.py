@@ -4,7 +4,7 @@ verification, and response formatting.
 
 Production-Ready Refactor:
 - Removed asynchronous threading (which gets killed by Render/serverless platforms).
-- Switched to synchronous SendGrid API calls with strict timeouts.
+- Uses Brevo's transactional HTTP API over HTTPS with strict timeouts.
 - Added atomic rate limiting using cache.incr().
 - Added extensive logging for failure diagnostics.
 """
@@ -15,6 +15,7 @@ import secrets
 import hmac
 import hashlib
 import logging
+import requests
 from typing import Optional, Dict, Any
 
 from sentiment_driven_stock_price_prediction_engine.log_safety import describe_exception, scrub_text
@@ -22,7 +23,7 @@ from sentiment_driven_stock_price_prediction_engine.log_safety import describe_e
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.cache import cache
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
@@ -75,6 +76,10 @@ __all__ = [
     'check_email_rate_limit',
     'get_request_context',
     'check_email_service_health',
+    'generate_weekly_digest_unsubscribe_token',
+    'verify_weekly_digest_unsubscribe_token',
+    'generate_account_deletion_cancellation_token',
+    'verify_account_deletion_cancellation_token',
 ]
 
 
@@ -214,80 +219,120 @@ def verify_password_reset_token(uid: str, token: str) -> Optional[User]:
     return verify_email_token(uid, token)
 
 
+def _account_action_token(user: User, purpose: str, extra: str = '') -> str:
+    """Create a purpose-bound HMAC token without exposing user data in URLs."""
+    payload = f"{purpose}:{user.pk}:{user.email.casefold()}:{extra}"
+    return hmac.new(settings.SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+
+def generate_weekly_digest_unsubscribe_token(user: User) -> str:
+    """Return a stable token for unsubscribing from optional weekly digests."""
+    return _account_action_token(user, 'weekly-digest-unsubscribe')
+
+
+def verify_weekly_digest_unsubscribe_token(user: User, token: str) -> bool:
+    expected = generate_weekly_digest_unsubscribe_token(user)
+    return bool(token) and hmac.compare_digest(expected, str(token))
+
+
+def generate_account_deletion_cancellation_token(user: User) -> str:
+    """Return a cancellation token bound to this deletion request and deadline."""
+    deadline = user.deletion_scheduled_for.isoformat() if user.deletion_scheduled_for else ''
+    return _account_action_token(user, 'account-deletion-cancel', deadline)
+
+
+def verify_account_deletion_cancellation_token(user: User, token: str) -> bool:
+    expected = generate_account_deletion_cancellation_token(user)
+    return bool(token) and hmac.compare_digest(expected, str(token))
+
+
 # ============================================================================
 # CORE EMAIL SENDING (SYNCHRONOUS)
 # ============================================================================
 
-def send_email_sync(subject: str, to_email: str, html_content: str, plain_content: Optional[str] = None, retry_count: int = EMAIL_MAX_RETRIES) -> bool:
-    """
-    Send email synchronously using SendGrid Web API with SMTP fallback.
-    This blocks the request for ~200ms but guarantees the email is dispatched 
-    before Render can terminate the worker process.
-    """
+def send_email_sync(
+    subject: str,
+    to_email: str,
+    html_content: str,
+    plain_content: Optional[str] = None,
+    retry_count: int = EMAIL_MAX_RETRIES,
+    headers: Optional[Dict[str, str]] = None,
+) -> bool:
+    """Send transactional email through Brevo's HTTPS API."""
     if not validate_email(to_email):
         logger.error("Invalid email address rejected")
         return False
 
+    api_key = getattr(settings, 'BREVO_API_KEY', None)
     plain_text = plain_content or strip_html_tags(html_content)
-    last_error = None
-    sendgrid_rejected = False
 
-    for attempt in range(retry_count):
-        if not sendgrid_rejected:
-            # --- Primary: SendGrid Web API ---
+    # Local development may use Django's console/locmem backend. Production
+    # never treats console output as successful delivery.
+    if not api_key:
+        if settings.DEBUG:
             try:
-                from sendgrid import SendGridAPIClient
-                from sendgrid.helpers.mail import Mail
-
-                message = Mail(
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    to_emails=to_email,
+                message = EmailMultiAlternatives(
                     subject=subject,
-                    html_content=html_content,
-                    plain_text_content=plain_text,
+                    body=plain_text,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to=[to_email],
                 )
+                if html_content:
+                    message.attach_alternative(html_content, 'text/html')
+                return message.send(fail_silently=False) == 1
+            except Exception as exc:
+                logger.warning("Local console email failed (%s)", describe_exception(exc))
+                return False
+        logger.error("Brevo API is not configured; transactional email was not sent.")
+        return False
 
-                # 10-second timeout ensures Render doesn't hang indefinitely if SendGrid is down
-                sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=10)
-                response = sg.send(message)
+    payload = {
+        'sender': {
+            'name': settings.DEFAULT_FROM_NAME,
+            'email': settings.DEFAULT_FROM_EMAIL,
+        },
+        'to': [{'email': to_email}],
+        'subject': subject,
+        'textContent': plain_text,
+        'htmlContent': html_content,
+    }
+    if headers:
+        payload['headers'] = headers
 
-                if 200 <= response.status_code < 300:
-                    logger.info(f"[SendGrid] Email sent (status: {response.status_code})")
-                    return True
-                else:
-                    last_error = scrub_text(f"SendGrid HTTP {response.status_code}: {getattr(response, 'body', '')}")
-                    logger.error(f"[SendGrid] Failed: {last_error}")
-                
-                    # Don't retry on 4xx errors (except 429) as they indicate a configuration issue
-                    if 400 <= response.status_code < 500 and response.status_code != 429:
-                        sendgrid_rejected = True  # skip SendGrid on later attempts; keep SMTP fallback
+    request_headers = {
+        'accept': 'application/json',
+        'api-key': api_key,
+        'content-type': 'application/json',
+    }
+    max_attempts = max(1, retry_count)
+    last_error = None
 
-            except ImportError:
-                logger.warning("[Email] SendGrid library not installed, falling back to SMTP.")
-            except Exception as e:
-                last_error = describe_exception(e)
-                logger.warning(f"[SendGrid] Attempt {attempt + 1} failed: {last_error}")
-
-        # --- Fallback: Django SMTP ---
+    for attempt in range(max_attempts):
         try:
-            send_mail(
-                subject=subject,
-                message=plain_text,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[to_email],
-                html_message=html_content,
-                fail_silently=False,
+            response = requests.post(
+                settings.BREVO_API_URL,
+                headers=request_headers,
+                json=payload,
+                timeout=settings.EMAIL_TIMEOUT,
             )
-            logger.info("[SMTP] Email sent")
-            return True
-        except Exception as e:
-            last_error = describe_exception(e)
-            logger.error(f"[SMTP] Fallback failed: {last_error}")
+            if response.status_code in (200, 201, 202):
+                logger.info("Brevo accepted a transactional email request.")
+                return True
 
-        if attempt < retry_count - 1:
+            last_error = f"HTTP {response.status_code}"
+            if response.status_code == 429 or response.status_code >= 500:
+                logger.warning("Brevo transient response on attempt %s (%s)", attempt + 1, last_error)
+            else:
+                logger.warning("Brevo rejected transactional email request (%s)", last_error)
+                return False
+        except requests.RequestException as exc:
+            last_error = describe_exception(exc)
+            logger.warning("Brevo API request failed on attempt %s (%s)", attempt + 1, last_error)
+
+        if attempt < max_attempts - 1:
             time.sleep(EMAIL_RETRY_DELAY)
 
-    logger.error(f"[Email] Failed after {retry_count} attempts. Last error: {last_error}")
+    logger.error("Brevo API delivery failed after %s attempt(s): %s", max_attempts, last_error)
     return False
 
 
@@ -453,24 +498,32 @@ def send_email_change_notification(user: User, old_email: str, new_email: str) -
 
 
 def send_account_deletion_confirmation(user: User, request) -> bool:
-    """Send account deletion confirmation synchronously."""
+    """Send account deletion confirmation with a working, time-bound cancellation link."""
     try:
-        cancellation_link = f"{settings.FRONTEND_URL}/cancel-deletion"
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = generate_account_deletion_cancellation_token(user)
+        cancellation_link = (
+            f"{settings.FRONTEND_URL.rstrip('/')}/cancel-deletion"
+            f"?uid={uid}&token={token}"
+        )
         subject = EMAIL_SUBJECTS['account_deletion']
-        
+        scheduled_for = user.deletion_scheduled_for.strftime('%B %d, %Y')
         html_content = render_to_string('email/account_deletion.html', {
             'user': user,
             'cancellation_link': cancellation_link,
-            'scheduled_for': user.deletion_scheduled_for.strftime('%B %d, %Y'),
+            'scheduled_for': scheduled_for,
             'days_left': 30,
+            'contact_email': getattr(settings, 'CONTACT_EMAIL', settings.DEFAULT_FROM_EMAIL),
+            'frontend_url': settings.FRONTEND_URL.rstrip('/'),
             'year': timezone.now().year,
         })
-        
-        plain_content = f"Account Deletion Requested\n\nYour account is scheduled for deletion on {user.deletion_scheduled_for.strftime('%B %d, %Y')}."
-        
+        plain_content = (
+            f"Account deletion requested. Your account is scheduled for deletion on {scheduled_for}.\n\n"
+            f"To cancel before that date, open: {cancellation_link}\n"
+        )
         return send_email_sync(subject, user.email, html_content, plain_content)
     except Exception as e:
-        logger.error(f"Failed to send account deletion confirmation: {e}", exc_info=True)
+        logger.error("Failed to send account deletion confirmation: %s", describe_exception(e), exc_info=True)
         return False
 
 
@@ -512,37 +565,36 @@ def send_security_alert_email(user: User, action: str, ip_address: str, user_age
 # ============================================================================
 
 def check_email_service_health() -> Dict[str, Any]:
-    """Check if SendGrid API is accessible and functioning."""
+    """Check Brevo API authentication without sending a test email."""
+    api_key = getattr(settings, 'BREVO_API_KEY', None)
+    if not api_key:
+        return {
+            'available': False,
+            'status': 'unconfigured',
+            'provider': 'brevo_api',
+            'message': 'Brevo API credentials are not configured.',
+        }
+
     try:
-        from sendgrid import SendGridAPIClient
-        
-        sg = SendGridAPIClient(settings.SENDGRID_API_KEY, timeout=5)
-        response = sg.client._("v3").get()
-        
-        if response.status_code < 500:
-            return {
-                'available': True,
-                'status': 'healthy',
-                'provider': 'sendgrid',
-                'status_code': response.status_code,
-            }
+        response = requests.get(
+            settings.BREVO_ACCOUNT_URL,
+            headers={'accept': 'application/json', 'api-key': api_key},
+            timeout=settings.EMAIL_TIMEOUT,
+        )
+        if response.status_code == 200:
+            return {'available': True, 'status': 'healthy', 'provider': 'brevo_api'}
+        if response.status_code in (401, 403):
+            return {'available': False, 'status': 'misconfigured', 'provider': 'brevo_api'}
         return {
             'available': False,
             'status': 'degraded',
-            'provider': 'sendgrid',
-            'status_code': response.status_code,
+            'provider': 'brevo_api',
+            'error': f'HTTP {response.status_code}',
         }
-    except ImportError:
-        return {
-            'available': True,
-            'status': 'healthy',
-            'provider': 'smtp',
-            'message': 'SendGrid not installed, using SMTP fallback',
-        }
-    except Exception as e:
+    except requests.RequestException as exc:
         return {
             'available': False,
-            'status': 'unhealthy',
-            'provider': 'sendgrid',
-            'error': str(e),
+            'status': 'degraded',
+            'provider': 'brevo_api',
+            'error': describe_exception(exc),
         }

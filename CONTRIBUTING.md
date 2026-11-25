@@ -1,348 +1,157 @@
-# Contributing to StockSentiment AI
+# Contributing to Tickflow Capital Intelligence
 
-Thank you for your interest in contributing! We welcome contributions from everyone.
+Thank you for considering a contribution. Bug reports, focused improvements, documentation corrections and tests are welcome.
 
----
+## 1. Before contributing: intellectual property
 
-## Code of Conduct
+Tickflow Capital Limited intends to maintain this repository as a company-owned open-source project.
 
-By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
+**Do not submit a contribution for merging until the Company has provided and approved its Contributor Intellectual Property Assignment and the contributor has signed it.** Any statutory recordal required by Kenyan law must also be completed before the contribution is represented as company-owned.
 
----
+The current repository licence is MIT and currently names an individual copyright holder. The transfer of existing project rights to the Company is being documented separately. Do not change the LICENSE notice or claim that company ownership is complete until the assignment and KECOBO recordal are complete.
 
-## How to Contribute
+The Company intends to continue distributing accepted project code under the MIT License. Existing valid MIT licences granted to the public will be respected. The MIT licence does not grant rights to Tickflow Capital trademarks, third-party market data, provider SDKs or materials excluded from that licence.
 
-### 1. Find an Issue
+The contributor assignment template is in docs/legal/CONTRIBUTOR_IP_ASSIGNMENT_TEMPLATE.md. It is a draft and must be approved by Kenyan counsel before use.
 
-- Check [existing issues](https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues)
-- Look for labels: `good-first-issue`, `help-wanted`, `bug`, `enhancement`
-- Create a new issue if you find something not listed
+## 2. Find or propose an issue
 
-### 2. Fork and Clone
+- Review existing issues: https://github.com/AnyegaAlex/Tickflow-Capital-Intelligence/issues
+- Use labels such as good-first-issue, help-wanted, bug or enhancement where appropriate.
+- For substantial changes, open an issue first so maintainers can agree on scope.
+- Do not post secrets, customer data, personal data or confidential information in a public issue.
 
-```bash
-# Fork the repository on GitHub
-# Then clone your fork
-git clone https://github.com/your-username/Sentiment-Driven-Stock-Price-Prediction-Using-News-Headlines.git
+## 3. Development setup
+
+### Backend
+
+~~~bash
 cd sentiment_driven_stock_price_prediction_engine
-3. Set Up Development Environment
-Backend:
-
-bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python manage.py migrate
-python manage.py generate_apikey "Development"
 python manage.py runserver
-Frontend:
+~~~
 
-bash
+Use a local development environment file. Never copy production credentials into a local file committed to Git.
+
+### Frontend
+
+~~~bash
 cd frontend
 npm install
 npm run dev
-4. Create a Feature Branch
-bash
+~~~
+
+### Docker
+
+~~~bash
+docker-compose up --build
+docker-compose exec web python manage.py migrate
+~~~
+
+## 4. Branching and coding standards
+
+Create a focused branch:
+
+~~~bash
 git checkout -b feature/your-feature-name
 # or
 git checkout -b fix/your-bug-fix
-5. Make Your Changes
-Coding Standards:
+~~~
 
-Language	Standard
-Python	PEP 8
-JavaScript/React	ESLint configuration
-Commit Messages	Conventional Commits
-Commit Message Format:
+- Python: follow PEP 8 and the project's existing conventions.
+- JavaScript/React: follow the configured ESLint rules and existing component patterns.
+- Keep changes focused and avoid unrelated formatting churn.
+- Do not log passwords, API keys, tokens, email verification codes or unnecessary personal data.
+- Use structured logging and avoid interpolating untrusted or sensitive values into log messages.
+- Document new environment variables in the relevant example/configuration file without including real values.
+- Do not add third-party code, fonts, images, datasets or models without recording provenance and licence compatibility.
+- Disclose generated code, external assistance, employer/client ownership or other restrictions that could affect the rights being assigned.
 
-text
+## 5. Commit messages
+
+Use Conventional Commits:
+
+~~~text
 <type>(<scope>): <description>
+~~~
 
-[optional body]
+Common types:
 
-[optional footer]
-Types:
-
-feat: New feature
-
-fix: Bug fix
-
-docs: Documentation
-
-style: Formatting
-
-refactor: Code restructuring
-
-test: Adding tests
-
-chore: Maintenance
+- feat: new feature
+- fix: bug fix
+- docs: documentation
+- style: formatting only
+- refactor: code restructuring
+- test: tests
+- chore: maintenance
 
 Example:
 
-text
+~~~text
 feat(api): add stock comparison endpoint
+~~~
 
-Adds a new endpoint `/api/v1/stock-comparison/` that allows
-comparing multiple stocks side by side.
+## 6. Tests and validation
 
-Closes #123
-6. Write Tests
-Backend:
+Run the relevant tests before opening a pull request.
 
-python
-# tests/test_views.py
-from django.test import TestCase
-from rest_framework.test import APIClient
+### Backend
 
-class StockAnalysisTests(TestCase):
-    def setUp(self):
-        self.client = APIClient()
-        # Setup test data
+~~~bash
+cd sentiment_driven_stock_price_prediction_engine
+python -m pytest
+python manage.py check
+python manage.py makemigrations --check --dry-run
+~~~
 
-    def test_stock_analysis(self):
-        response = self.client.get('/api/v1/stock-analysis/?symbol=AAPL')
-        self.assertEqual(response.status_code, 200)
-Frontend:
+### Frontend
 
-javascript
-// frontend/src/__tests__/components/StockOpinionCard.test.js
-import { render, screen } from '@testing-library/react';
-import StockOpinionCard from '../components/cards/StockOpinionCard';
-
-test('renders stock opinion card', () => {
-  render(<StockOpinionCard symbol="AAPL" />);
-  expect(screen.getByText('AAPL')).toBeInTheDocument();
-});
-7. Run Tests
-bash
-# Backend
-python manage.py test
-
-# Frontend
+~~~bash
 cd frontend
-npm test
-8. Commit and Push
-bash
-git add .
-git commit -m "feat: add your feature"
-git push origin feature/your-feature-name
-9. Open a Pull Request
-Go to the repository on GitHub
+npm test -- --run
+npm run build
+npm run lint
+~~~
 
-Click "Compare & pull request"
+Add tests for behavior changes. A pull request should not claim a check passed unless it was actually run.
 
-Fill in the PR template
+## 7. Pull request requirements
 
-Link related issues
+- Keep one logical change per pull request.
+- Explain the problem, implementation and any operational impact.
+- Include tests for changed behavior.
+- Update documentation and example environment variables where needed.
+- Link related issues.
+- Identify database migrations and any deployment steps.
+- Disclose third-party dependencies and licence implications.
+- Obtain maintainer review and address requested changes.
+- Do not merge until the required contributor IP agreement is signed and recorded.
 
-Submit
+## 8. Useful commands
 
-Pull Request Guidelines
-Requirement	Description
-One feature per PR	Keep PRs focused and reviewable
-Include tests	New features must include tests
-Update docs	Update README if needed
-Keep commits atomic	One logical change per commit
-Link issues	Reference related issues
-Pass CI	All checks must pass
-Review comments	Address feedback promptly
-Review Process
-Automated checks run (tests, linting, build)
-
-Maintainer review within 3-5 business days
-
-Feedback may be requested
-
-Approval and merge
-
-Development Tips
-Common Commands
-bash
+~~~bash
 # Backend
 python manage.py runserver
 python manage.py shell
 python manage.py migrate
-python manage.py generate_apikey "Development"
+python -m pytest
 
 # Frontend
 npm run dev
 npm run build
 npm run lint
-npm run test
+npm test -- --run
 
 # Docker
 docker-compose up --build
 docker-compose exec web python manage.py migrate
-Debugging
-python
-# Add debug logging
-import logging
-logger = logging.getLogger(__name__)
-logger.info(f"Debug message: {variable}")
-javascript
-// Frontend debugging
-console.log('Debug:', data);
-debugger; // Open DevTools
-Getting Help
-Resource	How to Use
-Issues	Report bugs, request features
-Discussions	Ask questions, share ideas
-Email	anyega.alex.kamau@gmail.com
-Recognition
-Contributors will be recognized in:
+~~~
 
-The README
+## 9. Getting help and recognition
 
-The CHANGELOG
+Use GitHub issues for bugs and feature requests. For sensitive security or ownership matters, contact the maintainers privately rather than publishing details.
 
-GitHub contributors list
-
-Thank you for contributing!
-
-text
-
----
-
-## 4. CODE_OF_CONDUCT.md
-
-**File:** `CODE_OF_CONDUCT.md`
-
-```markdown
-# Code of Conduct
-
-## Our Pledge
-
-We as members, contributors, and leaders pledge to make participation in our
-community a harassment-free experience for everyone, regardless of age, body
-size, visible or invisible disability, ethnicity, sex characteristics, gender
-identity and expression, level of experience, education, socio-economic status,
-nationality, personal appearance, race, religion, or sexual identity and orientation.
-
-We pledge to act and interact in ways that contribute to an open, welcoming,
-diverse, inclusive, and healthy community.
-
----
-
-## Our Standards
-
-### Positive Behavior
-
-Examples of behavior that contributes to a positive environment:
-
-- Using welcoming and inclusive language
-- Being respectful of differing viewpoints and experiences
-- Gracefully accepting constructive criticism
-- Focusing on what is best for the community
-- Showing empathy towards other community members
-
-### Unacceptable Behavior
-
-Examples of unacceptable behavior include:
-
-- Trolling, insulting, or derogatory comments
-- Personal or political attacks
-- Harassment of any kind
-- Publishing others' private information without permission
-- Sexualized language or imagery
-- Other conduct which could reasonably be considered inappropriate
-
----
-
-## Enforcement Responsibilities
-
-Project maintainers are responsible for clarifying and enforcing our standards of
-acceptable behavior and will take appropriate and fair corrective action in
-response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
-
-Project maintainers have the right and responsibility to remove, edit, or reject
-comments, commits, code, wiki edits, issues, and other contributions that are
-not aligned to this Code of Conduct.
-
----
-
-## Scope
-
-This Code of Conduct applies within all community spaces, and also applies when
-an individual is officially representing the community in public spaces.
-
-Examples of representing our community include using an official e-mail address,
-posting via an official social media account, or acting as an appointed
-representative at an online or offline event.
-
----
-
-## Enforcement
-
-### Reporting
-
-Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project team at:
-
-**Email:** anyega.alex.kamau@gmail.com
-
-All complaints will be reviewed and investigated promptly and fairly.
-
-### Enforcement Guidelines
-
-Project maintainers will follow these Community Impact Guidelines in determining
-the consequences for any action they deem in violation of this Code of Conduct:
-
-#### 1. Correction
-
-**Community Impact:** Use of inappropriate language or other behavior deemed
-unprofessional or unwelcome in the community.
-
-**Consequence:** A private, written warning from maintainers, providing clarity
-around the nature of the violation and an explanation of why the behavior was
-inappropriate. A public apology may be requested.
-
-#### 2. Warning
-
-**Community Impact:** A violation through a single incident or series of actions.
-
-**Consequence:** A warning with consequences for continued behavior. No
-interaction with the people involved, including unsolicited interaction with
-those enforcing the Code of Conduct, for a specified period. This includes
-avoiding interactions in community spaces as well as external channels like
-social media. Violating these terms may lead to a temporary or permanent ban.
-
-#### 3. Temporary Ban
-
-**Community Impact:** A serious violation of community standards, including
-sustained inappropriate behavior.
-
-**Consequence:** A temporary ban from any sort of interaction or public
-communication with the community for a specified period. No public or private
-interaction with the people involved, including unsolicited interaction with
-those enforcing the Code of Conduct, is allowed during this period.
-Violating these terms may lead to a permanent ban.
-
-#### 4. Permanent Ban
-
-**Community Impact:** Demonstrating a pattern of violation of community
-standards, including sustained inappropriate behavior, harassment of an
-individual, or aggression toward or disparagement of classes of individuals.
-
-**Consequence:** A permanent ban from any sort of public interaction within
-the community.
-
----
-
-## Attribution
-
-This Code of Conduct is adapted from the [Contributor Covenant][homepage],
-version 2.0, available at
-https://www.contributor-covenant.org/version/2/0/code_of_conduct.html
-
-Community Impact Guidelines were inspired by [Mozilla's code of conduct
-enforcement ladder](https://github.com/mozilla/diversity).
-
-[homepage]: https://www.contributor-covenant.org
-
-For answers to common questions about this code of conduct, see the FAQ at
-https://www.contributor-covenant.org/faq. Translations are available at
-https://www.contributor-covenant.org/translations.
-
----
-
-**Last Updated:** July 14, 2026
+Contributors may be recognised in the README, changelog and GitHub contributors list, subject to their preferences and the project's attribution obligations.
