@@ -87,6 +87,8 @@ class TestRegisterSerializer:
             "email": "valid@test.com",
             "password": "SecurePass123!",
             "password2": "SecurePass123!",
+            "accept_terms": True,
+            "acknowledge_privacy_notice": True,
         }
         serializer = RegisterSerializer(data=data)
         assert serializer.is_valid()
@@ -104,6 +106,8 @@ class TestRegisterSerializer:
             "email": "create@test.com",
             "password": "SecurePass123!",
             "password2": "SecurePass123!",
+            "accept_terms": True,
+            "acknowledge_privacy_notice": True,
         }
         serializer = RegisterSerializer(data=data)
         assert serializer.is_valid()

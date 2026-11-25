@@ -71,6 +71,8 @@ class TestRegistration:
             "email": "test@example.com",
             "password": "SecurePass123!",
             "password2": "SecurePass123!",
+            "accept_terms": True,
+            "acknowledge_privacy_notice": True,
         }
         with patch("authentication.views.send_verification_email", return_value=True) as mock_send:
             response = api_client.post(url, data)
@@ -90,6 +92,8 @@ class TestRegistration:
             "email": user.email,
             "password": "SecurePass123!",
             "password2": "SecurePass123!",
+            "accept_terms": True,
+            "acknowledge_privacy_notice": True,
         }
         with patch("authentication.views.send_verification_email", return_value=True):
             response = api_client.post(url, data)
@@ -105,6 +109,8 @@ class TestRegistration:
             "email": "new@example.com",
             "password": "SecurePass123!",
             "password2": "SecurePass123!",
+            "accept_terms": True,
+            "acknowledge_privacy_notice": True,
         }
         with patch("authentication.views.send_verification_email", return_value=True):
             response = api_client.post(url, data)
@@ -119,6 +125,8 @@ class TestRegistration:
             "email": "test@example.com",
             "password": "123",
             "password2": "123",
+            "accept_terms": True,
+            "acknowledge_privacy_notice": True,
         }
         response = api_client.post(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -132,6 +140,8 @@ class TestRegistration:
             "email": "test@example.com",
             "password": "SecurePass123!",
             "password2": "WrongPass123!",
+            "accept_terms": True,
+            "acknowledge_privacy_notice": True,
         }
         response = api_client.post(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST

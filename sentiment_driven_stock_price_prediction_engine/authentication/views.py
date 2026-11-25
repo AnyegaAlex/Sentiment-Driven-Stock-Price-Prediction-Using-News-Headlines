@@ -37,6 +37,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from .models import User, AuditLog, UserPreferences, UserAPIKey
+from .models import PrivacyNoticeAcknowledgement, TermsAcceptance
+from .legal_config import PRIVACY_NOTICE, TERMS
 from .serializers import (
     RegisterSerializer,
     LoginSerializer,
@@ -160,6 +162,13 @@ class RegisterView(generics.CreateAPIView):
             with transaction.atomic():
                 user = serializer.save()
                 UserPreferences.objects.get_or_create(user=user)
+                # Legal acceptance records, written atomically with the account (GAP-03).
+                TermsAcceptance.objects.create(
+                    user=user, version=TERMS.version, content_hash=TERMS.sha256,
+                )
+                PrivacyNoticeAcknowledgement.objects.create(
+                    user=user, version=PRIVACY_NOTICE.version, content_hash=PRIVACY_NOTICE.sha256,
+                )
                 # Audit log (does not depend on email)
                 request_context = get_request_context(self.request)
                 AuditLog.objects.create(

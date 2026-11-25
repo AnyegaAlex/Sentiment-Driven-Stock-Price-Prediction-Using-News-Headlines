@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Radar } from 'lucide-react';
+import LegalDocumentBody from '@/components/legal/LegalDocumentBody';
+import termsDocument from '@/legal/documents/terms.json';
 
 const Terms = () => {
   return (
@@ -21,34 +23,9 @@ const Terms = () => {
         </div>
         
         <div className="prose max-w-none prose-headings:text-white prose-p:text-gray-400 prose-a:text-gray-400 hover:prose-a:text-white prose-strong:text-gray-300 prose-strong:font-semibold">
-          <p className="text-gray-500">Last updated: {new Date().toLocaleDateString()}</p>
+          <p className="text-gray-500">Version {termsDocument.version}</p>
           
-          <h2>Acceptance of Terms</h2>
-          <p>By using TickFlow Intelligence, you agree to these terms and conditions.</p>
-          
-          <h2>Use of Service</h2>
-          <p>You may use the service for personal and commercial purposes in accordance with these terms.</p>
-          
-          <h2>Intellectual Property</h2>
-          <p>All content and code in TickFlow Intelligence is open source under the MIT License.</p>
-          
-          <h2>Disclaimer</h2>
-          <p>This platform provides LSTM + FinBERT-driven financial intelligence for informational purposes only. It is not financial advice.</p>
-          
-          <h2>Limitation of Liability</h2>
-          <p>TickFlow Capital is not liable for any decisions made based on the information provided.</p>
-          
-          <h2>Contact Us</h2>
-          <p>
-            For any questions, please contact us at{' '}
-            <a 
-              href="mailto:legal@tickflow.com" 
-              className="text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-            >
-              legal@tickflow.com
-            </a>
-            .
-          </p>
+          <LegalDocumentBody document={termsDocument} />
         </div>
       </div>
     </div>

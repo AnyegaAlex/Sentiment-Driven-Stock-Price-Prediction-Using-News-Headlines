@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Radar } from 'lucide-react';
+import LegalDocumentBody from '@/components/legal/LegalDocumentBody';
+import privacyDocument from '@/legal/documents/privacy.json';
 
 const Privacy = () => {
   return (
@@ -21,41 +23,9 @@ const Privacy = () => {
         </div>
         
         <div className="prose max-w-none prose-headings:text-white prose-p:text-gray-400 prose-a:text-gray-400 hover:prose-a:text-white prose-strong:text-gray-300 prose-strong:font-semibold">
-          <p className="text-gray-500">Last updated: {new Date().toLocaleDateString()}</p>
+          <p className="text-gray-500">Version {privacyDocument.version}</p>
           
-          <h2>Information We Collect</h2>
-          <p>We collect information you provide when creating or managing an account, such as your username, email address, and profile details. The app also stores your investment preferences, watchlist, and API access settings. Account creation does not require payment information.</p>
-          
-          <h2>How We Use Your Information</h2>
-          <p>We use your information to provide, maintain, and improve our services, and to communicate with you.</p>
-          
-          <h2>Cookies and Analytics</h2>
-          <p>Essential browser storage supports core service functionality and security. If you allow analytics, Google Analytics may collect information about how the site is used. Analytics remains disabled until you choose to enable it. You can change your choice at any time using the privacy preferences control in the site footer.</p>
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new Event('tickflow:open-consent-settings'))}
-            className="my-2 inline-flex min-h-[40px] items-center rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-900"
-          >
-            Manage privacy preferences
-          </button>
-
-          <h2>Data Security</h2>
-          <p>We implement appropriate technical and organizational measures to protect your personal information.</p>
-          
-          <h2>Your Rights</h2>
-          <p>You have the right to access, correct, or delete your personal information at any time.</p>
-          
-          <h2>Contact Us</h2>
-          <p>
-            If you have any questions about this Privacy Policy, please contact us at{' '}
-            <a 
-              href="mailto:privacy@tickflow.com" 
-              className="text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-            >
-              privacy@tickflow.com
-            </a>
-            .
-          </p>
+          <LegalDocumentBody document={privacyDocument} />
         </div>
       </div>
     </div>
