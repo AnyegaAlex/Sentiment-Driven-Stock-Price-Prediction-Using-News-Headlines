@@ -25,7 +25,7 @@ const DEFAULT_VALUES = {
   email_notifications: true,
   price_alerts: false,
   news_alerts: false,
-  weekly_digest: true,
+  weekly_digest: false,
 };
 
 const NOTIFICATIONS = [
@@ -47,7 +47,7 @@ const NOTIFICATIONS = [
   {
     id: 'weekly_digest',
     label: 'Weekly Digest',
-    description: 'Stored as a preference. Weekly digest delivery is not currently available.',
+    description: 'Receive an optional weekly summary of your activity. Off until you enable it. Every digest email includes an unsubscribe link.',
   },
 ];
 
@@ -142,7 +142,7 @@ const NotificationsTab = ({ preferences, onSave, isSaving, saveStatus: parentSav
       </CardHeader>
       <CardContent>
         <p className="rounded-lg border border-gray-800 bg-gray-950 p-3 text-sm text-gray-400">
-          These preferences are saved to your account, but automated alert and digest delivery is not active yet. Changing a switch will not send a notification.
+          The weekly digest is sent only when you opt in. Price and news alerts are not currently delivered. Account, security and legal emails are separate and are not disabled by these preferences.
         </p>
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Notification Toggles */}

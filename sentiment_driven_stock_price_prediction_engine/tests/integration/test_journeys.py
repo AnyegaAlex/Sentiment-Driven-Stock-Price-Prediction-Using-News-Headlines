@@ -15,6 +15,7 @@ from django.utils.encoding import force_bytes
 from rest_framework.test import APIClient
 
 from authentication.models import User
+from authentication.utils import generate_account_deletion_cancellation_token
 
 pytestmark = pytest.mark.django_db
 
@@ -104,39 +105,10 @@ class TestFullUserJourney:
         assert user.email_verified is True
 
     @patch("authentication.views.send_verification_email", return_value=True)
-    @patch("stocks.lstm_predictor.LSTMPredictor")  # patch the class, not the function
-    @patch("yfinance.Ticker")
-    @patch("yfinance.download")
-    def test_full_journey(self, mock_download, mock_ticker, mock_lstm_class, mock_send_email, api_client, user_data):
+    def test_full_journey(self, mock_send_email, api_client, user_data):
         """
         Complete flow: register, verify, login, stock analysis, prediction history.
         """
-        # Mock yfinance to return dummy data (just in case)
-        mock_ticker.return_value.history.return_value = pd.DataFrame({
-            "Close": [100] * 250,
-            "High": [101] * 250,
-            "Low": [99] * 250,
-            "Volume": [1000] * 250
-        })
-        mock_download.return_value = pd.DataFrame({
-            "Close": [100] * 250,
-            "Volume": [1000] * 250
-        })
-
-        # Create a mock predictor instance that will be returned when the class is instantiated
-        mock_predictor = MagicMock()
-        mock_predictor.predict.return_value = {
-            "prediction": "UP",
-            "confidence": 80,
-            "success": True,
-            "sentiment_score": 0.3,
-            "close_price": 116,
-            "fallback": False,
-            "message": "LSTM prediction successful"
-        }
-        # When LSTMPredictor() is called (by get_lstm_predictor), return this mock
-        mock_lstm_class.return_value = mock_predictor
-
         # Register
         register_url = reverse("register")
         response = api_client.post(
@@ -199,20 +171,17 @@ class TestFullUserJourney:
             response = api_client.get(analysis_url, {"symbol": "AAPL"})
             assert response.status_code == 200
 
-            from stocks.models import Prediction
-            predictions = Prediction.objects.filter(stock_symbol="AAPL")  # not filtering by user
-            assert predictions.count() == 1
-            prediction = predictions.first()
-            assert prediction.predicted_movement == "up"
-            assert prediction.confidence == 0.8
+            analysis_data = response.json()["data"]
+            # Public price-derived outputs stay disabled until data redistribution
+            # rights are confirmed; a successful response must not fabricate a signal.
+            assert analysis_data["dataStatus"]["prediction"] == "disabled"
+            assert analysis_data["lstm_prediction"]["direction"] is None
+            assert "licensed" in analysis_data["lstm_prediction"]["message"].lower()
 
-            # Prediction history
+            # Prediction history is likewise unavailable while the price-data gate is closed.
             history_url = reverse("prediction-history")
             response = api_client.get(history_url, {"symbol": "AAPL", "limit": 10})
-            assert response.status_code == 200
-            data = response.json()
-            found = any(item["id"] == prediction.id for item in data["results"])
-            assert found is True
+            assert response.status_code == 503
 
     @patch("authentication.utils.send_email_sync", return_value=True)
     @patch("authentication.views.send_verification_email", return_value=True)
@@ -272,7 +241,7 @@ class TestFullUserJourney:
     @patch("authentication.views.send_account_deletion_confirmation", return_value=True)
     def test_account_deletion_flow(self, mock_send_deletion, api_client, user_data):
         """
-        Account deletion: request → cancel (with blacklisted token → 401).
+        Account deletion: request → cancel using the signed email link without login.
         """
         # Register and verify
         register_url = reverse("register")
@@ -313,11 +282,21 @@ class TestFullUserJourney:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["message"] == "Account deletion scheduled"
+        assert data["message"] == "Account deletion scheduled. Check your email for the cancellation link."
         user.refresh_from_db()
         assert user.is_active is False
 
-        # Cancel deletion – token is blacklisted, so 401 is correct
+        # Cancel deletion using the signed, single-purpose email link.
+        cancellation_uid = urlsafe_base64_encode(force_bytes(user.pk))
+        cancellation_token = generate_account_deletion_cancellation_token(user)
+        api_client.credentials()  # the cancellation link must work without the access token
         cancel_url = reverse("cancel-deletion")
-        response = api_client.post(cancel_url, content_type="application/json")
-        assert response.status_code == 401
+        response = api_client.post(
+            cancel_url,
+            data=json.dumps({"uid": cancellation_uid, "token": cancellation_token}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        user.refresh_from_db()
+        assert user.is_active is True
+        assert user.deletion_requested_at is None

@@ -623,13 +623,18 @@ class UserPreferencesSerializer(serializers.ModelSerializer):
             'price_alerts',
             'news_alerts',
             'weekly_digest',
+            'weekly_digest_opted_in_at',
+            'weekly_digest_unsubscribed_at',
             'theme',
             'language',
             'timezone',
             'created_at',
             'updated_at',
         )
-        read_only_fields = ('created_at', 'updated_at')
+        read_only_fields = (
+            'created_at', 'updated_at',
+            'weekly_digest_opted_in_at', 'weekly_digest_unsubscribed_at',
+        )
         extra_kwargs = {
             'investment_goal': {'help_text': "Investment goal: growth, income, value, trading, retirement"},
             'risk_tolerance': {'help_text': "Risk tolerance: conservative, moderate, aggressive"},
@@ -640,6 +645,10 @@ class UserPreferencesSerializer(serializers.ModelSerializer):
             'theme': {'help_text': "UI theme: light or dark"},
             'language': {'help_text': "Language code (e.g., 'en', 'fr', 'es')"},
         }
+
+    def validate_watchlist(self, value: list[str]) -> list[str]:
+        """Remove duplicate symbols while preserving the user's order."""
+        return list(dict.fromkeys(value))
 
     def validate_language(self, value: str) -> str:
         """Validate language code."""

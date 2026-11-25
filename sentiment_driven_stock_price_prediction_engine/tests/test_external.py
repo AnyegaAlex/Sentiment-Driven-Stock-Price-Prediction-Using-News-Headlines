@@ -244,11 +244,13 @@ class TestSendWeeklyDigestCommand:
         user1 = UserFactory(email_verified=True)
         prefs1 = user1.user_preferences
         prefs1.weekly_digest = True
+        prefs1.weekly_digest_opted_in_at = timezone.now()
         prefs1.save()
 
         user2 = UserFactory(email_verified=True)
         prefs2 = user2.user_preferences
         prefs2.weekly_digest = True
+        prefs2.weekly_digest_opted_in_at = timezone.now()
         prefs2.save()
 
         user3 = UserFactory(email_verified=True)
@@ -272,6 +274,7 @@ class TestSendWeeklyDigestCommand:
         user = UserFactory(email_verified=True)
         prefs = user.user_preferences
         prefs.weekly_digest = True
+        prefs.weekly_digest_opted_in_at = timezone.now()
         prefs.save()
 
         with patch('stocks.management.commands.send_weekly_digest.send_email_sync') as mock_send:
@@ -284,6 +287,7 @@ class TestSendWeeklyDigestCommand:
         user = UserFactory(email_verified=True)
         prefs = user.user_preferences
         prefs.weekly_digest = True
+        prefs.weekly_digest_opted_in_at = timezone.now()
         prefs.save()
 
         with patch('stocks.management.commands.send_weekly_digest.send_email_sync') as mock_send:

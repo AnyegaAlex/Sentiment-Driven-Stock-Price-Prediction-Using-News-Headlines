@@ -295,4 +295,4 @@ class UserPreferencesFactory(DjangoModelFactory):
     theme = 'system'
     language = 'en'
     timezone = 'UTC'
-    weekly_digest = True
+    weekly_digest = False

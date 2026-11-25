@@ -27,6 +27,8 @@ from django.contrib.auth import authenticate
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from rest_framework.exceptions import ParseError
 from rest_framework import status, generics, permissions, serializers
 from rest_framework.permissions import IsAuthenticated
@@ -67,6 +69,8 @@ from .utils import (
     error_response,
     success_response,
     get_request_context,
+    verify_weekly_digest_unsubscribe_token,
+    verify_account_deletion_cancellation_token,
 )
 
 logger = logging.getLogger(__name__)
@@ -103,7 +107,7 @@ def _should_alert_new_device(user, ip, user_agent):
 
     Audit N2 fix: `LoginView` and `ChangePasswordView` used to call
     `send_security_alert_email` on every successful auth, blocking the sync
-    worker for ~4 minutes on the SMTP timeout when SendGrid is unreachable.
+    worker for ~4 minutes on the SMTP timeout when the SMTP provider is unavailable.
     Now the email only fires when the device/IP actually changes — the common
     path never blocks.
 
@@ -309,7 +313,7 @@ class LoginView(APIView):
             
             # SECURITY ALERT — new device only (Audit N2).
             # Previously fired on every successful login, blocking the sync
-            # worker for ~4 min when SendGrid is unreachable. Now only on a
+            # worker for ~4 min when the SMTP provider is unavailable. Now only on a
             # changed IP/user-agent. Fail-safe: never blocks the login path.
             try:
                 if _should_alert_new_device(
@@ -1189,13 +1193,78 @@ class UserPreferencesView(APIView):
             serializer = UserPreferencesSerializer(preferences, data=request.data, partial=True)
             
             if serializer.is_valid():
-                serializer.save()
+                requested_digest = serializer.validated_data.get('weekly_digest')
+                previous_digest = preferences.weekly_digest
+                if requested_digest is None or requested_digest == previous_digest:
+                    serializer.save()
+                else:
+                    changed_at = timezone.now()
+                    if requested_digest:
+                        serializer.save(
+                            weekly_digest_opted_in_at=changed_at,
+                            weekly_digest_unsubscribed_at=None,
+                        )
+                        AuditLog.objects.create(
+                            user=request.user,
+                            action=AuditLogActions.WEEKLY_DIGEST_OPTED_IN,
+                            details={'source': 'account_preferences'},
+                        )
+                    else:
+                        serializer.save(weekly_digest_unsubscribed_at=changed_at)
+                        AuditLog.objects.create(
+                            user=request.user,
+                            action=AuditLogActions.WEEKLY_DIGEST_UNSUBSCRIBED,
+                            details={'source': 'account_preferences'},
+                        )
                 return Response(serializer.data)
             
             return Response(error_response(message='Validation failed', code='VALIDATION_ERROR', details=serializer.errors, request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Preferences update error: {e}", exc_info=True)
             return Response(error_response(message='Failed to update preferences.', code='SERVER_ERROR', request_id=request_id), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class WeeklyDigestUnsubscribeView(APIView):
+    """Public, token-authenticated opt-out for weekly digest emails."""
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        uid = request.data.get('uid') or request.query_params.get('uid')
+        token = request.data.get('token') or request.query_params.get('token')
+        try:
+            if not uid or not token:
+                raise ValueError('Missing unsubscribe credentials')
+            user_id = force_str(urlsafe_base64_decode(uid))
+            with transaction.atomic():
+                user = User.objects.select_for_update().get(pk=user_id)
+                if not verify_weekly_digest_unsubscribe_token(user, token):
+                    raise ValueError('Invalid unsubscribe token')
+                preferences, _ = UserPreferences.objects.get_or_create(user=user)
+                if preferences.weekly_digest:
+                    now = timezone.now()
+                    preferences.weekly_digest = False
+                    preferences.weekly_digest_unsubscribed_at = now
+                    preferences.save(update_fields=[
+                        'weekly_digest', 'weekly_digest_unsubscribed_at', 'updated_at'
+                    ])
+                    AuditLog.objects.create(
+                        user=user,
+                        action=AuditLogActions.WEEKLY_DIGEST_UNSUBSCRIBED,
+                        details={'source': 'email_unsubscribe'},
+                    )
+            return Response(success_response(message='You have been unsubscribed from the weekly digest.'))
+        except (ValueError, TypeError, OverflowError, User.DoesNotExist):
+            return Response(
+                error_response(message='This unsubscribe link is invalid or no longer available.', code='INVALID_UNSUBSCRIBE_LINK'),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as e:
+            logger.error('Weekly digest unsubscribe failed: %s', type(e).__name__)
+            return Response(
+                error_response(message='We could not update your email preference. Please try again.', code='UNSUBSCRIBE_FAILED'),
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class UserWatchlistView(APIView):
@@ -1267,81 +1336,147 @@ class UserWatchlistView(APIView):
 # ============================================================================
 
 class DeleteAccountView(APIView):
-    """Delete user account with 30-day grace period."""
+    """Schedule account deletion only after the user receives a cancellation link."""
     permission_classes = [permissions.IsAuthenticated]
     throttle_classes = [UserRateThrottle]
     serializer_class = serializers.Serializer
 
     def post(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
-        
+
         try:
             user = request.user
             password = request.data.get('password')
             confirm = request.data.get('confirm')
-            
-            if not user.check_password(password):
-                return Response(error_response(message='Invalid password', code='WRONG_PASSWORD', request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
-            
+
+            if not password or not user.check_password(password):
+                return Response(
+                    error_response(message='Invalid password', code='WRONG_PASSWORD', request_id=request_id),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             if confirm != 'DELETE':
-                return Response(error_response(message='Please type "DELETE" to confirm', code='CONFIRMATION_REQUIRED', request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
-            
+                return Response(
+                    error_response(message='Please type "DELETE" to confirm', code='CONFIRMATION_REQUIRED', request_id=request_id),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             with transaction.atomic():
-                user.is_active = False
-                user.deletion_requested_at = timezone.now()
-                user.deletion_scheduled_for = timezone.now() + timedelta(days=30)
-                user.save()
-                
-                try:
-                    tokens = OutstandingToken.objects.filter(user=user)
-                    for token in tokens:
-                        BlacklistedToken.objects.get_or_create(token=token)
-                except Exception as e:
-                    logger.warning(f"Token blacklist skipped: {e}")
-            
-            # Send confirmation synchronously
+                locked_user = User.objects.select_for_update().get(pk=user.pk)
+                if locked_user.deletion_requested_at or locked_user.deletion_scheduled_for:
+                    return Response(
+                        error_response(message='An account deletion request is already pending.', code='DELETION_ALREADY_PENDING', request_id=request_id),
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                locked_user.deletion_requested_at = timezone.now()
+                locked_user.deletion_scheduled_for = locked_user.deletion_requested_at + timedelta(days=30)
+                locked_user.is_active = False
+                locked_user.save(update_fields=[
+                    'deletion_requested_at', 'deletion_scheduled_for', 'is_active', 'updated_at'
+                ])
+
+            # A user must receive a working cancellation link. If the provider
+            # rejects the message, restore the account and do not blacklist tokens.
+            email_sent = send_account_deletion_confirmation(locked_user, request)
+            if not email_sent:
+                with transaction.atomic():
+                    locked_user = User.objects.select_for_update().get(pk=user.pk)
+                    locked_user.is_active = True
+                    locked_user.deletion_requested_at = None
+                    locked_user.deletion_scheduled_for = None
+                    locked_user.save(update_fields=[
+                        'is_active', 'deletion_requested_at', 'deletion_scheduled_for', 'updated_at'
+                    ])
+                return Response(
+                    error_response(
+                        message='We could not send the deletion confirmation email, so your account has not been scheduled for deletion. Please try again later.',
+                        code='DELETION_CONFIRMATION_EMAIL_FAILED',
+                        request_id=request_id,
+                    ),
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+
+            # Invalidate outstanding sessions only after confirmation delivery succeeds.
             try:
                 send_account_deletion_confirmation(user, request)
             except Exception as e:
                 logger.warning(f"Deletion confirmation email failed for user_id={user.id}: {e}")
             
             request_context = get_request_context(request)
-            AuditLog.objects.create(user=user, action='ACCOUNT_DELETION_REQUESTED', details={'scheduled_for': user.deletion_scheduled_for.isoformat(), 'ip': request_context['ip'], 'request_id': request_id})
-            logger.info(f"Account deletion requested for user {user.id}")
-            
-            return Response(success_response(data={'scheduled_for': user.deletion_scheduled_for, 'logout': True}, message='Account deletion scheduled'), status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            logger.error(f"Account deletion error: {e}", exc_info=True)
-            return Response(error_response(message='Failed to schedule account deletion.', code='SERVER_ERROR', request_id=request_id), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            AuditLog.objects.create(
+                user=locked_user,
+                action=AuditLogActions.ACCOUNT_DELETION_REQUESTED,
+                details={
+                    'scheduled_for': locked_user.deletion_scheduled_for.isoformat(),
+                    'ip': request_context['ip'],
+                    'request_id': request_id,
+                },
+            )
+            logger.info('Account deletion requested for user_id=%s', locked_user.pk)
+
+            return Response(
+                success_response(
+                    data={'scheduled_for': locked_user.deletion_scheduled_for, 'logout': True},
+                    message='Account deletion scheduled. Check your email for the cancellation link.',
+                ),
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as exc:
+            logger.error(
+                'Account deletion request failed for user_id=%s (%s)',
+                getattr(request.user, 'pk', 'unknown'),
+                type(exc).__name__,
+                exc_info=True,
+            )
+            return Response(
+                error_response(message='Failed to schedule account deletion.', code='SERVER_ERROR', request_id=request_id),
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class CancelDeletionView(APIView):
-    """Cancel a pending account deletion request."""
-    permission_classes = [permissions.IsAuthenticated]
-    throttle_classes = [UserRateThrottle]
-    serializer_class = serializers.Serializer
+    """Cancel a pending deletion using the single-purpose link in the confirmation email."""
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [AnonRateThrottle]
 
     def post(self, request):
         request_id = request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())[:8])
-        
+        uid = request.data.get('uid') or request.query_params.get('uid')
+        token = request.data.get('token') or request.query_params.get('token')
         try:
-            user = request.user
-            if not user.deletion_requested_at:
-                return Response(error_response(message='No pending deletion request', code='NO_PENDING_REQUEST', request_id=request_id), status=status.HTTP_400_BAD_REQUEST)
-            
+            if not uid or not token:
+                raise ValueError('Missing cancellation credentials')
+            user_id = force_str(urlsafe_base64_decode(uid))
             with transaction.atomic():
+                user = User.objects.select_for_update().get(pk=user_id)
+                if not user.deletion_requested_at or not user.deletion_scheduled_for:
+                    raise ValueError('No pending deletion request')
+                if timezone.now() >= user.deletion_scheduled_for:
+                    raise ValueError('Deletion grace period has ended')
+                if not verify_account_deletion_cancellation_token(user, token):
+                    raise ValueError('Invalid cancellation token')
                 user.deletion_requested_at = None
                 user.deletion_scheduled_for = None
                 user.is_active = True
-                user.save()
-            
-            request_context = get_request_context(request)
-            AuditLog.objects.create(user=user, action='ACCOUNT_DELETION_CANCELLED', details={'ip': request_context['ip'], 'request_id': request_id})
-            logger.info(f"Account deletion cancelled for user {user.id}")
-            
-            return Response(success_response(message='Account deletion cancelled'), status=status.HTTP_200_OK)
-            
+                user.save(update_fields=[
+                    'deletion_requested_at', 'deletion_scheduled_for', 'is_active', 'updated_at'
+                ])
+                AuditLog.objects.create(
+                    user=user,
+                    action=AuditLogActions.ACCOUNT_DELETION_CANCELLED,
+                    details={'source': 'deletion_confirmation_email', 'request_id': request_id},
+                )
+            return Response(success_response(message='Account deletion cancelled. You can sign in again.'), status=status.HTTP_200_OK)
+        except (ValueError, TypeError, OverflowError, User.DoesNotExist):
+            return Response(
+                error_response(message='This cancellation link is invalid or the grace period has ended.', code='INVALID_CANCELLATION_LINK', request_id=request_id),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except Exception as e:
-            logger.error(f"Cancel deletion error: {e}", exc_info=True)
-            return Response(error_response(message='Failed to cancel deletion.', code='SERVER_ERROR', request_id=request_id), status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error('Cancel deletion failed: %s', type(e).__name__)
+            return Response(
+                error_response(message='We could not cancel the deletion. Please try again.', code='CANCELLATION_FAILED', request_id=request_id),
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

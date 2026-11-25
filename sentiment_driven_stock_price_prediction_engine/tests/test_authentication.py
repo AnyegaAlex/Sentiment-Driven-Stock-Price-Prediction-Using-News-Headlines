@@ -16,7 +16,7 @@ Version: 1.3.0
 """
 
 import pytest
-from authentication.utils import hash_verification_code
+from authentication.utils import hash_verification_code, generate_account_deletion_cancellation_token
 import json
 import base64
 from datetime import timedelta
@@ -26,6 +26,8 @@ from django.urls import reverse
 from django.core import mail
 from django.core.cache import cache
 from django.utils import timezone
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from django.test import override_settings
 from rest_framework import status
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
@@ -651,11 +653,11 @@ class TestAccountDeletion:
         assert user.deletion_scheduled_for is not None
 
     def test_delete_account_cancel(self, auth_client, deletion_pending_user):
-        """Cancel deletion should reactivate account."""
-        api_client = auth_client
-        api_client.force_authenticate(user=deletion_pending_user)
+        """A signed email link can cancel deletion without an authenticated session."""
+        uid = urlsafe_base64_encode(force_bytes(deletion_pending_user.pk))
+        token = generate_account_deletion_cancellation_token(deletion_pending_user)
         url = reverse("cancel-deletion")
-        response = api_client.post(url)
+        response = auth_client.post(url, {"uid": uid, "token": token}, format="json")
         assert response.status_code == status.HTTP_200_OK
         deletion_pending_user.refresh_from_db()
         assert deletion_pending_user.is_active is True
