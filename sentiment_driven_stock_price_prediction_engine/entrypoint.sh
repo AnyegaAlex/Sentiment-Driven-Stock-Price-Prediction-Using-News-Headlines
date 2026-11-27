@@ -57,9 +57,14 @@ fi
 
 echo "Running migrations..."
 if ! timeout 120 python manage.py migrate --noinput; then
-    echo "Migration timed out. Retrying after 10s..."
+    echo "Migration failed on first attempt. Retrying once after 10s..."
     sleep 10
-    timeout 120 python manage.py migrate --noinput || echo "Migration failed – check logs."
+    if ! timeout 120 python manage.py migrate --noinput; then
+        # Do not serve traffic against an unmigrated schema. Exiting makes the
+        # deploy fail, so Render keeps the previous version live.
+        echo "ERROR: Migrations failed after retry. Refusing to start the app."
+        exit 1
+    fi
 fi
 
 echo "Collecting static files..."
