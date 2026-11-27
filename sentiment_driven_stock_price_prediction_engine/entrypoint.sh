@@ -27,20 +27,31 @@ echo "=========================================="
 echo "Tickflow Intelligence - Starting up..."
 echo "=========================================="
 
-# Wait for database
+# Startup checks
+# 1. Configuration: a settings or import error will not fix itself by waiting,
+#    so fail immediately and show the real error instead of retrying.
+# 2. Database: retry for connectivity only, and show the last error on failure.
 if [ -n "$DATABASE_URL" ]; then
+    echo "Checking Django configuration..."
+    if ! CONFIG_OUT=$(python manage.py check 2>&1); then
+        echo "ERROR: Django configuration check failed. Not retrying. Fix the configuration and redeploy."
+        echo "$CONFIG_OUT" | tail -n 30
+        exit 1
+    fi
+
     echo "Waiting for database..."
     MAX_RETRIES=30
     RETRY_COUNT=0
-    until python manage.py check --database default &>/dev/null || [ $RETRY_COUNT -eq $MAX_RETRIES ]; do
+    until DB_OUT=$(python manage.py check --database default 2>&1); do
         RETRY_COUNT=$((RETRY_COUNT+1))
-        echo "Database not ready (attempt $RETRY_COUNT/$MAX_RETRIES)..."
+        if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+            echo "ERROR: Database not available after $MAX_RETRIES attempts. Last error:"
+            echo "$DB_OUT" | tail -n 20
+            exit 1
+        fi
+        echo "Database not ready (attempt $RETRY_COUNT/$MAX_RETRIES): $(echo "$DB_OUT" | tail -n 1)"
         sleep 2
     done
-    if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-        echo "ERROR: Database not available after $MAX_RETRIES attempts."
-        exit 1
-    fi
     echo "Database is ready."
 fi
 
