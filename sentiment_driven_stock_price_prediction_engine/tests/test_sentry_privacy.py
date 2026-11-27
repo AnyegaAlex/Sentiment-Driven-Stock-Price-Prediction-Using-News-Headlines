@@ -80,15 +80,38 @@ def test_local_debug_disables_sentry_unless_explicitly_enabled(monkeypatch):
     local_settings = SimpleNamespace(
         TESTING=False,
         DEBUG=True,
-        SENTRY_DSN="https://public@example.invalid/1",
+        SENTRY_DSN="https://production@example.invalid/1",
+        SENTRY_DEVELOPMENT_DSN="",
         SENTRY_ENABLE_IN_DEBUG=False,
     )
     monkeypatch.setattr(sentry_config, "settings", local_settings)
 
     assert sentry_config.is_sentry_enabled() is False
 
+    # Opt-in alone must not send local events to the production project.
     local_settings.SENTRY_ENABLE_IN_DEBUG = True
+    assert sentry_config.is_sentry_enabled() is False
+
+    local_settings.SENTRY_DEVELOPMENT_DSN = "https://development@example.invalid/2"
     assert sentry_config.is_sentry_enabled() is True
+    assert sentry_config.get_sentry_config()["dsn"] == local_settings.SENTRY_DEVELOPMENT_DSN
+
+
+def test_production_runtime_uses_only_production_sentry_dsn(monkeypatch):
+    from types import SimpleNamespace
+    from sentiment_driven_stock_price_prediction_engine import sentry_config
+
+    production_settings = SimpleNamespace(
+        TESTING=False,
+        DEBUG=False,
+        SENTRY_DSN="https://production@example.invalid/1",
+        SENTRY_DEVELOPMENT_DSN="https://development@example.invalid/2",
+        SENTRY_ENABLE_IN_DEBUG=False,
+    )
+    monkeypatch.setattr(sentry_config, "settings", production_settings)
+
+    assert sentry_config.is_sentry_enabled() is True
+    assert sentry_config.get_sentry_config()["dsn"] == production_settings.SENTRY_DSN
 
 
 def test_explicit_production_environment_is_not_relabelled_as_render(monkeypatch):

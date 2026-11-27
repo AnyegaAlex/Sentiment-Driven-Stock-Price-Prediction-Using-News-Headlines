@@ -495,10 +495,15 @@ if USE_JSON_LOGS and json_formatter:
 # ---------------------------------------------------------------------------
 # Sentry (error monitoring)
 # ---------------------------------------------------------------------------
+# SENTRY_DSN is reserved for the production Sentry project. Local DEBUG
+# processes must use a separate project DSN and never fall back to production.
 SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+SENTRY_DEVELOPMENT_DSN = os.getenv("SENTRY_DEVELOPMENT_DSN", "")
 SENTRY_TRACES_SAMPLE_RATE = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
 SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0"))
-SENTRY_ENVIRONMENT = os.getenv("SENTRY_ENVIRONMENT", "production")
+SENTRY_ENVIRONMENT = os.getenv(
+    "SENTRY_ENVIRONMENT", "development" if DEBUG else "production"
+)
 SENTRY_ENABLE_IN_DEBUG = os.getenv("SENTRY_ENABLE_IN_DEBUG", "false").lower() == "true"
 SENTRY_RELEASE = os.getenv("SENTRY_RELEASE", None)
 # Audit (item 7): PII off by default. The old "true" default shipped headers
@@ -510,7 +515,7 @@ SENTRY_ENABLE_PROFILING = os.getenv("SENTRY_ENABLE_PROFILING", "false").lower() 
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 SENTRY_DEBUG = os.getenv("SENTRY_DEBUG", "False").lower() == "true"
 
-if SENTRY_DSN:
+if SENTRY_DSN or SENTRY_DEVELOPMENT_DSN:
     try:
         from .sentry_config import init_sentry
         init_sentry()
