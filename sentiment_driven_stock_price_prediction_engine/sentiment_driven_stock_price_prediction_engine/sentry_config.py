@@ -47,6 +47,17 @@ APP_VERSION = getattr(settings, 'APP_VERSION', '1.0.0')
 # HELPER FUNCTIONS
 # ============================================================================
 
+def get_sentry_dsn() -> Optional[str]:
+    """Return only the DSN assigned to the current runtime class.
+
+    DEBUG runtimes use a dedicated development project. They never fall back
+    to SENTRY_DSN, which is reserved for production.
+    """
+    if getattr(settings, 'DEBUG', False):
+        return getattr(settings, 'SENTRY_DEVELOPMENT_DSN', None)
+    return getattr(settings, 'SENTRY_DSN', None)
+
+
 def get_sentry_config() -> Dict[str, Any]:
     """
     Get Sentry configuration from Django settings with defaults.
@@ -55,7 +66,7 @@ def get_sentry_config() -> Dict[str, Any]:
         dict: Sentry configuration
     """
     return {
-        'dsn': getattr(settings, 'SENTRY_DSN', None),
+        'dsn': get_sentry_dsn(),
         'environment': getattr(settings, 'SENTRY_ENVIRONMENT', DEFAULT_ENVIRONMENT),
         'traces_sample_rate': float(getattr(settings, 'SENTRY_TRACES_SAMPLE_RATE', DEFAULT_TRACES_SAMPLE_RATE)),
         'profiles_sample_rate': (
@@ -80,7 +91,7 @@ def is_sentry_enabled() -> bool:
     Returns:
         bool: True if Sentry is enabled
     """
-    dsn = getattr(settings, 'SENTRY_DSN', None)
+    dsn = get_sentry_dsn()
     
     # Never send test-runner or local DEBUG events to the production project by
     # default. Local capture requires an explicit opt-in and a development DSN.
