@@ -1,6 +1,9 @@
+# Matches the live production service (Render name: Tickflow-Capital-Intelligence-Backend,
+# slug: sentiment-driven-stock-price-prediction). If this file is applied as a
+# Blueprint, the name must stay identical to the existing service.
 services:
   - type: web
-    name: trading-algo
+    name: Tickflow-Capital-Intelligence-Backend
     region: singapore
     plan: free
     dockerfilePath: Dockerfile
