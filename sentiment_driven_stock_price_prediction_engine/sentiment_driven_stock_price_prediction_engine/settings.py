@@ -499,6 +499,9 @@ if USE_JSON_LOGS and json_formatter:
 # processes must use a separate project DSN and never fall back to production.
 SENTRY_DSN = os.getenv("SENTRY_DSN", "")
 SENTRY_DEVELOPMENT_DSN = os.getenv("SENTRY_DEVELOPMENT_DSN", "")
+# The production DSN is used only on Render. Set this to true only for a
+# deliberate, short-lived local test against the production project.
+SENTRY_ALLOW_PRODUCTION_DSN_LOCAL = os.getenv("SENTRY_ALLOW_PRODUCTION_DSN_LOCAL", "false").lower() == "true"
 SENTRY_TRACES_SAMPLE_RATE = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
 SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0"))
 SENTRY_ENVIRONMENT = os.getenv(

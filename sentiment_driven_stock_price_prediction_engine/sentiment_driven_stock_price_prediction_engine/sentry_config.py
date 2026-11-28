@@ -52,10 +52,20 @@ def get_sentry_dsn() -> Optional[str]:
 
     DEBUG runtimes use a dedicated development project. They never fall back
     to SENTRY_DSN, which is reserved for production.
+
+    The production DSN is used only on Render (the platform sets RENDER). Any
+    other process, including a local run with DEBUG off, gets None unless
+    SENTRY_ALLOW_PRODUCTION_DSN_LOCAL is explicitly enabled. This stops local
+    processes from sending events to the production project.
     """
     if getattr(settings, 'DEBUG', False):
         return getattr(settings, 'SENTRY_DEVELOPMENT_DSN', None)
-    return getattr(settings, 'SENTRY_DSN', None)
+    dsn = getattr(settings, 'SENTRY_DSN', None)
+    if dsn and 'RENDER' not in os.environ and not getattr(
+        settings, 'SENTRY_ALLOW_PRODUCTION_DSN_LOCAL', False
+    ):
+        return None
+    return dsn
 
 
 def get_sentry_config() -> Dict[str, Any]:
@@ -315,11 +325,13 @@ def init_sentry() -> bool:
             'debug_mode': getattr(settings, 'DEBUG', False),
         })
         
-        # Capture initialization message
-        sentry_sdk.capture_message(
-            f"Sentry initialized for environment: {environment} (v{APP_VERSION})",
-            level="info"
-        )
+        # Capture initialization message on Render only. Local starts and
+        # reloads otherwise add one event each to the production project.
+        if 'RENDER' in os.environ:
+            sentry_sdk.capture_message(
+                f"Sentry initialized for environment: {environment} (v{APP_VERSION})",
+                level="info"
+            )
         
         logger.info(f"Sentry initialized successfully for environment: {environment}")
         return True
