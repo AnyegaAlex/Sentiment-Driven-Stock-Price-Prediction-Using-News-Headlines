@@ -180,3 +180,18 @@ class ReadinessView(APIView):
             'status': 'ready' if ready else 'not_ready',
             'issues': issues,
         }, status=200 if ready else 503)
+
+class LivenessView(APIView):
+    """
+    Liveness probe for the platform health checker.
+
+    Returns 200 when the process can serve requests. It deliberately performs
+    no database or cache work. The platform probes this endpoint every few
+    seconds, and a database query on each probe keeps the database compute
+    awake. Use /readiness/ for dependency checks.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        return Response({'status': 'alive'}, status=200)
