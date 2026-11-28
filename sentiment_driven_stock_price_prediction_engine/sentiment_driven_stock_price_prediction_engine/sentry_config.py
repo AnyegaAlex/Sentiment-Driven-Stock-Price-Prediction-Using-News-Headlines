@@ -325,13 +325,9 @@ def init_sentry() -> bool:
             'debug_mode': getattr(settings, 'DEBUG', False),
         })
         
-        # Capture initialization message on Render only. Local starts and
-        # reloads otherwise add one event each to the production project.
-        if 'RENDER' in os.environ:
-            sentry_sdk.capture_message(
-                f"Sentry initialized for environment: {environment} (v{APP_VERSION})",
-                level="info"
-            )
+        # The startup message is intentionally not sent to Sentry. Every
+        # manage.py command (including the entrypoint's database wait loop)
+        # initialises Sentry, so the message added one event per command.
         
         logger.info(f"Sentry initialized successfully for environment: {environment}")
         return True
