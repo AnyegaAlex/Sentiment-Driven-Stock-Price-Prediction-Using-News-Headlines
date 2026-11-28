@@ -11,12 +11,9 @@ services:
       - key: DATABASE_URL
         sync: false   # set manually in dashboard (Neon)
 
-      # Redis (optional – fallback to LocMem)
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: trading-redis
-          property: connectionString
+      # Redis is optional. The app falls back to the local-memory cache when
+      # REDIS_URL is unset. To use Redis, create it separately and set REDIS_URL
+      # in the dashboard. It is intentionally not declared in this Blueprint.
 
       # Django core
       - key: SECRET_KEY
@@ -97,10 +94,3 @@ services:
       #   value: "your_static_key_here"  # Not recommended
 
     healthCheckPath: /api/v1/health/
-
-  # Redis service (free tier)
-  - type: redis
-    name: trading-redis
-    region: singapore
-    plan: free
-    maxmemoryPolicy: noeviction
